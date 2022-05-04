@@ -8,7 +8,7 @@ import scipy.spatial
 import scipy.interpolate
 
 from torch_mpc.models.steer_setpoint_kbm import SteerSetpointKBM
-from torch_mpc.algos.mppi import MPPI
+from torch_mpc.algos.batch_mppi import BatchMPPI
 from torch_mpc.cost_functions.waypoint_costmap import WaypointCostMapCostFunction
 
 """
@@ -148,7 +148,7 @@ def optimize_traj(mppi, initial_state, costmap):
     compute an "optimal" trajectory via MPPI through the model, from the initial state, on the costmap
     """
     mppi.cost_fn.update_costmap(costmap)
-    x = mppi.model.get_observations({'state':initial_state, 'steer_angle':torch.zeros(1)})
+    x = mppi.model.get_observations({'state':initial_state, 'steer_angle':torch.zeros(mppi.B, 1)})
     for i in range(5):
         mppi.get_control(x, step=False)
 
@@ -175,14 +175,11 @@ def maxent_irl(dataset, mppi):
         costmap = compute_costmap(map_features, weights)
         #Get policy feature counts
         trajs = []
-        init_states = expert_traj[torch.randint(expert_traj.shape[0], (50, ))]
-        for init_state in init_states:
-            with torch.no_grad():
-                traj = optimize_traj(mppi, init_state, costmap)
+        init_states = expert_traj[torch.randint(expert_traj.shape[0], (mppi.B, ))]
 
-            trajs.append(traj)
+        with torch.no_grad():
+            trajs = optimize_traj(mppi, init_states, costmap)
 
-        trajs = torch.stack(trajs, dim=0)
         learner_feature_counts = get_empirical_feature_counts(map_features, trajs, map_metadata)
 
         #Gradient step
@@ -228,6 +225,8 @@ if __name__ == '__main__':
     test_data = torch.load('test_data.pt')
 
     horizon = 70
+    batch_size = 100
+
     kbm = SteerSetpointKBM(L=1.0, v_target_lim=[1.0, 2.0], steer_lim=[-0.3, 0.3], steer_rate_lim=0.2)
 
     parameters = {
@@ -242,6 +241,6 @@ if __name__ == '__main__':
         'origin':torch.tensor([train_data['metadata'].origin.position.x, train_data['metadata'].origin.position.y])
     }
     cfn = WaypointCostMapCostFunction(unknown_cost=10., goal_cost=1000., map_params=map_params)
-    mppi = MPPI(model=kbm, cost_fn=cfn, num_samples=2048, num_timesteps=horizon, control_params={'sys_noise':torch.tensor([1.0, 0.5]), 'temperature':0.05})
+    mppi = BatchMPPI(model=kbm, cost_fn=cfn, num_samples=2048, num_timesteps=horizon, control_params={'sys_noise':torch.tensor([1.0, 0.5]), 'temperature':0.05}, batch_size=batch_size)
 
     costmap_weights = maxent_irl(train_data, mppi)
