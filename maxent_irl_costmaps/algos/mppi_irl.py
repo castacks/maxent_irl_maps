@@ -14,6 +14,7 @@ from torch_mpc.algos.mppi import MPPI
 from torch_mpc.cost_functions.waypoint_costmap import WaypointCostMapCostFunction
 
 from maxent_irl_costmaps.dataset.maxent_irl_dataset import MaxEntIRLDataset
+from maxent_irl_costmaps.utils import get_feature_counts
 
 class MPPIIRL:
     """
@@ -82,10 +83,10 @@ class MPPIIRL:
 #            learner_feature_counts = self.expert_dataset.get_feature_counts(traj, map_features, map_metadata)
 
             #MPPI weight
-            learner_feature_counts = self.expert_dataset.get_feature_counts(trajs, map_features, map_metadata)
+            learner_feature_counts = get_feature_counts(trajs, map_features, map_metadata)
             learner_feature_counts = (weights.view(1, -1) * learner_feature_counts).sum(dim=-1)
 
-            expert_feature_counts = self.expert_dataset.get_feature_counts(expert_traj, map_features, map_metadata)
+            expert_feature_counts = get_feature_counts(expert_traj, map_features, map_metadata)
 
             lfc.append(learner_feature_counts)
             efc.append(expert_feature_counts)
@@ -125,20 +126,22 @@ if __name__ == '__main__':
 
     horizon = 70
     batch_size = 100
-    bag_fp = '../../debug_data.bag'
 
-    dataset = MaxEntIRLDataset(bag_fp=bag_fp, horizon=horizon, config_fp="sam messed up his dataset implementation")
+    bag_fp = '/home/yamaha/Desktop/datasets/yamaha_maxent_irl/rosbags/'
+    pp_fp = '/home/yamaha/Desktop/datasets/yamaha_maxent_irl/torch/'
 
-    kbm = SteerSetpointKBM(L=3.0, v_target_lim=[3.0, 3.5], steer_lim=[-0.3, 0.3], steer_rate_lim=0.2)
+    dataset = MaxEntIRLDataset(bag_fp=bag_fp, preprocess_fp=pp_fp)
+
+    kbm = SteerSetpointKBM(L=3.0, v_target_lim=[3.0, 8.0], steer_lim=[-0.3, 0.3], steer_rate_lim=0.2)
 
     parameters = {
         'log_K_delta':torch.tensor(10.0)
     }
     kbm.update_parameters(parameters)
-    cfn = WaypointCostMapCostFunction(unknown_cost=10., goal_cost=1000., map_params=dataset.dataset['metadata'][0])
-    mppi = MPPI(model=kbm, cost_fn=cfn, num_samples=2048, num_timesteps=horizon, control_params={'sys_noise':torch.tensor([1.0, 0.5]), 'temperature':0.05})
+    cfn = WaypointCostMapCostFunction(unknown_cost=10., goal_cost=1000., map_params=dataset.metadata)
+    mppi = MPPI(model=kbm, cost_fn=cfn, num_samples=2048, num_timesteps=horizon, control_params={'sys_noise':torch.tensor([2.0, 0.5]), 'temperature':0.05})
 
     mppi_irl = MPPIIRL(dataset, mppi)
     for i in range(100):
         mppi_irl.update()
-        torch.save({'weights':mppi_irl.weights, 'keys':mppi_irl.expert_dataset.feature_keys}, 'learner_full_gd/weights_itr_{}.pt'.format(i + 1))
+        torch.save({'weights':mppi_irl.weights, 'keys':mppi_irl.expert_dataset.feature_keys}, 'learner_more_data_full_gd/weights_itr_{}.pt'.format(i + 1))

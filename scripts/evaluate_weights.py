@@ -40,33 +40,36 @@ if __name__ == '__main__':
     torch.set_printoptions(sci_mode=False)
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('--test_bag', type=str, required=True, help='Bag of expert data to train from')
     parser.add_argument('--weights', type=str, required=True, help='Costmap weights file')
     args = parser.parse_args()
 
-    dataset = MaxEntIRLDataset(bag_fp=args.test_bag, config_fp='AAA')
-    costmaps = load_maps(args.test_bag, skip_window=dataset.dt*dataset.horizon)
-    weights = torch.load(args.weights)
-    weight_keys = weights['keys']
-    weights = weights['weights']
+    bag_fp = '/home/yamaha/Desktop/datasets/yamaha_maxent_irl/rosbags/'
+    pp_fp = '/home/yamaha/Desktop/datasets/yamaha_maxent_irl/torch/'
 
-    for k1, k2 in zip(dataset.feature_keys, weight_keys):
-        assert k1 == k2, 'dataset and weight keys dont match'
+    dataset = MaxEntIRLDataset(bag_fp=bag_fp, preprocess_fp=pp_fp)
+    weights = torch.load(args.weights)['weights']
 
-    k = min(len(dataset), len(costmaps))
-    for i in range(0, k, 10):
-        cmap = costmaps[i]
-        feats = dataset.dataset['map_features'][i]
+    for i in range(0, len(dataset), 30):
+        data = dataset[i]
+        traj = data['traj']
+        feats = data['map_features']
+        metadata = data['metadata']
+
+        xmin = metadata['origin'][0]
+        ymin = metadata['origin'][1]
+        xmax = xmin + metadata['width']
+        ymax = ymin + metadata['height']
+        
         cmap_pred = (feats * weights.view(-1, 1, 1)).sum(dim=0)
 
-        fig, axs = plt.subplots(1, 3, figsize=(18, 6))
+        fig, axs = plt.subplots(1, 2, figsize=(12, 6))
         
-        axs[0].imshow(feats[1])
-        m1 = axs[1].imshow(cmap, cmap='coolwarm')
-        m2 = axs[2].imshow(cmap_pred, cmap='coolwarm')
+        axs[0].imshow(feats[1], origin='lower', extent=(xmin, xmax, ymin, ymax))
+        m1 = axs[1].imshow(cmap_pred, origin='lower', cmap='coolwarm', extent=(xmin, xmax, ymin, ymax))
+        axs[0].plot(traj[:, 0], traj[:, 1], c='r')
+        axs[1].plot(traj[:, 0], traj[:, 1], c='r')
+
         axs[0].set_title('Heightmap High')
-        axs[1].set_title('RACER Cost')
-        axs[2].set_title('IRL Cost')
+        axs[1].set_title('IRL Cost')
         plt.colorbar(m1, ax=axs[1])
-        plt.colorbar(m2, ax=axs[2])
         plt.show()
