@@ -64,6 +64,8 @@ class MaxEntIRLDataset(Dataset):
             for tfp in os.listdir(self.bag_fp):
                 raw_fp = os.path.join(self.bag_fp, tfp)
                 data, feature_keys = load_data(raw_fp, self.map_features_topic, self.odom_topic, self.horizon, self.dt, self.fill_value)
+                if data is None:
+                    continue
                 for i in range(len(data['traj'])):
                     pp_fp = os.path.join(self.preprocess_fp, 'traj_{}.pt'.format(self.N))
                     subdata = {k:v[i] for k,v in data.items()}

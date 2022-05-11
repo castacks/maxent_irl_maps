@@ -37,6 +37,9 @@ def load_data(bag_fp, map_features_topic, odom_topic, horizon, dt, fill_value):
     #filter out maps that dont have enough trajectory
     map_features_list = [x for x in map_features_list if (x.info.header.stamp.to_sec() > timestamps.min()) and (x.info.header.stamp.to_sec() < timestamps.max() - (horizon*dt))]
 
+    if len(map_features_list) == 0:
+        return None, None
+
     #interpolate traj to get accurate timestamps
     interp_x = scipy.interpolate.interp1d(timestamps, traj[:, 0])
     interp_y = scipy.interpolate.interp1d(timestamps, traj[:, 1])
@@ -56,11 +59,16 @@ def load_data(bag_fp, map_features_topic, odom_topic, horizon, dt, fill_value):
             #temp hack bc I don't like this feature.
             if k == 'npts':
                 continue
+#                data = np.array(v.data).reshape(mf_nx, mf_ny)[::-1, ::-1]
+#                data[data > 0] = np.log(data[data > 0])
+#                map_feature_keys.append('log_' + k)
+#                map_feature_data.append(data)
 
-            data = np.array(v.data).reshape(mf_nx, mf_ny)[::-1, ::-1]
+            else:
+                data = np.array(v.data).reshape(mf_nx, mf_ny)[::-1, ::-1]
 
-            map_feature_keys.append(k)
-            map_feature_data.append(data)
+                map_feature_keys.append(k)
+                map_feature_data.append(data)
 
         map_feature_data.append(np.ones([mf_nx, mf_ny]))
         map_feature_keys.append('bias')

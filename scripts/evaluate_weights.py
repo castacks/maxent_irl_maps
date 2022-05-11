@@ -48,6 +48,9 @@ if __name__ == '__main__':
 
     dataset = MaxEntIRLDataset(bag_fp=bag_fp, preprocess_fp=pp_fp)
     weights = torch.load(args.weights)['weights']
+    network = torch.load(args.weights)['net']
+
+    print(network)
 
     for i in range(0, len(dataset), 30):
         data = dataset[i]
@@ -60,14 +63,20 @@ if __name__ == '__main__':
         xmax = xmin + metadata['width']
         ymax = ymin + metadata['height']
         
-        cmap_pred = (feats * weights.view(-1, 1, 1)).sum(dim=0)
+        #linear
+#        cmap_pred = (feats * weights.view(-1, 1, 1)).sum(dim=0)
+
+        #deep
+        with torch.no_grad():
+            deep_features = torch.moveaxis(network.forward(torch.moveaxis(feats, 0, -1)), -1, 0)
+            cmap_pred = (deep_features * weights.view(-1, 1, 1)).sum(dim=0)
 
         fig, axs = plt.subplots(1, 2, figsize=(12, 6))
         
-        axs[0].imshow(feats[1], origin='lower', extent=(xmin, xmax, ymin, ymax))
+        axs[0].imshow(feats[1], origin='lower', cmap='gray', extent=(xmin, xmax, ymin, ymax))
         m1 = axs[1].imshow(cmap_pred, origin='lower', cmap='coolwarm', extent=(xmin, xmax, ymin, ymax))
-        axs[0].plot(traj[:, 0], traj[:, 1], c='r')
-        axs[1].plot(traj[:, 0], traj[:, 1], c='r')
+        axs[0].plot(traj[:, 0], traj[:, 1], c='y')
+        axs[1].plot(traj[:, 0], traj[:, 1], c='y')
 
         axs[0].set_title('Heightmap High')
         axs[1].set_title('IRL Cost')
