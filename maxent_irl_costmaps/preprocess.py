@@ -70,8 +70,8 @@ def load_data(bag_fp, map_features_topic, odom_topic, horizon, dt, fill_value):
                 map_feature_keys.append(k)
                 map_feature_data.append(data)
 
-        map_feature_data.append(np.ones([mf_nx, mf_ny]))
-        map_feature_keys.append('bias')
+#        map_feature_data.append(np.ones([mf_nx, mf_ny]))
+#        map_feature_keys.append('bias')
 
         map_feature_data = np.stack(map_feature_data, axis=0)
         map_feature_data[~np.isfinite(map_feature_data)] = fill_value

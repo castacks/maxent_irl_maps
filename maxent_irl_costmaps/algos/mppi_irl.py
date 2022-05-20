@@ -51,6 +51,8 @@ class MPPIIRL:
         lfc = []
 
         for i, data in enumerate(dl):
+            if i >= 64:
+                return 
             print(i, end='\r')
             map_features = data['map_features'][0]
             map_metadata = {k:v[0] for k,v in data['metadata'].items()}
@@ -119,7 +121,7 @@ class MPPIIRL:
         grad = grads.mean(dim=0)
 
         self.opt.zero_grad()
-        self.costmapper.weights.backward(gradient=grad)
+        self.costmapper.weights -= 0.1 * grad
         self.opt.step()
 
         print('__________ITR {}__________'.format(self.itr))
@@ -147,7 +149,7 @@ if __name__ == '__main__':
     cfn = WaypointCostMapCostFunction(unknown_cost=10., goal_cost=1000., map_params=dataset.metadata)
     mppi = MPPI(model=kbm, cost_fn=cfn, num_samples=2048, num_timesteps=horizon, control_params={'sys_noise':torch.tensor([2.0, 0.5]), 'temperature':0.05})
 
-    weights = torch.zeros(len(dataset.feature_keys), requires_grad=True)
+    weights = torch.zeros(len(dataset.feature_keys), requires_grad=False)
     opt = torch.optim.SGD([weights], lr=0.01)
     costmapper = LinearCostMapper(weights)
 
@@ -155,4 +157,4 @@ if __name__ == '__main__':
 
     for i in range(100):
         mppi_irl.update()
-        torch.save({'weights':costmapper.weights.detach(), 'keys':mppi_irl.expert_dataset.feature_keys}, 'learner_all_data_lognpts/weights_itr_{}.pt'.format(i + 1))
+        torch.save({'weights':costmapper.weights.detach(), 'keys':mppi_irl.expert_dataset.feature_keys}, 'learner_linear/weights_itr_{}.pt'.format(i + 1))

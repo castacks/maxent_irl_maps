@@ -15,7 +15,7 @@ from torch_mpc.cost_functions.waypoint_costmap import WaypointCostMapCostFunctio
 
 from maxent_irl_costmaps.dataset.maxent_irl_dataset import MaxEntIRLDataset
 from maxent_irl_costmaps.costmappers.linear_costmapper import LinearCostMapper
-from maxent_irl_costmaps.utils import get_feature_counts
+from maxent_irl_costmaps.utils import get_feature_counts, get_state_visitations
 from maxent_irl_costmaps.networks.mlp import MLP
 
 class MPPIIRL:
@@ -40,12 +40,13 @@ class MPPIIRL:
         self.mppi = mppi
         self.mppi_itrs = 3
 
-        hidden = 128
-        self.network = MLP(insize = len(expert_dataset.feature_keys), outsize=hidden, hiddens=[128,])
-        self.last_weights = torch.zeros(hidden)
+        mlp_hiddens = [128, ]
+        self.network = MLP(insize = len(expert_dataset.feature_keys), outsize=1, hiddens=mlp_hiddens)
 
-        self.network_opt = torch.optim.Adam(self.network.parameters())
-        self.last_lr = 0.001
+#        self.network.layers[-1].weight.fill_(0.)
+#        print(list(self.network.parameters()))
+
+        self.network_opt = torch.optim.SGD(self.network.parameters(), lr=0.1)
 
         self.itr = 0
 
@@ -55,10 +56,12 @@ class MPPIIRL:
         grads = []
         efc = []
         lfc = []
+        rfc = []
+        contrastive_grads = []
         deep_features_cache = []
 
         for i, data in enumerate(dl):
-            if i > 64:
+            if i >= 64:
                 break
 
             print(i, end='\r')
@@ -70,8 +73,7 @@ class MPPIIRL:
 #            costmap = (map_features * self.weights.view(-1, 1, 1)).sum(dim=0)
 #            costmap = self.costmapper.get_costmap(data)[0]
 
-            deep_features = torch.moveaxis(self.network.forward(torch.moveaxis(map_features, 0, -1)), -1, 0)
-            costmap = (deep_features * self.last_weights.view(-1, 1, 1)).sum(dim=0)
+            costmap = torch.moveaxis(self.network.forward(torch.moveaxis(map_features, 0, -1)), -1, 0)[0]
 
             #initialize solver
             initial_state = expert_traj[0]
@@ -92,21 +94,46 @@ class MPPIIRL:
 
             self.mppi.reset()
 
+            u_rand = torch.rand(self.mppi.K, self.mppi.T, self.mppi.umin.shape[0])
+            u_rand = (u_rand * (self.mppi.umax - self.mppi.umin)) + self.mppi.umin
+            traj_rand = self.mppi.model.rollout(x.unsqueeze(0).repeat(self.mppi.K, 1), u_rand)
+
             #get learner feature counts
 
             #regular
 #            learner_feature_counts = self.expert_dataset.get_feature_counts(traj, map_features, map_metadata)
 
             #MPPI weight
-            learner_feature_counts = get_feature_counts(trajs, deep_features, map_metadata)
-            learner_feature_counts = (weights.view(1, -1) * learner_feature_counts).sum(dim=-1)
+#            learner_feature_counts = get_feature_counts(trajs, deep_features, map_metadata)
+#            learner_feature_counts = (weights.view(1, -1) * learner_feature_counts).sum(dim=-1)
 
-            expert_feature_counts = get_feature_counts(expert_traj, deep_features, map_metadata)
+#            expert_feature_counts = get_feature_counts(expert_traj, deep_features, map_metadata)
 
-            lfc.append(learner_feature_counts)
-            efc.append(expert_feature_counts)
-            grads.append(expert_feature_counts - learner_feature_counts)
-            deep_features_cache.append(deep_features)
+#            rand_feature_counts = get_feature_counts(traj_rand, deep_features, map_metadata).mean(dim=-1)
+
+            #debug
+            learner_state_visitations = get_state_visitations(trajs, map_metadata, weights)
+            expert_state_visitations = get_state_visitations(expert_traj.unsqueeze(0), map_metadata)
+            random_state_visitations = get_state_visitations(traj_rand, map_metadata)
+
+            lfc.append(learner_state_visitations)
+            efc.append(expert_state_visitations)
+            rfc.append(random_state_visitations)
+
+            deep_features_cache.append(costmap)
+            grads.append((expert_state_visitations - learner_state_visitations))
+
+#            learner_feature_counts_check = get_feature_counts(trajs, map_features, map_metadata)
+#            learner_feature_counts_check = (weights.view(1, -1) * learner_feature_counts_check).sum(dim=-1)
+
+#            expert_feature_counts_check = get_feature_counts(expert_traj, map_features, map_metadata)
+
+#            grad_check = (expert_feature_counts_check - learner_feature_counts_check)
+#            self.network_opt.zero_grad()
+#            costmap.backward(gradient = (expert_state_visitations - learner_state_visitations))
+#            grad = list(self.network.parameters())[0].grad
+
+#            assert torch.allclose(grad_check, grad, atol=1e-4), "grad error = {}, grad = {}, grad_check = {}, itr = {}".format(torch.linalg.norm(grad-grad_check), grad, grad_check, i)
 
             """
             #Viz debug
@@ -126,24 +153,22 @@ class MPPIIRL:
                 plt.show()
             """ 
 
-        grads = torch.stack(grads, dim=0)
         lfc = torch.stack(lfc, dim=0)
         efc = torch.stack(efc, dim=0)
-        deep_features_cache = torch.stack(deep_features_cache, dim=0)
-        deep_features_temp = deep_features_cache.mean(dim=0).mean(dim=-1).mean(dim=-1)
+        rfc = torch.stack(rfc, dim=0)
 
-        shallow_grad = grads.mean(dim=0)
+        deep_features_cache = torch.stack(deep_features_cache, dim=0)
+        grads = torch.stack(grads, dim=0) / len(grads)
 
         self.network_opt.zero_grad()
-        deep_features_temp.backward(gradient=shallow_grad * self.last_weights)
+        deep_features_cache.backward(gradient=grads)
         self.network_opt.step()
 
-        self.last_weights -= shallow_grad.detach() * self.last_lr
-
         print('__________ITR {}__________'.format(self.itr))
-        print('WEIGHTS:\n', self.last_weights.detach().numpy())
-        print('LEARNER FC: ', lfc.mean(dim=0).detach())
-        print('EXPERT FC:  ', efc.mean(dim=0).detach())
+#        print('WEIGHTS:\n', np.stack([np.array(self.expert_dataset.feature_keys), list(self.network.parameters())[0].data[0].detach().numpy()], axis=-1))
+#        print('LEARNER FC: ', lfc.mean(dim=0).detach())
+#        print('EXPERT FC:  ', efc.mean(dim=0).detach())
+#        print('RANDOM FC:  ', rfc.mean(dim=0).detach())
 
     def visualize(self):
         dl = DataLoader(self.expert_dataset, batch_size=1, shuffle=True)
@@ -199,6 +224,7 @@ class MPPIIRL:
 
 if __name__ == '__main__':
     torch.set_printoptions(sci_mode=False)
+    np.set_printoptions(suppress=True)
 
     horizon = 70
     batch_size = 100
@@ -214,7 +240,7 @@ if __name__ == '__main__':
         'log_K_delta':torch.tensor(10.0)
     }
     kbm.update_parameters(parameters)
-    cfn = WaypointCostMapCostFunction(unknown_cost=10., goal_cost=1000., map_params=dataset.metadata)
+    cfn = WaypointCostMapCostFunction(unknown_cost=0., goal_cost=0., map_params=dataset.metadata)
     mppi = MPPI(model=kbm, cost_fn=cfn, num_samples=2048, num_timesteps=horizon, control_params={'sys_noise':torch.tensor([2.0, 0.5]), 'temperature':0.05})
 
     mppi_irl = MPPIIRL(dataset, mppi)
@@ -222,7 +248,7 @@ if __name__ == '__main__':
     for i in range(100):
         mppi_irl.update()
         with torch.no_grad():
-            torch.save({'net':mppi_irl.network, 'weights':mppi_irl.last_weights, 'keys':mppi_irl.expert_dataset.feature_keys}, 'learner_all_data_network/weights_itr_{}.pt'.format(i + 1))
+            torch.save({'net':mppi_irl.network, 'keys':mppi_irl.expert_dataset.feature_keys}, 'learner_net_2layer/weights_itr_{}.pt'.format(i + 1))
 
 #        if (i % 10) == 0:
             #visualize

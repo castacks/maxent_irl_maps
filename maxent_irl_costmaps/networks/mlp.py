@@ -29,7 +29,7 @@ class MLP(nn.Module):
         self.device=device
 
         for i in range(len(layer_sizes) - 1):
-            self.layers.append(nn.Linear(layer_sizes[i], layer_sizes[i+1]))
+            self.layers.append(nn.Linear(layer_sizes[i], layer_sizes[i+1], bias=False))
 
         self.to(self.device)
 
@@ -40,7 +40,7 @@ class MLP(nn.Module):
             out = self.dropout(out)
             out = layer.forward(out)
 
-        return self.activation(out)
+        return out
 
     def to(self, device):
         self.device = device

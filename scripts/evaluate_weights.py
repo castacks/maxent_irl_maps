@@ -47,10 +47,15 @@ if __name__ == '__main__':
     pp_fp = '/home/yamaha/Desktop/datasets/yamaha_maxent_irl/torch/'
 
     dataset = MaxEntIRLDataset(bag_fp=bag_fp, preprocess_fp=pp_fp)
-    weights = torch.load(args.weights)['weights']
-    network = torch.load(args.weights)['net']
+    predictor = torch.load(args.weights)
 
-    print(network)
+    if 'net' in predictor.keys():
+        network = predictor['net']
+        print(network)
+        is_deep = True
+    else:
+        weights = predictor['weights']
+        is_deep = False
 
     for i in range(0, len(dataset), 30):
         data = dataset[i]
@@ -62,14 +67,15 @@ if __name__ == '__main__':
         ymin = metadata['origin'][1]
         xmax = xmin + metadata['width']
         ymax = ymin + metadata['height']
-        
-        #linear
-#        cmap_pred = (feats * weights.view(-1, 1, 1)).sum(dim=0)
 
+        print('ACTUAL FEATURES STDDEV:', feats.std())
         #deep
-        with torch.no_grad():
-            deep_features = torch.moveaxis(network.forward(torch.moveaxis(feats, 0, -1)), -1, 0)
-            cmap_pred = (deep_features * weights.view(-1, 1, 1)).sum(dim=0)
+        if is_deep:
+            with torch.no_grad():
+                cmap_pred = torch.moveaxis(network.forward(torch.moveaxis(feats, 0, -1)), -1, 0)[0]
+        #linear
+        else:
+            cmap_pred = (feats * weights.view(-1, 1, 1)).sum(dim=0)
 
         fig, axs = plt.subplots(1, 2, figsize=(12, 6))
         

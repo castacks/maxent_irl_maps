@@ -121,7 +121,7 @@ class MaxEntIRLDataset(Dataset):
 
         data = torch.load(data_fp)
 
-        data['map_features'] = (data['map_features'] - self.feature_mean.view(-1, 1, 1)) / self.feature_std.view(-1, 1, 1).clip(-5, 5)
+        data['map_features'] = ((data['map_features'] - self.feature_mean.view(-1, 1, 1)) / self.feature_std.view(-1, 1, 1)).clip(-5, 5)
 
         return data
 
