@@ -34,6 +34,9 @@ def load_data(bag_fp, map_features_topic, odom_topic, horizon, dt, fill_value):
     traj = np.stack(traj, axis=0)
     timestamps = np.array(timestamps)
 
+    #edge case check
+    idxs = np.argsort(timestamps)
+
     #filter out maps that dont have enough trajectory
     map_features_list = [x for x in map_features_list if (x.info.header.stamp.to_sec() > timestamps.min()) and (x.info.header.stamp.to_sec() < timestamps.max() - (horizon*dt))]
 
@@ -41,12 +44,12 @@ def load_data(bag_fp, map_features_topic, odom_topic, horizon, dt, fill_value):
         return None, None
 
     #interpolate traj to get accurate timestamps
-    interp_x = scipy.interpolate.interp1d(timestamps, traj[:, 0])
-    interp_y = scipy.interpolate.interp1d(timestamps, traj[:, 1])
-    interp_z = scipy.interpolate.interp1d(timestamps, traj[:, 2])
+    interp_x = scipy.interpolate.interp1d(timestamps[idxs], traj[idxs, 0])
+    interp_y = scipy.interpolate.interp1d(timestamps[idxs], traj[idxs, 1])
+    interp_z = scipy.interpolate.interp1d(timestamps[idxs], traj[idxs, 2])
     
     rots = scipy.spatial.transform.Rotation.from_quat(traj[:, 3:])
-    interp_q = scipy.spatial.transform.Slerp(timestamps, rots)
+    interp_q = scipy.spatial.transform.Slerp(timestamps[idxs], rots[idxs])
 
     #get a registered trajectory for each map.
     for i, map_features in enumerate(map_features_list):
@@ -57,7 +60,8 @@ def load_data(bag_fp, map_features_topic, odom_topic, horizon, dt, fill_value):
         mf_ny = int(map_features.info.length_y/map_features.info.resolution)
         for k,v in zip(map_features.layers, map_features.data):
             #temp hack bc I don't like this feature.
-            if k == 'npts':
+#            if k not in ['roughness', 'height_high']:
+            if 'npts' in k:
                 continue
 #                data = np.array(v.data).reshape(mf_nx, mf_ny)[::-1, ::-1]
 #                data[data > 0] = np.log(data[data > 0])
@@ -78,6 +82,7 @@ def load_data(bag_fp, map_features_topic, odom_topic, horizon, dt, fill_value):
 
         start_time = map_features.info.header.stamp.to_sec()
         targets = start_time + np.arange(horizon) * dt
+
         xs = interp_x(targets)
         ys = interp_y(targets)
         zs = interp_z(targets)

@@ -3,6 +3,7 @@ from torch.utils.data import Dataset
 import numpy as np
 import yaml
 import os
+import matplotlib.pyplot as plt
 
 from grid_map_msgs.msg import GridMap
 from geometry_msgs.msg import Pose, Point, Quaternion, PoseStamped
@@ -72,10 +73,10 @@ class MaxEntIRLDataset(Dataset):
                     subdata['feature_keys'] = feature_keys
 
                     #make heights relative.
-                    ks = ['height_low', 'height_high', 'terrain_low', 'terrain_high']
-                    for k in ks:
-                        idx = feature_keys.index(k)
-                        subdata['map_features'][idx] -= subdata['traj'][0, 2]
+                    for k in feature_keys:
+                        if 'height' in k or 'terrain' in k:
+                            idx = feature_keys.index(k)
+                            subdata['map_features'][idx] -= subdata['traj'][0, 2]
 
                     torch.save(subdata, pp_fp)
                     self.N += 1
@@ -96,7 +97,7 @@ class MaxEntIRLDataset(Dataset):
             print('{}/{} ({})'.format(i+1, len(traj_fps), fp), end='\r')
             traj = torch.load(os.path.join(self.preprocess_fp, fp))
 
-            mapfeats = traj['map_features'].view(nfeats, -1)
+            mapfeats = traj['map_features'][:, 10:-10, 10:-10].reshape(nfeats, -1)
             k = mapfeats.shape[-1]
 
             mean_new = (self.feature_mean + (mapfeats.sum(dim=-1) / K)) * (K / (K+k))
@@ -112,6 +113,34 @@ class MaxEntIRLDataset(Dataset):
 
         self.feature_std = self.feature_var.sqrt()
         self.feature_std[~torch.isfinite(self.feature_std)] = 1e-6
+
+    def visualize(self):
+        """
+        Get a rough sense of features
+        """
+        n_panes = len(self.feature_keys)
+
+        nx = int(np.sqrt(n_panes))
+        ny = int(n_panes / nx) + 1
+
+        fig, axs = plt.subplots(nx, ny, figsize=(20, 20))
+        axs = axs.flatten()
+
+        data = self[np.random.randint(len(self))]
+        traj = data['traj']
+        feats = data['map_features']
+        metadata = data['metadata']
+        xmin = metadata['origin'][0]
+        ymin = metadata['origin'][1]
+        xmax = xmin + metadata['width']
+        ymax = ymin + metadata['height']
+        
+        for ax, feat, feat_key in zip(axs, feats, self.feature_keys):
+            ax.imshow(feat, origin='lower', cmap='gray', extent=(xmin, xmax, ymin, ymax))
+            ax.plot(traj[:, 0], traj[:, 1], c='y')
+            ax.set_title(feat_key)
+
+        return fig, axs
 
     def __len__(self):
         return self.N
