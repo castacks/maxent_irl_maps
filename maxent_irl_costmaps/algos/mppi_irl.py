@@ -40,12 +40,13 @@ class MPPIIRL:
         """
         self.expert_dataset = expert_dataset
         self.mppi = mppi
-        self.mppi_itrs = 5
+        self.mppi_itrs = 10
 
 #        mlp_hiddens = [128, 128]
 #        self.network = MLP(insize = len(expert_dataset.feature_keys), outsize=1, hiddens=mlp_hiddens)
 
-        hiddens = []
+        hiddens = [128,]
+#        hiddens = []
         self.network = ResnetCostmapCNN(in_channels=len(expert_dataset.feature_keys), out_channels=1, hidden_channels=hiddens)
 
         print(sum([x.numel() for x in self.network.parameters()]))
@@ -97,6 +98,14 @@ class MPPIIRL:
             HACK = {"state":initial_state, "steer_angle":torch.zeros(1)}
             x = self.mppi.model.get_observations(HACK)
 
+            map_params = {
+                'resolution': map_metadata['resolution'].item(),
+                'height': map_metadata['height'].item(),
+                'width': map_metadata['width'].item(),
+                'origin': map_metadata['origin']
+            }
+            self.mppi.reset()
+            self.mppi.cost_fn.update_map_params(map_params)
             self.mppi.cost_fn.update_costmap(costmap)
             self.mppi.cost_fn.update_goal(expert_traj[-1, :2])
 
@@ -148,6 +157,11 @@ class MPPIIRL:
 
                 map_features = data['map_features'][0]
                 map_metadata = {k:v[0] for k,v in data['metadata'].items()}
+                metadata = data['metadata']
+                xmin = metadata['origin'][0, 0]
+                ymin = metadata['origin'][0, 1]
+                xmax = xmin + metadata['width'][0]
+                ymax = ymin + metadata['height'][0]
                 expert_traj = data['traj'][0]
 
                 #compute costmap
@@ -162,6 +176,15 @@ class MPPIIRL:
                 initial_state = expert_traj[0]
                 HACK = {"state":initial_state, "steer_angle":torch.zeros(1)}
                 x = self.mppi.model.get_observations(HACK)
+
+                map_params = {
+                    'resolution': map_metadata['resolution'].item(),
+                    'height': map_metadata['height'].item(),
+                    'width': map_metadata['width'].item(),
+                    'origin': map_metadata['origin']
+                }
+                self.mppi.reset()
+                self.mppi.cost_fn.update_map_params(map_params)
                 self.mppi.cost_fn.update_costmap(costmap)
                 self.mppi.cost_fn.update_goal(expert_traj[-1, :2])
 

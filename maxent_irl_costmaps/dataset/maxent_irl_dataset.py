@@ -18,7 +18,7 @@ class MaxEntIRLDataset(Dataset):
 
     Ok, the ony diff now is that there are multiple bag files and we save the trajdata to a temporary pt file.
     """
-    def __init__(self, bag_fp, preprocess_fp, map_features_topic='/local_gridmap', odom_topic='/integrated_to_init', horizon=70, dt=0.1, fill_value=0.):
+    def __init__(self, bag_fp, preprocess_fp, map_features_topic='/local_gridmap', odom_topic='/integrated_to_init', image_topic='/multisense/left/image_rect_color', horizon=70, dt=0.1, fill_value=0.):
         """
         Args:
             bag_fp: The bag to get data from
@@ -33,15 +33,13 @@ class MaxEntIRLDataset(Dataset):
         self.preprocess_fp = preprocess_fp
         self.map_features_topic = map_features_topic
         self.odom_topic = odom_topic
+        self.image_topic = image_topic
         self.horizon = horizon
         self.dt = dt
         self.fill_value = fill_value #I don't know if this is the best way to do this, but setting the fill value to 0 implies that missing features contribute nothing to the cost.
         self.N = 0
 
         self.initialize_dataset()
-
-#        self.dataset, self.feature_keys = load_data(bag_fp, self.map_features_topic, self.odom_topic, self.horizon, self.dt, self.fill_value)
-#        self.normalize_map_features()
 
     def initialize_dataset(self):
         """
@@ -64,7 +62,7 @@ class MaxEntIRLDataset(Dataset):
         if preprocess:
             for tfp in os.listdir(self.bag_fp):
                 raw_fp = os.path.join(self.bag_fp, tfp)
-                data, feature_keys = load_data(raw_fp, self.map_features_topic, self.odom_topic, self.horizon, self.dt, self.fill_value)
+                data, feature_keys = load_data(raw_fp, self.map_features_topic, self.odom_topic, self.image_topic, self.horizon, self.dt, self.fill_value)
                 if data is None:
                     continue
                 for i in range(len(data['traj'])):
@@ -80,7 +78,6 @@ class MaxEntIRLDataset(Dataset):
 
                     torch.save(subdata, pp_fp)
                     self.N += 1
-
         
         #Actually read all the data to get statistics.
         #need number of trajs, and the mean/std of all the map features.
@@ -111,14 +108,14 @@ class MaxEntIRLDataset(Dataset):
             self.feature_var = var_new
             K += k
 
-        self.feature_std = self.feature_var.sqrt()
+        self.feature_std = self.feature_var.sqrt() + 1e-6
         self.feature_std[~torch.isfinite(self.feature_std)] = 1e-6
 
     def visualize(self):
         """
         Get a rough sense of features
         """
-        n_panes = len(self.feature_keys)
+        n_panes = len(self.feature_keys) + 1
 
         nx = int(np.sqrt(n_panes))
         ny = int(n_panes / nx) + 1
@@ -134,11 +131,18 @@ class MaxEntIRLDataset(Dataset):
         ymin = metadata['origin'][1]
         xmax = xmin + metadata['width']
         ymax = ymin + metadata['height']
+
         
         for ax, feat, feat_key in zip(axs, feats, self.feature_keys):
             ax.imshow(feat, origin='lower', cmap='gray', extent=(xmin, xmax, ymin, ymax))
             ax.plot(traj[:, 0], traj[:, 1], c='y')
             ax.set_title(feat_key)
+
+        if 'image' in data.keys():
+            image =  data['image']
+            ax = axs[len(self.feature_keys)]
+            ax.imshow(image.permute(1, 2, 0))
+            ax.set_title('Image')
 
         return fig, axs
 

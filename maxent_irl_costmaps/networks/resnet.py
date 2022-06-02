@@ -31,7 +31,7 @@ class ResnetCostmapCNN(nn.Module):
 
     def forward(self, x):
         cnn_out = self.cnn.forward(x)
-        return cnn_out
+        return cnn_out.sigmoid()
 
 class ResnetCostmapBlock(nn.Module):
     """

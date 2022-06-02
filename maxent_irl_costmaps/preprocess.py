@@ -2,13 +2,16 @@ import rosbag
 import torch
 import numpy as np
 import scipy.interpolate, scipy.spatial
-    
-def load_data(bag_fp, map_features_topic, odom_topic, horizon, dt, fill_value):
+import cv2
+
+def load_data(bag_fp, map_features_topic, odom_topic, image_topic, horizon, dt, fill_value):
     """
     Extract map features and trajectory data from the bag.
     """
+    print(bag_fp)
     map_features_list = []
     traj = []
+    vels = []
     timestamps = []
     dataset = []
 
@@ -26,12 +29,24 @@ def load_data(bag_fp, map_features_topic, odom_topic, horizon, dt, fill_value):
                 pose.orientation.w,
             ])
 
+            twist = msg.twist.twist
+            v = np.array([
+                twist.linear.x,
+                twist.linear.y,
+                twist.linear.z,
+                twist.angular.x,
+                twist.angular.y,
+                twist.angular.z,
+            ])
+
             traj.append(p)
+            vels.append(v)
             timestamps.append(msg.header.stamp.to_sec())
         elif topic == map_features_topic:
             map_features_list.append(msg)
 
     traj = np.stack(traj, axis=0)
+    vels = np.stack(vels, axis=0)
     timestamps = np.array(timestamps)
 
     #edge case check
@@ -50,6 +65,16 @@ def load_data(bag_fp, map_features_topic, odom_topic, horizon, dt, fill_value):
     
     rots = scipy.spatial.transform.Rotation.from_quat(traj[:, 3:])
     interp_q = scipy.spatial.transform.Slerp(timestamps[idxs], rots[idxs])
+
+    interp_vx = scipy.interpolate.interp1d(timestamps[idxs], vels[idxs, 0])
+    interp_vy = scipy.interpolate.interp1d(timestamps[idxs], vels[idxs, 1])
+    interp_vz = scipy.interpolate.interp1d(timestamps[idxs], vels[idxs, 2])
+
+    interp_wx = scipy.interpolate.interp1d(timestamps[idxs], vels[idxs, 3])
+    interp_wy = scipy.interpolate.interp1d(timestamps[idxs], vels[idxs, 4])
+    interp_wz = scipy.interpolate.interp1d(timestamps[idxs], vels[idxs, 5])
+
+    map_target_times = []
 
     #get a registered trajectory for each map.
     for i, map_features in enumerate(map_features_list):
@@ -82,14 +107,26 @@ def load_data(bag_fp, map_features_topic, odom_topic, horizon, dt, fill_value):
 
         start_time = map_features.info.header.stamp.to_sec()
         targets = start_time + np.arange(horizon) * dt
+        map_target_times.append(start_time)
 
         xs = interp_x(targets)
         ys = interp_y(targets)
         zs = interp_z(targets)
         qs = interp_q(targets).as_quat()
 
+        vxs = interp_vx(targets)
+        vys = interp_vy(targets)
+        vzs = interp_vz(targets)
+        wxs = interp_wx(targets)
+        wys = interp_wy(targets)
+        wzs = interp_wz(targets)
+
         #handle transforms to deserialize map/costmap
-        traj = np.concatenate([np.stack([xs, ys, zs], axis=-1), qs], axis=-1)
+        traj = np.concatenate([
+            np.stack([xs, ys, zs], axis=-1),
+            qs,
+            np.stack([vxs, vys, vzs, wxs, wys, wzs], axis=-1)
+        ], axis=-1)
 
         map_metadata = map_features.info
         xmin = map_metadata.pose.position.x - 0.5 * (map_metadata.length_x)
@@ -110,6 +147,7 @@ def load_data(bag_fp, map_features_topic, odom_topic, horizon, dt, fill_value):
             'map_features': torch.tensor(map_feature_data).float(),
             'metadata': metadata_out
         }
+
         dataset.append(data)
 
     #convert from gridmap to occgrid metadata
@@ -117,7 +155,28 @@ def load_data(bag_fp, map_features_topic, odom_topic, horizon, dt, fill_value):
     dataset = {
         'map_features':[x['map_features'] for x in dataset],
         'traj':[x['traj'] for x in dataset],
-        'metadata':[x['metadata'] for x in dataset]
+        'metadata':[x['metadata'] for x in dataset],
     }
+
+    #If image topic exists, add to bag
+    if image_topic is not None:
+        image_timestamps = []
+        for topic, msg, t in bag.read_messages(topics=[image_topic]):
+            image_timestamps.append(t.to_sec())
+        image_timestamps = np.array(image_timestamps)
+        #get closest image to targets
+        dists = np.abs(np.expand_dims(image_timestamps, axis=0) - np.expand_dims(map_target_times, axis=1))
+        image_targets = np.argmin(dists, axis=1)
+
+        images = []
+        for i, (topic, msg, t) in enumerate(bag.read_messages(topics=[image_topic])):
+            n_hits = np.sum(image_targets == i)
+            for j in range(n_hits):
+                img = np.frombuffer(msg.data, dtype=np.uint8)
+                img = cv2.imdecode(img, cv2.IMREAD_UNCHANGED)
+                img = cv2.resize(img, dsize=(224, 224), interpolation=cv2.INTER_AREA)
+                images.append(torch.tensor(img).permute(2, 0, 1)[[2, 1, 0]] / 255.)
+
+        dataset['image'] = images
 
     return dataset, feature_keys
