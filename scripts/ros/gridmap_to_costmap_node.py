@@ -82,10 +82,11 @@ class CostmapperNode:
 if __name__ == '__main__':
     rospy.init_node('costmapper_node')
 
-    grid_map_topic = '/local_gridmap'
-    cost_map_topic = '/local_cost_map_final_occupancy_grid'
-    odom_topic = '/integrated_to_init'
-    mppi_irl = torch.load('../training/ackermann_costmaps/baseline2.pt')
+    model_fp = rospy.get_param('~model_fp')
+    grid_map_topic = rospy.get_param('~gridmap_topic')
+    cost_map_topic = rospy.get_param('~costmap_topic')
+    odom_topic = rospy.get_param('~odom_topic')
+    mppi_irl = torch.load(model_fp)
 
 #    mppi_irl.visualize()
 
