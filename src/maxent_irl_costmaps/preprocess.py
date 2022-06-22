@@ -33,9 +33,10 @@ def load_traj(bag_fp, odom_topic, dt):
                 twist.angular.z,
             ])
 
-            traj.append(p)
-            vels.append(v)
-            timestamps.append(msg.header.stamp.to_sec())
+            if len(timestamps) == 0 or (msg.header.stamp.to_sec() - timestamps[-1] > 1e-6):
+                traj.append(p)
+                vels.append(v)
+                timestamps.append(msg.header.stamp.to_sec())
 
     traj = np.stack(traj, axis=0)
     vels = np.stack(vels, axis=0)
@@ -60,7 +61,6 @@ def load_traj(bag_fp, odom_topic, dt):
     interp_wy = scipy.interpolate.interp1d(timestamps[idxs], vels[idxs, 4])
     interp_wz = scipy.interpolate.interp1d(timestamps[idxs], vels[idxs, 5])
 
-    import pdb;pdb.set_trace()
     start_time = timestamps[0]
     targets = np.arange(timestamps[0], timestamps[-1], dt)
 
@@ -119,9 +119,11 @@ def load_data(bag_fp, map_features_topic, odom_topic, image_topic, horizon, dt, 
                 twist.angular.z,
             ])
 
-            traj.append(p)
-            vels.append(v)
-            timestamps.append(msg.header.stamp.to_sec())
+            if len(timestamps) == 0 or (msg.header.stamp.to_sec() - timestamps[-1] > 1e-6):
+                traj.append(p)
+                vels.append(v)
+                timestamps.append(msg.header.stamp.to_sec())
+
         elif topic == map_features_topic:
             map_features_list.append(msg)
 

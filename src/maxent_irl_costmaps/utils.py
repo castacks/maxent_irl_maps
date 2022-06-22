@@ -1,5 +1,14 @@
 import torch
 
+def quat_to_yaw(quat):
+    """
+    Convert a quaternion (as [x, y, z, w]) to yaw
+    """
+    if len(quat.shape) < 2:
+        return quat_to_yaw(quat.unsqueeze(0)).squeeze()
+
+    return torch.atan2(2 * (quat[:, 3]*quat[:, 2] + quat[:, 0]*quat[:, 1]), 1 - 2 * (quat[:, 1]**2 + quat[:, 2]**2))    
+
 def get_state_visitations(trajs, map_metadata, weights = None):
     """
     Given a set of trajectories and map metadata, compute the visitations on the map for each traj.
