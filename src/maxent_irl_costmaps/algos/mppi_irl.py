@@ -32,34 +32,33 @@ class MPPIIRL:
         d. Get empirical feature counts from the MPPI solver (maybe try the weighted trick)
         e. Match feature expectations
     """
-    def __init__(self, expert_dataset, mppi, batch_size=64):
+    def __init__(self, network, opt, expert_dataset, mppi, mppi_itrs=10, batch_size=64, device='cpu'):
         """
         Args:
+            network: the network to use for predicting costmaps
+            opt: the optimizer for the network
             expert_dataset: The dataset containing expert demonstrations to imitate
             mppi: The MPPI object to optimize with
         """
         self.expert_dataset = expert_dataset
         self.mppi = mppi
-        self.mppi_itrs = 10
+        self.mppi_itrs = mppi_itrs
 
-#        mlp_hiddens = [128, 128]
-#        self.network = MLP(insize = len(expert_dataset.feature_keys), outsize=1, hiddens=mlp_hiddens)
+#        hiddens = [128,]
+#        self.network = ResnetCostmapCNN(in_channels=len(expert_dataset.feature_keys), out_channels=1, hidden_channels=hiddens)
 
-        hiddens = [128,]
-#        hiddens = []
-        self.network = ResnetCostmapCNN(in_channels=len(expert_dataset.feature_keys), out_channels=1, hidden_channels=hiddens)
+        self.network = network
 
         print(sum([x.numel() for x in self.network.parameters()]))
         print(expert_dataset.feature_keys)
 
-#        self.network.layers[-1].weight.fill_(0.)
-#        print(list(self.network.parameters()))
-
 #        self.network_opt = torch.optim.SGD(self.network.parameters(), lr=0.01)
-        self.network_opt = torch.optim.Adam(self.network.parameters())
+#        self.network_opt = torch.optim.Adam(self.network.parameters())
+        self.network_opt = opt
 
         self.batch_size = batch_size
         self.itr = 0
+        self.device = device
 
     def update(self):
         self.itr += 1
@@ -78,6 +77,7 @@ class MPPIIRL:
         contrastive_grads = []
         deep_features_cache = []
 
+        #TODO: Use the batch MPPI interface
         for i in range(batch['traj'].shape[0]):
             map_features = batch['map_features'][i]
             map_metadata = {k:v[i] for k,v in batch['metadata'].items()}
@@ -90,12 +90,12 @@ class MPPIIRL:
 #            #MLP
 #            costmap = torch.moveaxis(self.network.forward(torch.moveaxis(map_features, 0, -1)), -1, 0)[0]
 
-            #resnet cnn
+            #resnet cnn (and actual net interface in general)
             costmap = self.network.forward(map_features.view(1, *map_features.shape))[0, 0]
 
             #initialize solver
             initial_state = expert_traj[0]
-            HACK = {"state":initial_state, "steer_angle":torch.zeros(1)}
+            HACK = {"state":initial_state, "steer_angle":torch.zeros(1, device=initial_state.device)}
             x = self.mppi.model.get_observations(HACK)
 
             map_params = {
@@ -122,7 +122,7 @@ class MPPIIRL:
 
             self.mppi.reset()
 
-            u_rand = torch.rand(self.mppi.K, self.mppi.T, self.mppi.umin.shape[0])
+            u_rand = torch.rand(self.mppi.K, self.mppi.T, self.mppi.umin.shape[0], device=self.mppi.device)
             u_rand = (u_rand * (self.mppi.umax - self.mppi.umin)) + self.mppi.umin
             traj_rand = self.mppi.model.rollout(x.unsqueeze(0).repeat(self.mppi.K, 1), u_rand)
 
@@ -148,11 +148,11 @@ class MPPIIRL:
         deep_features_cache.backward(gradient=grads)
         self.network_opt.step()
 
-    def visualize(self):
+    def visualize(self, n=10):
         dl = DataLoader(self.expert_dataset, batch_size=1, shuffle=True)
         with torch.no_grad():
             for i, data in enumerate(dl):
-                if i > 20:
+                if i > n:
                     return
 
                 map_features = data['map_features'][0]
@@ -174,7 +174,7 @@ class MPPIIRL:
 
                 #initialize solver
                 initial_state = expert_traj[0]
-                HACK = {"state":initial_state, "steer_angle":torch.zeros(1)}
+                HACK = {"state":initial_state, "steer_angle":torch.zeros(1, device=initial_state.device)}
                 x = self.mppi.model.get_observations(HACK)
 
                 map_params = {
@@ -196,27 +196,39 @@ class MPPIIRL:
                 traj = self.mppi.last_states
 
                 metadata = data['metadata']
-                xmin = metadata['origin'][0, 0]
-                ymin = metadata['origin'][0, 1]
+                xmin = metadata['origin'][0, 0].cpu()
+                ymin = metadata['origin'][0, 1].cpu()
                 xmax = xmin + metadata['width'][0]
                 ymax = ymin + metadata['height'][0]
-                fig, axs = plt.subplots(1, 2, figsize=(12, 6))
+
+                fig, axs = plt.subplots(1, 3, figsize=(18, 6))
                 
-
                 idx = self.expert_dataset.feature_keys.index('height_high')
-                axs[0].imshow(map_features[idx], origin='lower', cmap='gray', extent=(xmin, xmax, ymin, ymax))
-                m1 = axs[1].imshow(costmap, origin='lower', cmap='coolwarm', extent=(xmin, xmax, ymin, ymax))
-                axs[0].plot(expert_traj[:, 0], expert_traj[:, 1], c='y', label='expert')
-                axs[1].plot(expert_traj[:, 0], expert_traj[:, 1], c='y')
-                axs[0].plot(traj[:, 0], traj[:, 1], c='g', label='learner')
-                axs[1].plot(traj[:, 0], traj[:, 1], c='g')
+                
+                axs[0].imshow(data['image'][0].permute(1, 2, 0)[:, :, [2, 1, 0]].cpu())
+                axs[1].imshow(map_features[idx].cpu(), origin='lower', cmap='gray', extent=(xmin, xmax, ymin, ymax))
+                m1 = axs[2].imshow(costmap.cpu(), origin='lower', cmap='plasma', extent=(xmin, xmax, ymin, ymax))
 
-                axs[0].set_title('heightmap high')
-                axs[1].set_title('irl cost')
-                axs[0].legend()
+                axs[1].plot(expert_traj[:, 0].cpu(), expert_traj[:, 1].cpu(), c='y', label='expert')
+                axs[2].plot(expert_traj[:, 0].cpu(), expert_traj[:, 1].cpu(), c='y')
 
-                plt.colorbar(m1, ax=axs[1])
+                axs[1].plot(traj[:, 0].cpu(), traj[:, 1].cpu(), c='g', label='learner')
+                axs[2].plot(traj[:, 0].cpu(), traj[:, 1].cpu(), c='g')
+
+                axs[1].set_title('heightmap high')
+                axs[2].set_title('irl cost')
+
+                axs[1].legend()
+
+                plt.colorbar(m1, ax=axs[2])
                 plt.show()
+
+    def to(self, device):
+        self.device = device
+        self.expert_dataset = self.expert_dataset.to(device)
+        self.mppi = self.mppi.to(device)
+        self.network = self.network.to(device)
+        return self
 
 if __name__ == '__main__':
     torch.set_printoptions(sci_mode=False)

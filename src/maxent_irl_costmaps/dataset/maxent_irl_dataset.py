@@ -9,6 +9,7 @@ from grid_map_msgs.msg import GridMap
 from geometry_msgs.msg import Pose, Point, Quaternion, PoseStamped
 
 from maxent_irl_costmaps.preprocess import load_data
+from maxent_irl_costmaps.utils import dict_to
 
 class MaxEntIRLDataset(Dataset):
     """
@@ -38,6 +39,7 @@ class MaxEntIRLDataset(Dataset):
         self.dt = dt
         self.fill_value = fill_value #I don't know if this is the best way to do this, but setting the fill value to 0 implies that missing features contribute nothing to the cost.
         self.N = 0
+        self.device = 'cpu'
 
         self.initialize_dataset()
 
@@ -152,11 +154,17 @@ class MaxEntIRLDataset(Dataset):
     def __getitem__(self, idx):
         data_fp = os.path.join(self.preprocess_fp, 'traj_{}.pt'.format(idx))
 
-        data = torch.load(data_fp)
+        data = torch.load(data_fp, map_location=self.device)
 
         data['map_features'] = ((data['map_features'] - self.feature_mean.view(-1, 1, 1)) / self.feature_std.view(-1, 1, 1)).clip(-5, 5)
 
         return data
+
+    def to(self, device):
+        self.device = device
+        self.feature_mean = self.feature_mean.to(self.device)
+        self.feature_std = self.feature_std.to(self.device)
+        return self
 
 if __name__ == '__main__':
     from torch.utils.data import DataLoader

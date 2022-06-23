@@ -18,7 +18,7 @@ def get_state_visitations(trajs, map_metadata, weights = None):
         weights: (optional) the amount to weight each traj by
     """
     if weights is None:
-        weights = torch.ones(trajs.shape[0]) / trajs.shape[0]
+        weights = torch.ones(trajs.shape[0], device=trajs.device) / trajs.shape[0]
 
     xs = trajs[...,0]
     ys = trajs[...,1]
@@ -33,12 +33,12 @@ def get_state_visitations(trajs, map_metadata, weights = None):
 
     valid_mask = (xidxs >= 0) & (xidxs < ny) & (yidxs >= 0) & (yidxs < nx)
 
-    binweights = torch.ones(trajs.shape[:-1]) * weights.view(-1, 1)
+    binweights = torch.ones(trajs.shape[:-1], device=trajs.device) * weights.view(-1, 1)
     flat_binweights = binweights.flatten()
 
     flat_visits = (nx * yidxs + xidxs).flatten().clamp(0, nx*ny - 1).long()
     flat_visit_counts = torch.bincount(flat_visits, weights=flat_binweights)
-    bins = torch.zeros(nx*ny)
+    bins = torch.zeros(nx*ny, device=trajs.device)
     bins[:len(flat_visit_counts)] += flat_visit_counts
     visit_counts = bins.view(nx, ny)
     visitation_probs = visit_counts / visit_counts.sum()
@@ -78,3 +78,9 @@ def get_feature_counts(traj, map_features, map_metadata):
 
     feature_counts = features.mean(dim=-1)
     return feature_counts
+
+def dict_to(d1, device):
+    if isinstance(d1, dict):
+        return {k:dict_to(v, device) for k,v in d1.items()}
+    else:
+        return d1.to(device)

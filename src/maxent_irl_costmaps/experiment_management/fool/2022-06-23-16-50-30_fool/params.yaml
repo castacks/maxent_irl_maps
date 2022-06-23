@@ -1,0 +1,57 @@
+algo:
+  params:
+    batch_size: 16
+    mppi_itrs: 10
+  type: MPPIIRL
+cost_function:
+  params:
+    goal_cost: 50.0
+    unknown_cost: 0.0
+  type: WaypointCostMapCostFunction
+dataset:
+  params:
+    bag_fp: /home/striest/Desktop/datasets/yamaha_maxent_irl/rosbags_test
+    horizon: 50
+    image_topic: /multisense/left/image_rect_color
+    map_features_topic: /local_gridmap
+    odom_topic: /integrated_to_init
+    preprocess_fp: /home/striest/Desktop/datasets/yamaha_maxent_irl/torch_test
+  type: MaxEntIRLDataset
+experiment:
+  device: cuda
+  epochs: 1
+  name: fool
+  save_every: 1
+  save_to: fool
+metrics: null
+model:
+  params:
+    L: 3.0
+    steer_lim:
+    - -0.5
+    - 0.5
+    steer_rate_lim: 0.5
+    v_Kp: 1.0
+    v_target_lim:
+    - 0.0
+    - 10.0
+    w_Kp: 10.0
+  type: SteerSetpointKBM
+netopt:
+  params: {}
+  type: Adam
+network:
+  params:
+    hidden_channels:
+    - 64
+  type: ResnetCostMapCNN
+trajopt:
+  params:
+    control_params:
+      sys_noise:
+      - 2.0
+      - 0.2
+      temperature: 1.0
+      use_ou: false
+    num_samples: 2048
+  type: MPPI

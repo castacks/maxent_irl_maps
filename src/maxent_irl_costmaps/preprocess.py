@@ -3,6 +3,7 @@ import torch
 import numpy as np
 import scipy.interpolate, scipy.spatial
 import cv2
+from cv_bridge import CvBridge
 
 def load_traj(bag_fp, odom_topic, dt):
     traj = []
@@ -242,6 +243,7 @@ def load_data(bag_fp, map_features_topic, odom_topic, image_topic, horizon, dt, 
 
     #If image topic exists, add to bag
     if image_topic is not None:
+        bridge = CvBridge()
         image_timestamps = []
         for topic, msg, t in bag.read_messages(topics=[image_topic]):
             image_timestamps.append(t.to_sec())
@@ -254,8 +256,11 @@ def load_data(bag_fp, map_features_topic, odom_topic, image_topic, horizon, dt, 
         for i, (topic, msg, t) in enumerate(bag.read_messages(topics=[image_topic])):
             n_hits = np.sum(image_targets == i)
             for j in range(n_hits):
-                img = np.frombuffer(msg.data, dtype=np.uint8)
-                img = cv2.imdecode(img, cv2.IMREAD_UNCHANGED)
+#                img = np.frombuffer(msg.data, dtype=np.uint8)
+                if msg._type == 'sensor_msgs/CompressedImage':
+                    img = bridge.compressed_imgmsg_to_cv2(msg, "rgb8")
+                else:
+                    img = bridge.imgmsg_to_cv2(msg, "rgb8")
                 img = cv2.resize(img, dsize=(224, 224), interpolation=cv2.INTER_AREA)
                 images.append(torch.tensor(img).permute(2, 0, 1)[[2, 1, 0]] / 255.)
 
