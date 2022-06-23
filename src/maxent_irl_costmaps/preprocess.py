@@ -166,6 +166,10 @@ def load_data(bag_fp, map_features_topic, odom_topic, image_topic, horizon, dt, 
         map_feature_keys = []
         mf_nx = int(map_features.info.length_x/map_features.info.resolution)
         mf_ny = int(map_features.info.length_y/map_features.info.resolution)
+
+        #normalize the terrain features to start at ego-height
+        curr_height = interp_z(map_features.info.header.stamp.to_sec())
+
         for k,v in zip(map_features.layers, map_features.data):
             #temp hack bc I don't like this feature.
 #            if k not in ['roughness', 'height_high']:
@@ -179,11 +183,11 @@ def load_data(bag_fp, map_features_topic, odom_topic, image_topic, horizon, dt, 
             else:
                 data = np.array(v.data).reshape(mf_nx, mf_ny)[::-1, ::-1]
 
+                if k in ['terrain', 'height_low', 'height_mean', 'height_high', 'height_max']:
+                    data -= curr_height
+
                 map_feature_keys.append(k)
                 map_feature_data.append(data)
-
-#        map_feature_data.append(np.ones([mf_nx, mf_ny]))
-#        map_feature_keys.append('bias')
 
         map_feature_data = np.stack(map_feature_data, axis=0)
         map_feature_data[~np.isfinite(map_feature_data)] = fill_value
