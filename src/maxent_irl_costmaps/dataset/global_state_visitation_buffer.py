@@ -8,6 +8,7 @@ relevant methods
 """
 
 import os
+import yaml
 import torch
 import numpy as np
 import matplotlib.pyplot as plt
@@ -18,19 +19,27 @@ from maxent_irl_costmaps.utils import quat_to_yaw
 from maxent_irl_costmaps.os_utils import walk_bags
 
 class GlobalStateVisitationBuffer:
-    def __init__(self, fp, gps_topic='/odometry/filtered_odom', resolution=0.5, dt=0.05, device='cpu'):
+    def __init__(self, config_fp, bag_dir, gps_topic='/odometry/filtered_odom', dt=0.05, device='cpu'):
         """
         Args:
-            fp: The root dir to get trajectories from
+            config_fp: yaml file containing metadata for the state visitation map
+            bag_dir: The dir to parse for rosbags
             resolution: The discretization of the map
             dt: The dt for the trajectory
         """
-        self.base_fp = fp
+        self.config_fp = config_fp
+        self.base_fp = bag_dir
         self.gps_topic = gps_topic
-        self.resolution = resolution
         self.dt = dt
 
         self.traj_fps = np.array(walk_bags(self.base_fp))
+        config_data = yaml.safe_load(open(self.config_fp, 'r'))
+        self.metadata = {
+            'origin': torch.tensor([config_data['origin']['x'], config_data['origin']['y']]),
+            'length_x': config_data['length_x'],
+            'length_y': config_data['length_y'],
+            'resolution': config_data['resolution']
+        }
         self.initialize()
         self.device = device
 
@@ -38,44 +47,51 @@ class GlobalStateVisitationBuffer:
         """
         Set map bounds and occgrid
         """
-        xmin = 1e10
-        xmax = -xmin
-        ymin = 1e10
-        ymax = -ymin
+        nx = int(self.metadata['length_x'] / self.metadata['resolution'])
+        ny = int(self.metadata['length_y'] / self.metadata['resolution'])
+        self.data = torch.zeros(nx, ny).long()
+        xmin = self.metadata['origin'][0].item()
+        xmax = xmin + self.metadata['length_x']
+        ymin = self.metadata['origin'][1].item()
+        ymax = ymin + self.metadata['length_y']
 
-        #first pass to get map bounds
+        #first pass to sanitize data
         good_traj_fps = []
         for i, tfp in enumerate(self.traj_fps):
             print('{}/{} ({})'.format(i+1, len(self.traj_fps), os.path.basename(tfp)), end='\r')
-            traj = load_traj(tfp, self.gps_topic, self.dt)
+            try:
+                traj = load_traj(tfp, self.gps_topic, self.dt)
+            except:
+                print("Couldn't load {}, skipping...".format(tfp))
+                good_traj_fps.append(False)
+                continue
             #check for gps jumps 
             diffs = np.linalg.norm(traj[1:, :3] - traj[:-1, :3], axis=-1)
             if any(diffs > self.dt * 50.):
                 print('Jump in ({}) > 50m/s. skipping...'.format(tfp))
                 good_traj_fps.append(False)
 
+            elif traj[:, 0].min() < xmin:
+                print('Traj {} x {:.2f} less than xmin {:.2f}, skipping...'.format(tfp, traj[:, 0].min(), xmin))
+                good_traj_fps.append(False)
+
+            elif traj[:, 0].max() > xmax:
+                print('Traj {} x {:.2f} more than xmax {:.2f}, skipping...'.format(tfp, traj[:, 0].max(), xmax))
+                good_traj_fps.append(False)
+
+            elif traj[:, 1].min() < ymin:
+                print('Traj {} y {:.2f} less than ymin {:.2f}, skipping...'.format(tfp, traj[:, 1].min(), ymin))
+                good_traj_fps.append(False)
+
+            elif traj[:, 1].max() > ymax:
+                print('Traj {} y {:.2f} more than ymax {:.2f}, skipping...'.format(tfp, traj[:, 1].max(), ymax))
+                good_traj_fps.append(False)
+
             else:
-                xmin = min(xmin, traj[:, 0].min())
-                xmax = max(xmax, traj[:, 0].max())
-                ymin = min(ymin, traj[:, 1].min())
-                ymax = max(ymax, traj[:, 1].max())
                 good_traj_fps.append(True)
 
+
         self.traj_fps = self.traj_fps[good_traj_fps]
-        #set up metadata (pad a bit)
-        xmin -= 5.
-        xmax += 5.
-        ymin -= 5.
-        ymax += 5.
-
-        origin = [
-            xmin,
-            ymin
-        ]
-        nx = int((xmax - xmin) / self.resolution)
-        ny = int((ymax - ymin) / self.resolution)
-
-        data = np.zeros([nx, ny]).astype(np.int64)
 
         for i, tfp in enumerate(self.traj_fps):
             print('{}/{} ({})'.format(i+1, len(self.traj_fps), os.path.basename(tfp)), end='\r')
@@ -88,23 +104,15 @@ class GlobalStateVisitationBuffer:
             txs = traj[:, 0]
             tys = traj[:, 1]
 
-            gxs = ((txs - xmin) / self.resolution).astype(np.int64)
-            gys = ((tys - ymin) / self.resolution).astype(np.int64)
+            gxs = ((txs - xmin) / self.metadata['resolution']).astype(np.int64)
+            gys = ((tys - ymin) / self.metadata['resolution']).astype(np.int64)
             width = max(nx, ny)
             grid_hash = gxs * width + gys
             bins, cnts = np.unique(grid_hash, return_counts=True)
             bin_xs = bins // width
             bin_ys = bins % width
 
-            data[bin_xs, bin_ys] += cnts
-
-        self.metadata = {
-            'origin': torch.tensor(origin),
-            'length_x': xmax - xmin,
-            'length_y': ymax - ymin,
-            'resolution': self.resolution
-        }
-        self.data = torch.from_numpy(data)
+            self.data[bin_xs, bin_ys] += torch.from_numpy(cnts)
 
     def get_state_visitations(self, pose, crop_params, tf=None, local=True):
         """
@@ -184,7 +192,7 @@ class GlobalStateVisitationBuffer:
         """
         create an animation for viz purposes
         """
-        traj = load_traj(self.traj_fps[10], self.gps_topic, self.dt)
+        traj = load_traj(np.random.choice(self.traj_fps), self.gps_topic, self.dt)
         traj = traj[np.linalg.norm(traj[:, 7:10], axis=-1) > 1.0]
         crop_params = {
             'origin': np.array([-30., -30.]),
@@ -204,7 +212,7 @@ class GlobalStateVisitationBuffer:
         cymax = cymin + crop_params['length_y']
 
         fig, axs = plt.subplots(1, 2, figsize=(12, 6))
-        plt.show(block=False)
+#        plt.show(block=False)
 
         def get_frame(t, fig, axs):
             print(t, end='\r')
@@ -216,9 +224,10 @@ class GlobalStateVisitationBuffer:
             dx = traj[t+5, 0] - traj[t, 0]
             dy = traj[t+5, 1] - traj[t, 1]
             n = np.sqrt(dx*dx + dy*dy)
+            l = max(self.metadata['length_x'], self.metadata['length_y']) / 50.
 
             axs[0].imshow(self.data.T, origin='lower', extent = (xmin, xmax, ymin, ymax), vmin=0., vmax=5.)
-            axs[0].arrow(traj[t, 0], traj[t, 1], 10*dx/n, 10*dy/n, color='r', head_width=3.)
+            axs[0].arrow(traj[t, 0], traj[t, 1], l*dx/n, l*dy/n, color='r', head_width=l/2.)
             axs[1].imshow(svs[0].T, origin='lower', extent = (cxmin, cxmax, cymin, cymax), vmin=0., vmax=0.01)
             axs[1].arrow(0., 0., 5., 0., color='r', head_width=1.)
 
@@ -234,9 +243,18 @@ class GlobalStateVisitationBuffer:
 #        plt.show()
         anim.save(save_to)
 
-
 if __name__ == '__main__':
-    fp = '/media/striest/4e369a85-4ded-4dcb-b666-9e0d521555c7/2022-05-05/'
-    buf = GlobalStateVisitationBuffer(fp, resolution=1.0)
+    import argparse
 
-    buf.create_anim(save_to = 'gsv2.mp4', local=True)
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--config_fp', type=str, required=True, help='path to global map config')
+    parser.add_argument('--bag_dir', type=str, required=True, help='dir containing GPS for state visitations')
+    args = parser.parse_args()
+
+    buf = GlobalStateVisitationBuffer(args.config_fp, args.bag_dir)
+    torch.save(buf, 'state_visitations.pt')
+
+    if not os.path.exists('gsv_figs'):
+        os.mkdir('gsv_figs')
+    for i in range(10):
+        buf.create_anim(save_to = 'gsv_figs/gsv_{}.mp4'.format(i+1), local=True)
