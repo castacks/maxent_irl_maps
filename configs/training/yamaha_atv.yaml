@@ -1,8 +1,8 @@
 experiment:
-    save_to: fool
-    name: fool
+    save_to: /home/striest/Desktop/experiments/yamaha_maxent_irl
+    name: trail_driving
     device: cuda
-    epochs: 1
+    epochs: 5
     save_every: 1
 
 algo:
@@ -14,8 +14,8 @@ algo:
 dataset:
     type: MaxEntIRLDataset
     params:
-        bag_fp: /home/striest/Desktop/datasets/yamaha_maxent_irl/big_gridmaps/rosbags_test
-        preprocess_fp: /home/striest/Desktop/datasets/yamaha_maxent_irl/big_gridmaps/torch_test
+        bag_fp: /home/striest/Desktop/datasets/yamaha_maxent_irl/big_gridmaps/rosbags_train
+        preprocess_fp: /home/striest/Desktop/datasets/yamaha_maxent_irl/big_gridmaps/torch_train
         map_features_topic: /local_gridmap
         odom_topic: /integrated_to_init
         image_topic: /multisense/left/image_rect_color

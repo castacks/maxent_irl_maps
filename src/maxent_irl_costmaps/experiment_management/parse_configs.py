@@ -131,11 +131,15 @@ def setup_experiment(fp):
         **experiment_params
     ).to(device)
 
-
     return res
 
 #TEST
 if __name__ == '__main__':
     fp = '../../../configs/training/yamaha_atv.yaml'
     res = setup_experiment(fp)
+
+    for i in range(10):
+        res['dataset'].visualize()
+        plt.show()
+
     res['experiment'].run()

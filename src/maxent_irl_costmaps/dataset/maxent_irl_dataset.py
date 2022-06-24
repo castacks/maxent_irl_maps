@@ -74,9 +74,10 @@ class MaxEntIRLDataset(Dataset):
 
                     #make heights relative.
                     for k in feature_keys:
-                        if 'height' in k or 'terrain' in k:
+                        if k in ['height_low', 'height_mean', 'height_high', 'height_max', 'terrain']:
                             idx = feature_keys.index(k)
-                            subdata['map_features'][idx] -= subdata['traj'][0, 2]
+                            mask = abs(subdata['map_features'][idx] - self.fill_value) < 1e-6
+                            subdata['map_features'][idx][~mask] -= subdata['traj'][0, 2]
 
                     torch.save(subdata, pp_fp)
                     self.N += 1
@@ -129,21 +130,21 @@ class MaxEntIRLDataset(Dataset):
         traj = data['traj']
         feats = data['map_features']
         metadata = data['metadata']
-        xmin = metadata['origin'][0]
-        ymin = metadata['origin'][1]
+        xmin = metadata['origin'][0].cpu()
+        ymin = metadata['origin'][1].cpu()
         xmax = xmin + metadata['width']
         ymax = ymin + metadata['height']
 
         
         for ax, feat, feat_key in zip(axs, feats, self.feature_keys):
-            ax.imshow(feat, origin='lower', cmap='gray', extent=(xmin, xmax, ymin, ymax))
-            ax.plot(traj[:, 0], traj[:, 1], c='y')
+            ax.imshow(feat.cpu(), origin='lower', cmap='gray', extent=(xmin, xmax, ymin, ymax))
+            ax.plot(traj[:, 0].cpu(), traj[:, 1].cpu(), c='y')
             ax.set_title(feat_key)
 
         if 'image' in data.keys():
             image =  data['image']
             ax = axs[len(self.feature_keys)]
-            ax.imshow(image.permute(1, 2, 0))
+            ax.imshow(image.permute(1, 2, 0).cpu())
             ax.set_title('Image')
 
         return fig, axs

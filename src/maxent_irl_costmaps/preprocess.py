@@ -183,9 +183,6 @@ def load_data(bag_fp, map_features_topic, odom_topic, image_topic, horizon, dt, 
             else:
                 data = np.array(v.data).reshape(mf_nx, mf_ny)[::-1, ::-1]
 
-                if k in ['terrain', 'height_low', 'height_mean', 'height_high', 'height_max']:
-                    data -= curr_height
-
                 map_feature_keys.append(k)
                 map_feature_data.append(data)
 

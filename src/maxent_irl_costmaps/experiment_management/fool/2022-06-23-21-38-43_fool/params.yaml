@@ -10,12 +10,12 @@ cost_function:
   type: WaypointCostMapCostFunction
 dataset:
   params:
-    bag_fp: /home/striest/Desktop/datasets/yamaha_maxent_irl/small_gridmaps/rosbags_test
+    bag_fp: /home/striest/Desktop/datasets/yamaha_maxent_irl/big_gridmaps/rosbags_train
     horizon: 50
     image_topic: /multisense/left/image_rect_color
     map_features_topic: /local_gridmap
     odom_topic: /integrated_to_init
-    preprocess_fp: /home/striest/Desktop/datasets/yamaha_maxent_irl/small_gridmaps/torch_test
+    preprocess_fp: /home/striest/Desktop/datasets/yamaha_maxent_irl/big_gridmaps/torch_train
   type: MaxEntIRLDataset
 experiment:
   device: cuda
