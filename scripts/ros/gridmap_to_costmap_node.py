@@ -13,7 +13,7 @@ class CostmapperNode:
     """
     Node that listens to gridmaps from perception and uses IRL nets to make them into costmaps
     """
-    def __init__(self, grid_map_topic, cost_map_topic, odom_topic, dataset, network):
+    def __init__(self, grid_map_topic, cost_map_topic, odom_topic, dataset, network, device):
         """
         Args:
             grid_map_topic: the topic to get map features from
@@ -23,10 +23,12 @@ class CostmapperNode:
             network: the network to produce costmaps.
         """
         self.feature_keys = dataset.feature_keys
-        self.feature_mean = dataset.feature_mean
-        self.feature_std = dataset.feature_std
+        self.feature_mean = dataset.feature_mean.to(device)
+        self.feature_std = dataset.feature_std.to(device)
         self.map_metadata = dataset.metadata
-        self.network = network
+        self.network = network.to(device)
+        self.device = device
+
         self.current_height = 0.
 
         #we will set the output resolution dynamically
@@ -40,7 +42,7 @@ class CostmapperNode:
         self.current_height = msg.pose.pose.position.z
 
     def handle_grid_map(self, msg):
-        rospy.loginfo('handling gridmap...')
+        t1 = rospy.Time.now().to_sec()
         nx = int(msg.info.length_x / msg.info.resolution)
         ny = int(msg.info.length_y / msg.info.resolution)
         self.grid_map_cvt.size = [nx, ny]
@@ -48,9 +50,9 @@ class CostmapperNode:
 
         rospy.loginfo_throttle(1.0, "output shape: {}".format(gridmap['data'].shape))
 
-        map_feats = torch.from_numpy(gridmap['data']).float()
+        map_feats = torch.from_numpy(gridmap['data']).float().to(self.device)
         for k in self.feature_keys:
-            if 'height' in k or 'terrain' in k:
+            if k in ['height_low', 'height_mean', 'height_high', 'height_max', 'terrain']:
                 idx = self.feature_keys.index(k)
                 map_feats[idx] -= self.current_height
 
@@ -62,9 +64,8 @@ class CostmapperNode:
             costmap = self.network.forward(map_feats_norm.view(1, *map_feats_norm.shape))[0]
 
         #experiment w/ normalizing
-        rospy.loginfo_throttle(1.0, "min = {}, max = {}".format(costmap.min(), costmap.max()))
-        costmap = (costmap - costmap.min()) / (costmap.max() - costmap.min())
-        costmap = (costmap * 100.).long().numpy()
+        rospy.loginfo_throttle(1.0, "min = {:.4f}, max = {:.4f}".format(costmap.min(), costmap.max()))
+        costmap = (costmap * 100.).long().cpu().numpy()
 
         costmap_msg = OccupancyGrid()
         costmap_msg.header.stamp = msg.info.header.stamp
@@ -74,10 +75,13 @@ class CostmapperNode:
         costmap_msg.info.height = int(msg.info.length_y / msg.info.resolution)
         costmap_msg.info.origin.position.x = msg.info.pose.position.x - msg.info.length_x/2.
         costmap_msg.info.origin.position.y = msg.info.pose.position.y - msg.info.length_y/2.
+        costmap_msg.info.origin.position.z = self.current_height
 
         costmap_msg.data = costmap.flatten()
 
         self.cost_map_pub.publish(costmap_msg)
+        t2 = rospy.Time.now().to_sec()
+        rospy.loginfo_throttle(1.0, "inference time: {:.4f}s".format(t2-t1))
 
 if __name__ == '__main__':
     rospy.init_node('costmapper_node')
@@ -86,10 +90,11 @@ if __name__ == '__main__':
     grid_map_topic = rospy.get_param('~gridmap_topic')
     cost_map_topic = rospy.get_param('~costmap_topic')
     odom_topic = rospy.get_param('~odom_topic')
+    device = rospy.get_param('~device', 'cuda')
     mppi_irl = torch.load(model_fp)
 
 #    mppi_irl.visualize()
 
-    costmapper = CostmapperNode(grid_map_topic, cost_map_topic, odom_topic, mppi_irl.expert_dataset, mppi_irl.network)
+    costmapper = CostmapperNode(grid_map_topic, cost_map_topic, odom_topic, mppi_irl.expert_dataset, mppi_irl.network, device)
 
     rospy.spin()
