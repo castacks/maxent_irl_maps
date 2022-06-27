@@ -6,12 +6,15 @@ import torch
 import matplotlib.pyplot as plt
 
 from torch_mpc.models.steer_setpoint_kbm import SteerSetpointKBM
+from torch_mpc.models.skid_steer import SkidSteer
+
 from torch_mpc.algos.mppi import MPPI
 from torch_mpc.cost_functions.waypoint_costmap import WaypointCostMapCostFunction
 
 from maxent_irl_costmaps.algos.mppi_irl import MPPIIRL
 
 from maxent_irl_costmaps.networks.resnet import ResnetCostmapCNN
+from maxent_irl_costmaps.networks.unet import UNet
 
 from maxent_irl_costmaps.dataset.maxent_irl_dataset import MaxEntIRLDataset
 
@@ -68,6 +71,15 @@ def setup_experiment(fp):
             out_channels = 1,
             **network_params['params']
         ).to(device)
+    elif network_params['type'] == 'UNet':
+        channels = len(res['dataset'].feature_keys)
+        nx = int(res['dataset'].metadata['width'] / res['dataset'].metadata['resolution'])
+        ny = int(res['dataset'].metadata['height'] / res['dataset'].metadata['resolution'])
+        res['network'] = UNet(
+            insize = [channels, nx, ny],
+            outsize = [1, nx, ny],
+            **network_params['params']
+        )
     else:
         print('Unsupported network type {}'.format(network_params['type']))
         exit(1)
@@ -84,6 +96,8 @@ def setup_experiment(fp):
     model_params = experiment_dict['model']
     if model_params['type'] == 'SteerSetpointKBM':
         res['model'] = SteerSetpointKBM(**model_params['params']).to(device)
+    elif model_params['type'] == 'SkidSteer':
+        res['model'] = SkidSteer(**model_params['params']).to(device)
     else:
         print('Unsupported model type {}'.format(model_params['type']))
         exit(1)
@@ -135,11 +149,11 @@ def setup_experiment(fp):
 
 #TEST
 if __name__ == '__main__':
-    fp = '../../../configs/training/yamaha_atv.yaml'
+    fp = '../../../configs/training/warthog.yaml'
     res = setup_experiment(fp)
 
-    for i in range(10):
-        res['dataset'].visualize()
-        plt.show()
+#    for i in range(10):
+#        res['dataset'].visualize()
+#        plt.show()
 
     res['experiment'].run()

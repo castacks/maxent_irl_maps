@@ -120,7 +120,7 @@ class MaxEntIRLDataset(Dataset):
         """
         n_panes = len(self.feature_keys) + 1
 
-        nx = int(np.sqrt(n_panes))
+        nx = int(np.sqrt(n_panes)) + 1
         ny = int(n_panes / nx) + 1
 
         fig, axs = plt.subplots(nx, ny, figsize=(20, 20))

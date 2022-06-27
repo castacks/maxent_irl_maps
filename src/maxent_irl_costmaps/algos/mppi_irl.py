@@ -60,12 +60,14 @@ class MPPIIRL:
         self.itr = 0
         self.device = device
 
-    def update(self):
+    def update(self, n=-1):
         self.itr += 1
         dl = DataLoader(self.expert_dataset, batch_size=self.batch_size, shuffle=True)
         for i, batch in enumerate(dl):
             print('{}/{}'.format(i+1, int(len(self.expert_dataset)/self.batch_size)), end='\r')
             self.gradient_step(batch)
+            if n > -1 and i >= n:
+                break
 
         print('_____ITR {}_____'.format(self.itr))
 
@@ -148,80 +150,74 @@ class MPPIIRL:
         deep_features_cache.backward(gradient=grads)
         self.network_opt.step()
 
-    def visualize(self, n=10):
-        dl = DataLoader(self.expert_dataset, batch_size=1, shuffle=True)
+    def visualize(self, idx=-1):
+        if idx == -1:
+            idx = np.random.randint(len(self.expert_dataset))
+
         with torch.no_grad():
-            for i, data in enumerate(dl):
-                if i > n:
-                    return
+            data = self.expert_dataset[idx]
 
-                map_features = data['map_features'][0]
-                map_metadata = {k:v[0] for k,v in data['metadata'].items()}
-                metadata = data['metadata']
-                xmin = metadata['origin'][0, 0]
-                ymin = metadata['origin'][0, 1]
-                xmax = xmin + metadata['width'][0]
-                ymax = ymin + metadata['height'][0]
-                expert_traj = data['traj'][0]
+            map_features = data['map_features']
+            metadata = data['metadata']
+            xmin = metadata['origin'][0].cpu()
+            ymin = metadata['origin'][1].cpu()
+            xmax = xmin + metadata['width']
+            ymax = ymin + metadata['height']
+            expert_traj = data['traj']
 
-                #compute costmap
+            #compute costmap
 
 #                #mlp
 #                costmap = torch.moveaxis(self.network.forward(torch.moveaxis(map_features, 0, -1)), -1, 0)[0]
 
-                #resnet cnn
-                costmap = self.network.forward(map_features.view(1, *map_features.shape))[0, 0]
+            #resnet cnn
+            costmap = self.network.forward(map_features.view(1, *map_features.shape))[0, 0]
 
-                #initialize solver
-                initial_state = expert_traj[0]
-                HACK = {"state":initial_state, "steer_angle":torch.zeros(1, device=initial_state.device)}
-                x = self.mppi.model.get_observations(HACK)
+            #initialize solver
+            initial_state = expert_traj[0]
+            HACK = {"state":initial_state, "steer_angle":torch.zeros(1, device=initial_state.device)}
+            x = self.mppi.model.get_observations(HACK)
 
-                map_params = {
-                    'resolution': map_metadata['resolution'].item(),
-                    'height': map_metadata['height'].item(),
-                    'width': map_metadata['width'].item(),
-                    'origin': map_metadata['origin']
-                }
-                self.mppi.reset()
-                self.mppi.cost_fn.update_map_params(map_params)
-                self.mppi.cost_fn.update_costmap(costmap)
-                self.mppi.cost_fn.update_goal(expert_traj[-1, :2])
+            map_params = {
+                'resolution': metadata['resolution'],
+                'height': metadata['height'],
+                'width': metadata['width'],
+                'origin': metadata['origin']
+            }
+            self.mppi.reset()
+            self.mppi.cost_fn.update_map_params(map_params)
+            self.mppi.cost_fn.update_costmap(costmap)
+            self.mppi.cost_fn.update_goal(expert_traj[-1, :2])
 
-                #solve for traj
-                for ii in range(self.mppi_itrs):
-                    self.mppi.get_control(x, step=False)
+            #solve for traj
+            for ii in range(self.mppi_itrs):
+                self.mppi.get_control(x, step=False)
 
-                #regular version
-                traj = self.mppi.last_states
+            #regular version
+            traj = self.mppi.last_states
 
-                metadata = data['metadata']
-                xmin = metadata['origin'][0, 0].cpu()
-                ymin = metadata['origin'][0, 1].cpu()
-                xmax = xmin + metadata['width'][0]
-                ymax = ymin + metadata['height'][0]
+            metadata = data['metadata']
+            fig, axs = plt.subplots(1, 3, figsize=(18, 6))
+            
+            idx = self.expert_dataset.feature_keys.index('height_high')
+            
+            axs[0].imshow(data['image'].permute(1, 2, 0)[:, :, [2, 1, 0]].cpu())
+            axs[1].imshow(map_features[idx].cpu(), origin='lower', cmap='gray', extent=(xmin, xmax, ymin, ymax))
+            m1 = axs[2].imshow(costmap.cpu(), origin='lower', cmap='plasma', extent=(xmin, xmax, ymin, ymax))
 
-                fig, axs = plt.subplots(1, 3, figsize=(18, 6))
-                
-                idx = self.expert_dataset.feature_keys.index('height_high')
-                
-                axs[0].imshow(data['image'][0].permute(1, 2, 0)[:, :, [2, 1, 0]].cpu())
-                axs[1].imshow(map_features[idx].cpu(), origin='lower', cmap='gray', extent=(xmin, xmax, ymin, ymax))
-                m1 = axs[2].imshow(costmap.cpu(), origin='lower', cmap='plasma', extent=(xmin, xmax, ymin, ymax))
+            axs[1].plot(expert_traj[:, 0].cpu(), expert_traj[:, 1].cpu(), c='y', label='expert')
+            axs[2].plot(expert_traj[:, 0].cpu(), expert_traj[:, 1].cpu(), c='y')
 
-                axs[1].plot(expert_traj[:, 0].cpu(), expert_traj[:, 1].cpu(), c='y', label='expert')
-                axs[2].plot(expert_traj[:, 0].cpu(), expert_traj[:, 1].cpu(), c='y')
+            axs[1].plot(traj[:, 0].cpu(), traj[:, 1].cpu(), c='g', label='learner')
+            axs[2].plot(traj[:, 0].cpu(), traj[:, 1].cpu(), c='g')
 
-                axs[1].plot(traj[:, 0].cpu(), traj[:, 1].cpu(), c='g', label='learner')
-                axs[2].plot(traj[:, 0].cpu(), traj[:, 1].cpu(), c='g')
+            axs[1].set_title('heightmap high')
+            axs[2].set_title('irl cost')
 
-                axs[1].set_title('heightmap high')
-                axs[2].set_title('irl cost')
+            axs[1].legend()
 
-                axs[1].legend()
-
-                plt.colorbar(m1, ax=axs[2])
-                plt.show()
+            plt.colorbar(m1, ax=axs[2])
+        return fig, axs
 
     def to(self, device):
         self.device = device

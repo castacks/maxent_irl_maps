@@ -1,6 +1,6 @@
 experiment:
     save_to: /home/striest/Desktop/experiments/yamaha_maxent_irl
-    name: trail_driving_cnn_deeper
+    name: trail_driving_unet
     device: cuda
     epochs: 50
     steps_per_epoch: 10
@@ -23,9 +23,10 @@ dataset:
         horizon: 50
 
 network:
-    type: ResnetCostMapCNN
+    type: UNet
     params:
-        hidden_channels: [64, 64, 64]
+        hidden_channels: [32, 16, 8]
+        n_blocks: 3
 
 netopt:
     type: Adam
