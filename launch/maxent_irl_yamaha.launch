@@ -1,0 +1,14 @@
+<?xml version="1.0"?>
+
+<launch>
+    <!-- File management -->
+	<arg name="model_fp" default="../models/yamaha/2022-06-26-resnet.pt"/>
+
+	<node pkg="maxent_irl_maps" type="gridmap_to_costmap_node.py" name="maxent_irl_node" output="screen"> 
+        <param name="model_fp" value="$(dirname)/$(arg model_fp)"/>
+	    <param name="gridmap_topic" value="/local_gridmap"/>
+        <param name="costmap_topic" value="/irl_costmap"/>
+        <param name="odom_topic" value="/integrated_to_init"/>
+	</node>
+
+</launch>
