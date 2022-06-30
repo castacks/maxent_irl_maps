@@ -44,16 +44,10 @@ class MPPIIRL:
         self.mppi = mppi
         self.mppi_itrs = mppi_itrs
 
-#        hiddens = [128,]
-#        self.network = ResnetCostmapCNN(in_channels=len(expert_dataset.feature_keys), out_channels=1, hidden_channels=hiddens)
-
         self.network = network
 
         print(sum([x.numel() for x in self.network.parameters()]))
         print(expert_dataset.feature_keys)
-
-#        self.network_opt = torch.optim.SGD(self.network.parameters(), lr=0.01)
-#        self.network_opt = torch.optim.Adam(self.network.parameters())
         self.network_opt = opt
 
         self.batch_size = batch_size
@@ -97,8 +91,8 @@ class MPPIIRL:
 
             #initialize solver
             initial_state = expert_traj[0]
-            HACK = {"state":initial_state, "steer_angle":torch.zeros(1, device=initial_state.device)}
-            x = self.mppi.model.get_observations(HACK)
+            x0 = {"state":initial_state, "steer_angle":batch["steer"][i, [0]] if "steer" in batch.keys() else torch.zeros(1, device=initial_state.device)}
+            x = self.mppi.model.get_observations(x0)
 
             map_params = {
                 'resolution': map_metadata['resolution'].item(),
@@ -175,8 +169,8 @@ class MPPIIRL:
 
             #initialize solver
             initial_state = expert_traj[0]
-            HACK = {"state":initial_state, "steer_angle":torch.zeros(1, device=initial_state.device)}
-            x = self.mppi.model.get_observations(HACK)
+            x0 = {"state":initial_state, "steer_angle":data["steer"][[0]] if "steer" in data.keys() else torch.zeros(1, device=initial_state.device)}
+            x = self.mppi.model.get_observations(x0)
 
             map_params = {
                 'resolution': metadata['resolution'],

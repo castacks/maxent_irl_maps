@@ -10,6 +10,7 @@ from geometry_msgs.msg import Pose, Point, Quaternion, PoseStamped
 
 from maxent_irl_costmaps.preprocess import load_data
 from maxent_irl_costmaps.utils import dict_to
+from maxent_irl_costmaps.os_utils import walk_bags
 
 class MaxEntIRLDataset(Dataset):
     """
@@ -62,7 +63,7 @@ class MaxEntIRLDataset(Dataset):
 
         #save all the data into individual files
         if preprocess:
-            for tfp in os.listdir(self.bag_fp):
+            for tfp in walk_bags(self.bag_fp):
                 raw_fp = os.path.join(self.bag_fp, tfp)
                 data, feature_keys = load_data(raw_fp, self.map_features_topic, self.odom_topic, self.image_topic, self.horizon, self.dt, self.fill_value)
                 if data is None:

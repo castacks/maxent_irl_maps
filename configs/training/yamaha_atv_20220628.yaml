@@ -1,6 +1,6 @@
 experiment:
     save_to: /home/striest/Desktop/experiments/yamaha_maxent_irl
-    name: trail_driving_cnn_deeper_bnorm_exp
+    name: resnet_fast_data
     device: cuda
     epochs: 50
     steps_per_epoch: 10
@@ -26,7 +26,6 @@ network:
     type: ResnetCostMapCNN
     params:
         hidden_channels: [64, 64, 64]
-        activation_type: exponential
         activation_scale: 1.0
 
 netopt:
@@ -37,13 +36,13 @@ cost_function:
     type: WaypointCostMapCostFunction
     params:
         unknown_cost: 0.
-        goal_cost: 20.0
+        goal_cost: 30.0
 
 model:
     type: SteerSetpointKBM
     params:
         L: 3.0
-        v_target_lim: [2.0, 10.0]
+        v_target_lim: [0.0, 15.0]
         steer_lim: [-0.5, 0.5]
         steer_rate_lim: 0.5
         v_Kp: 1.0
@@ -54,11 +53,8 @@ trajopt:
     params: 
         num_samples: 2048
         control_params:
-            sys_noise: [5.0, 0.25]
-            temperature: 0.1
-            use_ou: True
-            ou_alpha: 0.9
-            ou_scale: 10.0
-            d_ou_scale: 5.0
+            sys_noise: [2.0, 0.2]
+            temperature: 1.0
+            use_ou: False
 
 metrics:

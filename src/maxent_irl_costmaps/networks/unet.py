@@ -3,6 +3,8 @@ import numpy as np
 
 from torch import nn
 
+from maxent_irl_costmaps.networks.misc import ScaledSigmoid
+
 class DownsampleBlock(nn.Module):
     """
     Generic CNN to downsample an image
@@ -71,7 +73,7 @@ class UNet(nn.Module):
         2. Apply 1-d convolution to the most downsampled image
         3. Concatenate original image and features and upsample.
     """
-    def __init__(self, insize, outsize, n_blocks=3, hidden_channels=[8, 16, 32], pool=2, device='cpu'):
+    def __init__(self, insize, outsize, n_blocks=3, hidden_channels=[8, 16, 32], pool=2, activation_scale=1.0, device='cpu'):
         """
         Args:
             insize: The dimension of the image to process (not really needed for unet but keep for consistency with other architectures.
@@ -115,6 +117,7 @@ class UNet(nn.Module):
         self.channel_wise_conv = nn.Linear(np.prod(self.layer_sizes[-1][1:]), np.prod(self.layer_sizes[-1][1:]))
         self.conv1d = nn.Conv2d(self.hidden_channels[-1], self.hidden_channels[-1], kernel_size=1)
         self.last_conv = nn.Conv2d(self.insize[0], self.outsize[0], kernel_size=1)
+        self.activation = ScaledSigmoid(scale=activation_scale)
 
         self.device = device
 
@@ -148,7 +151,7 @@ class UNet(nn.Module):
             _x = self.conv_blocks[i].forward(_x)
         
         _x = self.last_conv(_x)
-        return _x.sigmoid() #squash to [0, 1]
+        return self.activation.forward(_x) #squash to [0, 1]
 
     def to(self, device):   
         self.device = device

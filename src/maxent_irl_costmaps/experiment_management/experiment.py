@@ -31,10 +31,6 @@ class Experiment:
         maybe_mkdir(self.base_fp, True)
 
     def run(self):
-        self.build_experiment_dir()
-        with open(os.path.join(self.base_fp, 'params.yaml'), 'w') as fp:
-            yaml.dump(self.params, fp, default_flow_style = False)
-
         for i in range(3):
             self.algo.visualize()
             plt.show()
@@ -43,6 +39,11 @@ class Experiment:
             #TODO: wrap the learning here
 
             self.algo.update(self.steps_per_epoch)
+
+            if e == 0:
+                self.build_experiment_dir()
+                with open(os.path.join(self.base_fp, 'params.yaml'), 'w') as fp:
+                    yaml.dump(self.params, fp, default_flow_style = False)
 
             if e % self.save_every == 0:
                 torch.save(self.algo.to('cpu'), os.path.join(self.base_fp, "itr_{}.pt".format(e + 1)))

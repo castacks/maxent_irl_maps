@@ -85,7 +85,7 @@ def load_traj(bag_fp, odom_topic, dt):
 
     return traj
 
-def load_data(bag_fp, map_features_topic, odom_topic, image_topic, horizon, dt, fill_value):
+def load_data(bag_fp, map_features_topic, odom_topic, image_topic, horizon, dt, fill_value, steer_angle_topic='/ros_talon/current_position'):
     """
     Extract map features and trajectory data from the bag.
     """
@@ -96,8 +96,12 @@ def load_data(bag_fp, map_features_topic, odom_topic, image_topic, horizon, dt, 
     timestamps = []
     dataset = []
 
+    #steer angle needed for yamaha
+    steer_angles = []
+    steer_timestamps = []
+
     bag = rosbag.Bag(bag_fp, 'r')
-    for topic, msg, t in bag.read_messages(topics=[map_features_topic, odom_topic]):
+    for topic, msg, t in bag.read_messages(topics=[map_features_topic, odom_topic, steer_angle_topic]):
         if topic == odom_topic:
             pose = msg.pose.pose
             p = np.array([
@@ -128,6 +132,10 @@ def load_data(bag_fp, map_features_topic, odom_topic, image_topic, horizon, dt, 
         elif topic == map_features_topic:
             map_features_list.append(msg)
 
+        elif topic == steer_angle_topic:
+            steer_angles.append(msg.data)
+            steer_timestamps.append(t.to_sec())
+
     traj = np.stack(traj, axis=0)
     vels = np.stack(vels, axis=0)
     timestamps = np.array(timestamps)
@@ -156,6 +164,10 @@ def load_data(bag_fp, map_features_topic, odom_topic, image_topic, horizon, dt, 
     interp_wx = scipy.interpolate.interp1d(timestamps[idxs], vels[idxs, 3])
     interp_wy = scipy.interpolate.interp1d(timestamps[idxs], vels[idxs, 4])
     interp_wz = scipy.interpolate.interp1d(timestamps[idxs], vels[idxs, 5])
+
+    if len(steer_angles) > 0:
+        steer_angles = np.stack(steer_angles)
+        interp_steer = scipy.interpolate.interp1d(steer_timestamps, steer_angles, fill_value="extrapolate") #this is a bit sketchy
 
     map_target_times = []
 
@@ -205,13 +217,20 @@ def load_data(bag_fp, map_features_topic, odom_topic, image_topic, horizon, dt, 
         wys = interp_wy(targets)
         wzs = interp_wz(targets)
 
-        #handle transforms to deserialize map/costmap
         traj = np.concatenate([
             np.stack([xs, ys, zs], axis=-1),
             qs,
             np.stack([vxs, vys, vzs, wxs, wys, wzs], axis=-1)
         ], axis=-1)
 
+        slim = 415.
+        if len(steer_angles) > 0:
+            steers = interp_steer(targets)
+            if any(np.abs(steers) > slim):
+                print("WARNING: steer {:.4f} exceeded the steer limit".format(max(abs(steers))))
+            steers = np.clip(steers, -slim, slim) #clip to deal with potentially bad extrapolation
+
+        #handle transforms to deserialize map/costmap
         map_metadata = map_features.info
         xmin = map_metadata.pose.position.x - 0.5 * (map_metadata.length_x)
         xmax = xmin + map_metadata.length_x
@@ -227,6 +246,7 @@ def load_data(bag_fp, map_features_topic, odom_topic, image_topic, horizon, dt, 
 
         data = {
             'traj':torch.tensor(traj).float(),
+            'steer': torch.tensor(steers).float() if len(steer_angles) > 0 else None,
             'feature_keys': map_feature_keys,
             'map_features': torch.tensor(map_feature_data).float(),
             'metadata': metadata_out
@@ -240,6 +260,7 @@ def load_data(bag_fp, map_features_topic, odom_topic, image_topic, horizon, dt, 
         'map_features':[x['map_features'] for x in dataset],
         'traj':[x['traj'] for x in dataset],
         'metadata':[x['metadata'] for x in dataset],
+        'steer':[x['steer'] for x in dataset]
     }
 
     #If image topic exists, add to bag
