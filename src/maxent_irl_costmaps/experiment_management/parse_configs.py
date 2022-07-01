@@ -149,7 +149,7 @@ def setup_experiment(fp):
 
 #TEST
 if __name__ == '__main__':
-    fp = '../../../configs/training/yamaha_atv_20220628.yaml'
+    fp = '../../../configs/training/yamaha_atv.yaml'
     res = setup_experiment(fp)
 
 #    for i in range(10):

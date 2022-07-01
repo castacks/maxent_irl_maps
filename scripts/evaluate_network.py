@@ -25,6 +25,7 @@ if __name__ == '__main__':
     parser.add_argument('--map_topic', type=str, required=False, default='/local_gridmap', help='topic to extract map features from')
     parser.add_argument('--odom_topic', type=str, required=False, default='/integrated_to_init', help='topic to extract odom from')
     parser.add_argument('--image_topic', type=str, required=False, default='/multisense/left/image_rect_color', help='topic to extract images from')
+    parser.add_argument('--viz', action='store_true', help='set this flag if you want the pyplot viz. Default is to save to folder')
     args = parser.parse_args()
 
     model = torch.load(args.model_fp, map_location='cpu')
@@ -38,8 +39,10 @@ if __name__ == '__main__':
     for i in range(len(dataset)):
         print('{}/{}'.format(i+1, len(dataset)), end='\r')
         fig_fp = os.path.join(args.save_fp, '{:05d}.png'.format(i+1))
-#        model.visualize(idx = -1)
-#        plt.show()
-        model.visualize(idx = i)
-        plt.savefig(fig_fp)
-        plt.close()
+        if args.viz:
+            model.visualize(idx = -1)
+            plt.show()
+        else:
+            model.visualize(idx = i)
+            plt.savefig(fig_fp)
+            plt.close()

@@ -1,6 +1,6 @@
 experiment:
     save_to: /home/striest/Desktop/experiments/yamaha_maxent_irl
-    name: trail_driving_cnn_deeper_bnorm_exp
+    name: fast_driving_cnn_deeper_bnorm_exp_h75
     device: cuda
     epochs: 50
     steps_per_epoch: 10
@@ -10,17 +10,17 @@ algo:
     type: MPPIIRL
     params:
         mppi_itrs: 10
-        batch_size: 8
+        batch_size: 12
 
 dataset:
     type: MaxEntIRLDataset
     params:
         bag_fp: /home/striest/Desktop/datasets/yamaha_maxent_irl/big_gridmaps/rosbags_train
-        preprocess_fp: /home/striest/Desktop/datasets/yamaha_maxent_irl/big_gridmaps/torch_train
+        preprocess_fp: /home/striest/Desktop/datasets/yamaha_maxent_irl/big_gridmaps/torch_train_h75
         map_features_topic: /local_gridmap
         odom_topic: /integrated_to_init
         image_topic: /multisense/left/image_rect_color
-        horizon: 50
+        horizon: 75
 
 network:
     type: ResnetCostMapCNN
@@ -43,7 +43,7 @@ model:
     type: SteerSetpointKBM
     params:
         L: 3.0
-        v_target_lim: [2.0, 10.0]
+        v_target_lim: [2.0, 15.0]
         steer_lim: [-0.5, 0.5]
         steer_rate_lim: 0.5
         v_Kp: 1.0
