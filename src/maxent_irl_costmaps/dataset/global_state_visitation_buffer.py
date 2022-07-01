@@ -240,8 +240,8 @@ class GlobalStateVisitationBuffer:
 
         anim = FuncAnimation(fig, lambda t: get_frame(t, fig, axs), frames = np.arange(traj.shape[0] - 10), interval=300*self.dt)
 
-#        plt.show()
-        anim.save(save_to)
+        plt.show()
+#        anim.save(save_to)
 
 if __name__ == '__main__':
     import argparse
@@ -249,12 +249,17 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--config_fp', type=str, required=True, help='path to global map config')
     parser.add_argument('--bag_dir', type=str, required=True, help='dir containing GPS for state visitations')
+    parser.add_argument('--save_as', type=str, required=True, help='save buffer to this filepath')
     args = parser.parse_args()
 
     buf = GlobalStateVisitationBuffer(args.config_fp, args.bag_dir)
-    torch.save(buf, 'state_visitations.pt')
 
-    if not os.path.exists('gsv_figs'):
-        os.mkdir('gsv_figs')
-    for i in range(10):
-        buf.create_anim(save_to = 'gsv_figs/gsv_{}.mp4'.format(i+1), local=True)
+    save_fp = args.save_as if args.save_as[-3:] == '.pt' else args.save_as + '.pt'
+
+    torch.save(buf, save_fp)
+    buf.create_anim(save_to = 'aaa', local=True)
+
+#    if not os.path.exists('gsv_figs'):
+#        os.mkdir('gsv_figs')
+#    for i in range(10):
+#        buf.create_anim(save_to = 'gsv_figs/gsv_{}.mp4'.format(i+1), local=True)

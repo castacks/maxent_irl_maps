@@ -85,7 +85,7 @@ def load_traj(bag_fp, odom_topic, dt):
 
     return traj
 
-def load_data(bag_fp, map_features_topic, odom_topic, image_topic, horizon, dt, fill_value, steer_angle_topic='/ros_talon/current_position'):
+def load_data(bag_fp, map_features_topic, odom_topic, image_topic, horizon, dt, fill_value, steer_angle_topic='/ros_talon/current_position', gps_topic='/odometry/filtered_odom'):
     """
     Extract map features and trajectory data from the bag.
     """
@@ -100,8 +100,12 @@ def load_data(bag_fp, map_features_topic, odom_topic, image_topic, horizon, dt, 
     steer_angles = []
     steer_timestamps = []
 
+    #gps needed for global state visitations
+    gps_poses = []
+    gps_timestamps = []
+
     bag = rosbag.Bag(bag_fp, 'r')
-    for topic, msg, t in bag.read_messages(topics=[map_features_topic, odom_topic, steer_angle_topic]):
+    for topic, msg, t in bag.read_messages(topics=[map_features_topic, odom_topic, steer_angle_topic, gps_topic]):
         if topic == odom_topic:
             pose = msg.pose.pose
             p = np.array([
@@ -135,6 +139,28 @@ def load_data(bag_fp, map_features_topic, odom_topic, image_topic, horizon, dt, 
         elif topic == steer_angle_topic:
             steer_angles.append(msg.data)
             steer_timestamps.append(t.to_sec())
+
+        elif topic == gps_topic:
+            pose = msg.pose.pose
+            twist = psg.twist.twist
+            gps_state = np.array([
+                pose.position.x,
+                pose.position.y,
+                pose.position.z,
+                pose.orientation.x,
+                pose.orientation.y,
+                pose.orientation.z,
+                pose.orientation.w,
+                twist.linear.x,
+                twist.linear.y,
+                twist.linear.z,
+                twist.angular.x,
+                twist.angular.y,
+                twist.angular.z,
+            ])
+            if len(gps_timestamps) == 0 or (msg.header.stamp.to_sec() - timestamps[-1] > 1e-6):
+                gps_poses.append(gps_state)
+                gps_timestamps.append(msg.header.stamp.to_sec())
 
     traj = np.stack(traj, axis=0)
     vels = np.stack(vels, axis=0)
