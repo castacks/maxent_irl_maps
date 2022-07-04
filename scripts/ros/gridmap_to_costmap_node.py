@@ -13,13 +13,15 @@ class CostmapperNode:
     """
     Node that listens to gridmaps from perception and uses IRL nets to make them into costmaps
     """
-    def __init__(self, grid_map_topic, cost_map_topic, odom_topic, dataset, network, device):
+    def __init__(self, grid_map_topic, cost_map_topic, odom_topic, dataset, network, vmin, vmax, device):
         """
         Args:
             grid_map_topic: the topic to get map features from
             cost_map_topic: The topic to publish costmaps to
             odom_topic: The topic to get height from 
             dataset: The dataset that the network was trained on. (Need to get feature mean/var)
+            vmin: For viz, this value of the costmap is set as 0 cost
+            vmax: For viz, this value of the costmaps is set as 1 cost
             network: the network to produce costmaps.
         """
         self.feature_keys = dataset.feature_keys
@@ -27,6 +29,10 @@ class CostmapperNode:
         self.feature_std = dataset.feature_std.to(device)
         self.map_metadata = dataset.metadata
         self.network = network.to(device)
+
+        self.vmin = vmin
+        self.vmax = vmax
+
         self.device = device
 
         self.current_height = 0.
@@ -37,6 +43,7 @@ class CostmapperNode:
         self.grid_map_sub = rospy.Subscriber(grid_map_topic, GridMap, self.handle_grid_map, queue_size=1)
         self.odom_sub = rospy.Subscriber(odom_topic, Odometry, self.handle_odom, queue_size=1)
         self.cost_map_pub = rospy.Publisher(cost_map_topic, OccupancyGrid, queue_size=1)
+        self.cost_map_viz_pub = rospy.Publisher(cost_map_topic + '/viz', OccupancyGrid, queue_size=1)
 
     def handle_odom(self, msg):
         self.current_height = msg.pose.pose.position.z
@@ -65,7 +72,11 @@ class CostmapperNode:
 
         #experiment w/ normalizing
         rospy.loginfo_throttle(1.0, "min = {:.4f}, max = {:.4f}".format(costmap.min(), costmap.max()))
-        costmap = (costmap * 100.).long().cpu().numpy()
+
+        costmap_viz = (100. * (costmap - self.vmin) / (self.vmax - self.vmin)).clip(0., 100.).long().cpu().numpy()
+        costmap = (costmap).long().cpu().numpy()
+
+#        costmap = (costmap * 100.).long().cpu().numpy()
 
         costmap_msg = OccupancyGrid()
         costmap_msg.header.stamp = msg.info.header.stamp
@@ -80,6 +91,10 @@ class CostmapperNode:
         costmap_msg.data = costmap.flatten()
 
         self.cost_map_pub.publish(costmap_msg)
+
+        costmap_msg.data = costmap_viz.flatten()
+        self.cost_map_viz_pub.publish(costmap_msg)
+
         t2 = rospy.Time.now().to_sec()
         rospy.loginfo_throttle(1.0, "inference time: {:.4f}s".format(t2-t1))
 
@@ -90,11 +105,11 @@ if __name__ == '__main__':
     grid_map_topic = rospy.get_param('~gridmap_topic')
     cost_map_topic = rospy.get_param('~costmap_topic')
     odom_topic = rospy.get_param('~odom_topic')
+    vmin = rospy.get_param('~viz_vmin', 0.5) #values below this quantile are viz-ed as 0
+    vmax = rospy.get_param('~viz_vmax', 30.0) #values above this quantile are viz-ed as 1
     device = rospy.get_param('~device', 'cuda')
     mppi_irl = torch.load(model_fp)
 
-#    mppi_irl.visualize()
-
-    costmapper = CostmapperNode(grid_map_topic, cost_map_topic, odom_topic, mppi_irl.expert_dataset, mppi_irl.network, device)
+    costmapper = CostmapperNode(grid_map_topic, cost_map_topic, odom_topic, mppi_irl.expert_dataset, mppi_irl.network, vmin, vmax, device)
 
     rospy.spin()
