@@ -32,7 +32,7 @@ class MPPIIRL:
         d. Get empirical feature counts from the MPPI solver (maybe try the weighted trick)
         e. Match feature expectations
     """
-    def __init__(self, network, opt, expert_dataset, mppi, mppi_itrs=10, batch_size=64, device='cpu'):
+    def __init__(self, network, opt, expert_dataset, mppi, mppi_itrs=10, batch_size=64, reg_coeff=1e-2, device='cpu'):
         """
         Args:
             network: the network to use for predicting costmaps
@@ -51,6 +51,8 @@ class MPPIIRL:
         self.network_opt = opt
 
         self.batch_size = batch_size
+        self.reg_coeff = reg_coeff
+
         self.itr = 0
         self.device = device
 
@@ -140,8 +142,11 @@ class MPPIIRL:
         deep_features_cache = torch.stack(deep_features_cache, dim=0)
         grads = torch.stack(grads, dim=0) / len(grads)
 
+        #add regularization
+        reg = self.reg_coeff * deep_features_cache
+
         self.network_opt.zero_grad()
-        deep_features_cache.backward(gradient=grads)
+        deep_features_cache.backward(gradient=(grads + reg))
         self.network_opt.step()
 
     def visualize(self, idx=-1):

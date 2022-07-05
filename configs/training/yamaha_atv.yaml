@@ -1,8 +1,8 @@
 experiment:
     save_to: /home/striest/Desktop/experiments/yamaha_maxent_irl
-    name: fast_driving_cnn_deeper_bnorm_exp_h75
+    name: bigger_net_with_reg
     device: cuda
-    epochs: 50
+    epochs: 200
     steps_per_epoch: 10
     save_every: 1
 
@@ -11,6 +11,7 @@ algo:
     params:
         mppi_itrs: 10
         batch_size: 12
+        reg_coeff: 0.001
 
 dataset:
     type: MaxEntIRLDataset
@@ -25,7 +26,7 @@ dataset:
 network:
     type: ResnetCostMapCNN
     params:
-        hidden_channels: [64, 64, 64]
+        hidden_channels: [128, 128]
         activation_type: exponential
         activation_scale: 1.0
 

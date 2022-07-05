@@ -5,6 +5,8 @@ import scipy.interpolate, scipy.spatial
 import cv2
 from cv_bridge import CvBridge
 
+from maxent_irl_costmaps.geometry_utils import TrajectoryInterpolator
+
 def load_traj(bag_fp, odom_topic, dt):
     traj = []
     vels = []
@@ -14,6 +16,7 @@ def load_traj(bag_fp, odom_topic, dt):
     for topic, msg, t in bag.read_messages(topics=[odom_topic]):
         if topic == odom_topic:
             pose = msg.pose.pose
+            twist = msg.twist.twist
             p = np.array([
                 pose.position.x,
                 pose.position.y,
@@ -22,10 +25,6 @@ def load_traj(bag_fp, odom_topic, dt):
                 pose.orientation.y,
                 pose.orientation.z,
                 pose.orientation.w,
-            ])
-
-            twist = msg.twist.twist
-            v = np.array([
                 twist.linear.x,
                 twist.linear.y,
                 twist.linear.z,
@@ -36,52 +35,17 @@ def load_traj(bag_fp, odom_topic, dt):
 
             if len(timestamps) == 0 or (msg.header.stamp.to_sec() - timestamps[-1] > 1e-6):
                 traj.append(p)
-                vels.append(v)
                 timestamps.append(msg.header.stamp.to_sec())
 
     traj = np.stack(traj, axis=0)
-    vels = np.stack(vels, axis=0)
     timestamps = np.array(timestamps)
 
-    #edge case check
-    idxs = np.argsort(timestamps)
-
-    #interpolate traj to get accurate timestamps
-    interp_x = scipy.interpolate.interp1d(timestamps[idxs], traj[idxs, 0])
-    interp_y = scipy.interpolate.interp1d(timestamps[idxs], traj[idxs, 1])
-    interp_z = scipy.interpolate.interp1d(timestamps[idxs], traj[idxs, 2])
-    
-    rots = scipy.spatial.transform.Rotation.from_quat(traj[:, 3:])
-    interp_q = scipy.spatial.transform.Slerp(timestamps[idxs], rots[idxs])
-
-    interp_vx = scipy.interpolate.interp1d(timestamps[idxs], vels[idxs, 0])
-    interp_vy = scipy.interpolate.interp1d(timestamps[idxs], vels[idxs, 1])
-    interp_vz = scipy.interpolate.interp1d(timestamps[idxs], vels[idxs, 2])
-
-    interp_wx = scipy.interpolate.interp1d(timestamps[idxs], vels[idxs, 3])
-    interp_wy = scipy.interpolate.interp1d(timestamps[idxs], vels[idxs, 4])
-    interp_wz = scipy.interpolate.interp1d(timestamps[idxs], vels[idxs, 5])
+    traj_interp = TrajectoryInterpolator(timestamps, traj)
 
     start_time = timestamps[0]
     targets = np.arange(timestamps[0], timestamps[-1], dt)
 
-    xs = interp_x(targets)
-    ys = interp_y(targets)
-    zs = interp_z(targets)
-    qs = interp_q(targets).as_quat()
-
-    vxs = interp_vx(targets)
-    vys = interp_vy(targets)
-    vzs = interp_vz(targets)
-    wxs = interp_wx(targets)
-    wys = interp_wy(targets)
-    wzs = interp_wz(targets)
-
-    traj = np.concatenate([
-        np.stack([xs, ys, zs], axis=-1),
-        qs,
-        np.stack([vxs, vys, vzs, wxs, wys, wzs], axis=-1)
-    ], axis=-1)
+    traj = traj_interp(targets)
 
     return traj
 
@@ -92,7 +56,6 @@ def load_data(bag_fp, map_features_topic, odom_topic, image_topic, horizon, dt, 
     print(bag_fp)
     map_features_list = []
     traj = []
-    vels = []
     timestamps = []
     dataset = []
 
@@ -108,6 +71,7 @@ def load_data(bag_fp, map_features_topic, odom_topic, image_topic, horizon, dt, 
     for topic, msg, t in bag.read_messages(topics=[map_features_topic, odom_topic, steer_angle_topic, gps_topic]):
         if topic == odom_topic:
             pose = msg.pose.pose
+            twist = msg.twist.twist
             p = np.array([
                 pose.position.x,
                 pose.position.y,
@@ -116,10 +80,6 @@ def load_data(bag_fp, map_features_topic, odom_topic, image_topic, horizon, dt, 
                 pose.orientation.y,
                 pose.orientation.z,
                 pose.orientation.w,
-            ])
-
-            twist = msg.twist.twist
-            v = np.array([
                 twist.linear.x,
                 twist.linear.y,
                 twist.linear.z,
@@ -130,7 +90,6 @@ def load_data(bag_fp, map_features_topic, odom_topic, image_topic, horizon, dt, 
 
             if len(timestamps) == 0 or (msg.header.stamp.to_sec() - timestamps[-1] > 1e-6):
                 traj.append(p)
-                vels.append(v)
                 timestamps.append(msg.header.stamp.to_sec())
 
         elif topic == map_features_topic:
@@ -142,7 +101,7 @@ def load_data(bag_fp, map_features_topic, odom_topic, image_topic, horizon, dt, 
 
         elif topic == gps_topic:
             pose = msg.pose.pose
-            twist = psg.twist.twist
+            twist = msg.twist.twist
             gps_state = np.array([
                 pose.position.x,
                 pose.position.y,
@@ -158,12 +117,11 @@ def load_data(bag_fp, map_features_topic, odom_topic, image_topic, horizon, dt, 
                 twist.angular.y,
                 twist.angular.z,
             ])
-            if len(gps_timestamps) == 0 or (msg.header.stamp.to_sec() - timestamps[-1] > 1e-6):
+            if len(gps_timestamps) == 0 or (msg.header.stamp.to_sec() - gps_timestamps[-1] > 1e-6):
                 gps_poses.append(gps_state)
                 gps_timestamps.append(msg.header.stamp.to_sec())
 
     traj = np.stack(traj, axis=0)
-    vels = np.stack(vels, axis=0)
     timestamps = np.array(timestamps)
 
     #edge case check
@@ -175,25 +133,16 @@ def load_data(bag_fp, map_features_topic, odom_topic, image_topic, horizon, dt, 
     if len(map_features_list) == 0:
         return None, None
 
-    #interpolate traj to get accurate timestamps
-    interp_x = scipy.interpolate.interp1d(timestamps[idxs], traj[idxs, 0])
-    interp_y = scipy.interpolate.interp1d(timestamps[idxs], traj[idxs, 1])
-    interp_z = scipy.interpolate.interp1d(timestamps[idxs], traj[idxs, 2])
-    
-    rots = scipy.spatial.transform.Rotation.from_quat(traj[:, 3:])
-    interp_q = scipy.spatial.transform.Slerp(timestamps[idxs], rots[idxs])
-
-    interp_vx = scipy.interpolate.interp1d(timestamps[idxs], vels[idxs, 0])
-    interp_vy = scipy.interpolate.interp1d(timestamps[idxs], vels[idxs, 1])
-    interp_vz = scipy.interpolate.interp1d(timestamps[idxs], vels[idxs, 2])
-
-    interp_wx = scipy.interpolate.interp1d(timestamps[idxs], vels[idxs, 3])
-    interp_wy = scipy.interpolate.interp1d(timestamps[idxs], vels[idxs, 4])
-    interp_wz = scipy.interpolate.interp1d(timestamps[idxs], vels[idxs, 5])
+    traj_interp = TrajectoryInterpolator(timestamps, traj)
 
     if len(steer_angles) > 0:
         steer_angles = np.stack(steer_angles)
         interp_steer = scipy.interpolate.interp1d(steer_timestamps, steer_angles, fill_value="extrapolate") #this is a bit sketchy
+
+    if len(gps_poses) > 0:
+        gps_traj = np.stack(gps_poses, axis=0)
+        gps_timestamps = np.array(gps_timestamps)
+        gps_interp = TrajectoryInterpolator(gps_timestamps, gps_traj)
 
     map_target_times = []
 
@@ -206,8 +155,6 @@ def load_data(bag_fp, map_features_topic, odom_topic, image_topic, horizon, dt, 
         mf_ny = int(map_features.info.length_y/map_features.info.resolution)
 
         #normalize the terrain features to start at ego-height
-        curr_height = interp_z(map_features.info.header.stamp.to_sec())
-
         for k,v in zip(map_features.layers, map_features.data):
             #temp hack bc I don't like this feature.
 #            if k not in ['roughness', 'height_high']:
@@ -231,23 +178,7 @@ def load_data(bag_fp, map_features_topic, odom_topic, image_topic, horizon, dt, 
         targets = start_time + np.arange(horizon) * dt
         map_target_times.append(start_time)
 
-        xs = interp_x(targets)
-        ys = interp_y(targets)
-        zs = interp_z(targets)
-        qs = interp_q(targets).as_quat()
-
-        vxs = interp_vx(targets)
-        vys = interp_vy(targets)
-        vzs = interp_vz(targets)
-        wxs = interp_wx(targets)
-        wys = interp_wy(targets)
-        wzs = interp_wz(targets)
-
-        traj = np.concatenate([
-            np.stack([xs, ys, zs], axis=-1),
-            qs,
-            np.stack([vxs, vys, vzs, wxs, wys, wzs], axis=-1)
-        ], axis=-1)
+        traj = traj_interp(targets)
 
         slim = 415.
         if len(steer_angles) > 0:
@@ -255,6 +186,9 @@ def load_data(bag_fp, map_features_topic, odom_topic, image_topic, horizon, dt, 
             if any(np.abs(steers) > slim):
                 print("WARNING: steer {:.4f} exceeded the steer limit".format(max(abs(steers))))
             steers = np.clip(steers, -slim, slim) #clip to deal with potentially bad extrapolation
+
+        if len(gps_poses) > 0:
+            gps_subtraj = gps_interp(targets)
 
         #handle transforms to deserialize map/costmap
         map_metadata = map_features.info
@@ -272,6 +206,7 @@ def load_data(bag_fp, map_features_topic, odom_topic, image_topic, horizon, dt, 
 
         data = {
             'traj':torch.tensor(traj).float(),
+            'gps_traj':torch.tensor(gps_subtraj).float() if len(gps_poses) > 0 else None,
             'steer': torch.tensor(steers).float() if len(steer_angles) > 0 else None,
             'feature_keys': map_feature_keys,
             'map_features': torch.tensor(map_feature_data).float(),
@@ -285,6 +220,7 @@ def load_data(bag_fp, map_features_topic, odom_topic, image_topic, horizon, dt, 
     dataset = {
         'map_features':[x['map_features'] for x in dataset],
         'traj':[x['traj'] for x in dataset],
+        'gps_traj':[x['gps_traj'] for x in dataset],
         'metadata':[x['metadata'] for x in dataset],
         'steer':[x['steer'] for x in dataset]
     }

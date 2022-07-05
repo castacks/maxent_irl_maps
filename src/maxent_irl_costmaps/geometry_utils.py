@@ -12,21 +12,26 @@ class TrajectoryInterpolator:
 
     funtionally, works identically to the scipy interpolation object
     """
-    def __init__(self, times, traj,interp_kwargs={}):
+    def __init__(self, times, traj, tol=1e-1, interp_kwargs={}):
         """
         Args:
             traj: the traj to interpolate (of shape [T x {7,13}])
             times: the times corresponding to the traj
-            interp_kwargs: kwargs to pass to the interpolator
+            tol: the amount of allowable extrapolation
         """
         assert len(traj.shape) == 2, 'Expected traj of shape [T x 7/13], got {}'.format(traj.shape)
         assert traj.shape[-1] in [7, 13], 'Expected traj of shape [T x 7/13], got {}'.format(traj.shape)
         assert times.shape[0] == traj.shape[0], 'Got {} times, but {} steps in traj'.format(times.shape[0], traj.shape[0])
 
         self.is_velocity = (traj.shape[-1] == 13)
+        self.tol = tol
 
         #edge case check
         idxs = np.argsort(times)
+
+        #add tol
+        times = np.concatenate([np.array([times[0]-self.tol]), times, np.array([times[-1] + self.tol])])
+        traj = np.concatenate([traj[[0]], traj, traj[[-1]]], axis=0)
 
         #interpolate traj to get accurate times
         self.interp_x = scipy.interpolate.interp1d(times[idxs], traj[idxs, 0], **interp_kwargs)

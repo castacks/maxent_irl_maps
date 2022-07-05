@@ -42,7 +42,7 @@ class Experiment:
 
             if e == 0:
                 self.build_experiment_dir()
-                with open(os.path.join(self.base_fp, 'params.yaml'), 'w') as fp:
+                with open(os.path.join(self.base_fp, '_params.yaml'), 'w') as fp:
                     yaml.dump(self.params, fp, default_flow_style = False)
 
             if e % self.save_every == 0:
