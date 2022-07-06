@@ -26,12 +26,13 @@ class TrajectoryInterpolator:
         self.is_velocity = (traj.shape[-1] == 13)
         self.tol = tol
 
-        #edge case check
-        idxs = np.argsort(times)
 
         #add tol
         times = np.concatenate([np.array([times[0]-self.tol]), times, np.array([times[-1] + self.tol])])
         traj = np.concatenate([traj[[0]], traj, traj[[-1]]], axis=0)
+
+        #edge case check
+        idxs = np.argsort(times)
 
         #interpolate traj to get accurate times
         self.interp_x = scipy.interpolate.interp1d(times[idxs], traj[idxs, 0], **interp_kwargs)

@@ -11,7 +11,8 @@ algo:
     params:
         mppi_itrs: 10
         batch_size: 12
-        reg_coeff: 0.001
+        reg_coeff: 0.000000005
+#        reg_coeff: 0.0
 
 dataset:
     type: MaxEntIRLDataset

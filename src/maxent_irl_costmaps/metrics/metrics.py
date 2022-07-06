@@ -2,19 +2,23 @@
 Collection of metrics for evaluating performance of mexent IRL
 """
 
+import numpy as np
 import torch
 import matplotlib.pyplot as plt
 
-from maxent_irl_costmaps.utils import get_state_visitations
+from maxent_irl_costmaps.dataset.global_state_visitation_buffer import GlobalStateVisitationBuffer
+from maxent_irl_costmaps.utils import get_state_visitations, quat_to_yaw
 
-def get_metrics(experiment, metric_fns = {}):
+def get_metrics(experiment, gsv = None, metric_fns = {}):
     """
     Wrapper method that generates metrics for an experiment
     Args:
         experiment: the experiment to compute metrics for
+        gsv: global state visitation buffer to use if gps
         metric_fns: A dict of {label:function} (the ones defined in this file) to use to compute metrics
     """
-    fig, axs = plt.subplots(1, 4, figsize=(24, 6))
+    fig, axs = plt.subplots(2, 3, figsize=(18, 12))
+    axs = axs.flatten()
     plt.show(block=False)
 
     res = {k:[] for k in metric_fns.keys()}
@@ -62,6 +66,27 @@ def get_metrics(experiment, metric_fns = {}):
             learner_state_visitations = get_state_visitations(trajs, map_metadata, weights)
             expert_state_visitations = get_state_visitations(expert_traj.unsqueeze(0), map_metadata)
 
+            #GET GLOBAL STATE VISITATIONS
+            gps_x0 = batch['gps_traj'][[0]]
+            expert_x0 = expert_traj[[0]]
+
+            #calculate the rotation offset to account for frame diff in SO and GPS
+            yaw_offset = quat_to_yaw(expert_x0[:, 3:7]) - quat_to_yaw(gps_x0[:, 3:7])
+            poses = torch.stack([
+                gps_x0[:, 0],
+                gps_x0[:, 1],
+                -yaw_offset
+            ], axis=-1)
+
+            crop_params = {
+                'origin':np.array([-map_params['height']/2, -map_params['width']/2]),
+                'length_x': map_params['height'],
+                'length_y': map_params['width'],
+                'resolution': map_params['resolution']
+            }
+
+            global_state_visitations = gsv.get_state_visitations(poses, crop_params, local=True)[0]
+
             for k, fn in metric_fns.items():
                 res[k].append(fn(costmap, expert_traj, traj, expert_state_visitations, learner_state_visitations))
 
@@ -69,6 +94,11 @@ def get_metrics(experiment, metric_fns = {}):
             ymin = map_metadata['origin'][1].cpu()
             xmax = xmin + map_metadata['width']
             ymax = ymin + map_metadata['height']
+
+            gxmin = gsv.metadata['origin'][0].cpu()
+            gymin = gsv.metadata['origin'][1].cpu()
+            gxmax = gxmin + gsv.metadata['length_x']
+            gymax = gymin + gsv.metadata['length_y']
 
             for ax in axs:
                 ax.cla()
@@ -82,11 +112,21 @@ def get_metrics(experiment, metric_fns = {}):
             axs[1].set_title('costmap')
             axs[1].legend()
 
-            axs[2].imshow(expert_state_visitations, origin='lower', extent=(xmin, xmax, ymin, ymax))
-            axs[2].set_title('expert SV')
+            axs[2].imshow(gsv.data.T, origin='lower', extent=(gxmin, gxmax, gymin, gymax), vmin=0., vmax=5.)
+            axs[2].scatter(gps_x0[0, 0], gps_x0[0, 1], color='r', marker='>', s=5.)
+            axs[2].set_title('global visitations')
 
-            axs[3].imshow(learner_state_visitations, origin='lower', extent=(xmin, xmax, ymin, ymax))
-            axs[3].set_title('learner SV')
+            axs[-3].imshow(learner_state_visitations, origin='lower', extent=(xmin, xmax, ymin, ymax))
+            axs[-3].set_title('learner SV')
+
+            axs[-2].imshow(expert_state_visitations, origin='lower', extent=(xmin, xmax, ymin, ymax))
+            axs[-2].set_title('expert SV')
+
+            axs[-1].imshow(global_state_visitations, origin='lower', extent=(xmin, xmax, ymin, ymax))
+            axs[-1].set_title('global SV')
+
+            for ax in axs[-3:]:
+                ax.scatter(traj[0, 0], traj[0, 1], c='r', marker='.')
 
             title = ''
             for k,v in res.items():
@@ -115,8 +155,10 @@ def kl_divergence(costmap, expert_traj, learner_traj, expert_state_visitations, 
 
 if __name__ == '__main__':
     experiment_fp = '/home/striest/Desktop/experiments/yamaha_maxent_irl/2022-06-29-11-21-25_trail_driving_cnn_deeper_bnorm_exp/itr_50.pt'
-#    experiment_fp = '/home/striest/Desktop/experiments/yamaha_maxent_irl/2022-06-28-11-55-46_trail_driving_cnn_deeper_bnorm/itr_50.pt'
-    experiment = torch.load(experiment_fp)
+    experiment = torch.load(experiment_fp, map_location='cpu')
+
+    gsv_fp = '/home/striest/physics_atv_ws/src/perception/maxent_irl_maps/src/maxent_irl_costmaps/dataset/gsv.pt'
+    gsv = torch.load(gsv_fp)
 
     metrics = {
         'expert_cost':expert_cost,
@@ -125,5 +167,5 @@ if __name__ == '__main__':
         'kl':kl_divergence,
     }
 
-    res = get_metrics(experiment, metrics)
+    res = get_metrics(experiment, gsv, metrics)
     torch.save(res, 'res.pt')
