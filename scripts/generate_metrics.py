@@ -44,6 +44,7 @@ if __name__ == '__main__':
         'learner_cost':learner_cost,
         'traj':position_distance,
         'kl':kl_divergence,
+        'kl_global':kl_divergence_global
     }
 
     res = get_metrics(model, gsv, metrics)

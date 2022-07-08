@@ -15,24 +15,33 @@ from torch_mpc.cost_functions.waypoint_costmap import WaypointCostMapCostFunctio
 
 from maxent_irl_costmaps.dataset.maxent_irl_dataset import MaxEntIRLDataset
 from maxent_irl_costmaps.costmappers.linear_costmapper import LinearCostMapper
-from maxent_irl_costmaps.utils import get_feature_counts, get_state_visitations
+from maxent_irl_costmaps.utils import get_feature_counts, get_state_visitations, get_speedmap
 
 from maxent_irl_costmaps.networks.mlp import MLP
 from maxent_irl_costmaps.networks.resnet import ResnetCostmapCNN
 
-class MPPIIRL:
+class MPPIIRLSpeedmaps:
     """
-    Costmap learner that uses expert data + MPPI optimization to learn costmaps.
-    The algorithm is as follows:
-    1. Get empirical feature counts across the entire dataset for expert
-    2. Iteratively
-        a. Sample a batch of data from the expert's dataset
-        b. Compute a set of costmaps from the current weight vector.
-        c. Use MPPI to optimize a trajectory on the costmap
-        d. Get empirical feature counts from the MPPI solver (maybe try the weighted trick)
+    This is the same as MPPI IRL, but in addition to the IRL, also learn a speed map via MLE to expert speed
+    Speedmap Learning:
+        1. Run the network to get the per-cell speed distribution
+        2. Create a speed label for each cell that the expert visited (have to register speeds/traj onto the map)
+        3. Compute a masked MLE for the cells that were visited
+        4. backward pass w/ the IRL grad
+        5. win
+
+    MPPI IRL:
+        Costmap learner that uses expert data + MPPI optimization to learn costmaps.
+        The algorithm is as follows:
+        1. Get empirical feature counts across the entire dataset for expert
+        2. Iteratively
+            a. Sample a batch of data from the expert's dataset
+            b. Compute a set of costmaps from the current weight vector.
+            c. Use MPPI to optimize a trajectory on the costmap
+            d. Get empirical feature counts from the MPPI solver (maybe try the weighted trick)
         e. Match feature expectations
     """
-    def __init__(self, network, opt, expert_dataset, mppi, mppi_itrs=10, batch_size=64, reg_coeff=1e-2, device='cpu'):
+    def __init__(self, network, opt, expert_dataset, mppi, mppi_itrs=10, batch_size=64, speed_coeff=1.0, reg_coeff=1e-2, device='cpu'):
         """
         Args:
             network: the network to use for predicting costmaps
@@ -46,12 +55,14 @@ class MPPIIRL:
 
         self.network = network
 
+        print(self.network)
         print(sum([x.numel() for x in self.network.parameters()]))
         print(expert_dataset.feature_keys)
         self.network_opt = opt
 
         self.batch_size = batch_size
         self.reg_coeff = reg_coeff
+        self.speed_coeff = speed_coeff
 
         self.itr = 0
         self.device = device
@@ -69,10 +80,11 @@ class MPPIIRL:
 
     def gradient_step(self, batch):
         grads = []
+        speed_loss = []
+
         efc = []
         lfc = []
         rfc = []
-        contrastive_grads = []
         costmap_cache = []
 
         #TODO: Use the batch MPPI interface
@@ -82,7 +94,8 @@ class MPPIIRL:
             expert_traj = batch['traj'][i]
 
             #resnet cnn (and actual net interface in general)
-            costmap = self.network.forward(map_features.view(1, *map_features.shape))['costmap'][0, 0]
+            res = self.network.forward(map_features.view(1, *map_features.shape))
+            costmap = res['costmap'][0, 0]
 
             #initialize solver
             initial_state = expert_traj[0]
@@ -128,6 +141,14 @@ class MPPIIRL:
             costmap_cache.append(costmap)
             grads.append((expert_state_visitations - learner_state_visitations))
 
+            #Speedmaps here:
+            speedmap = res['speedmap']
+            expert_speedmap = get_speedmap(expert_traj.unsqueeze(0), map_metadata).view(speedmap.loc.shape)
+
+            mask = (expert_speedmap > 1e-2) #only need the cells that the expert drove in
+            ll = -speedmap.log_prob(expert_speedmap)[mask]
+            speed_loss.append(ll.sum())
+
         lfc = torch.stack(lfc, dim=0)
         efc = torch.stack(efc, dim=0)
         rfc = torch.stack(rfc, dim=0)
@@ -135,11 +156,19 @@ class MPPIIRL:
         costmap_cache = torch.stack(costmap_cache, dim=0)
         grads = torch.stack(grads, dim=0) / len(grads)
 
+        speed_loss = torch.stack(speed_loss).mean() * self.speed_coeff
+
+        print('IRL GRAD:   {:.4f}'.format(torch.linalg.norm(grads).detach().cpu().item()))
+        print('SPEED LOSS: {:.4f}'.format(speed_loss.detach().item()))
+
         #add regularization
         reg = self.reg_coeff * costmap_cache
 
+        #kinda jank, but since we're multi-headed and have a loss and a gradient,
+        # I think we need two backward passes through the computation graph.
         self.network_opt.zero_grad()
-        costmap_cache.backward(gradient=(grads + reg))
+        costmap_cache.backward(gradient=(grads + reg), retain_graph=True)
+        speed_loss.backward()
         self.network_opt.step()
 
     def visualize(self, idx=-1):
@@ -159,7 +188,9 @@ class MPPIIRL:
 
             #compute costmap
             #resnet cnn
-            costmap = self.network.forward(map_features.view(1, *map_features.shape))['costmap'][0, 0]
+            res = self.network.forward(map_features.view(1, *map_features.shape))
+            costmap = res['costmap'][0, 0]
+            speedmap = torch.distributions.Normal(loc=res['speedmap'].loc[0], scale=res['speedmap'].scale[0])
 
             #initialize solver
             initial_state = expert_traj[0]
@@ -185,26 +216,54 @@ class MPPIIRL:
             traj = self.mppi.last_states
 
             metadata = data['metadata']
-            fig, axs = plt.subplots(1, 3, figsize=(18, 6))
+            fig, axs = plt.subplots(2, 3, figsize=(18, 12))
+            axs = axs.flatten()
             
             idx = self.expert_dataset.feature_keys.index('height_high')
             
             axs[0].imshow(data['image'].permute(1, 2, 0)[:, :, [2, 1, 0]].cpu())
             axs[1].imshow(map_features[idx].cpu(), origin='lower', cmap='gray', extent=(xmin, xmax, ymin, ymax))
-            m1 = axs[2].imshow(costmap.cpu(), origin='lower', cmap='plasma', extent=(xmin, xmax, ymin, ymax))
+            m1 = axs[2].imshow(costmap.cpu(), origin='lower', cmap='plasma', extent=(xmin, xmax, ymin, ymax), vmin=0., vmax=3.0)
+            m2 = axs[4].imshow(speedmap.loc.cpu(), origin='lower', cmap='bwr', extent=(xmin, xmax, ymin, ymax))
+            m3 = axs[5].imshow(speedmap.scale.cpu(), origin='lower', cmap='bwr', extent=(xmin, xmax, ymin, ymax))
 
             axs[1].plot(expert_traj[:, 0].cpu(), expert_traj[:, 1].cpu(), c='y', label='expert')
             axs[2].plot(expert_traj[:, 0].cpu(), expert_traj[:, 1].cpu(), c='y')
+            axs[4].plot(expert_traj[:, 0].cpu(), expert_traj[:, 1].cpu(), c='y')
+            axs[5].plot(expert_traj[:, 0].cpu(), expert_traj[:, 1].cpu(), c='y')
 
             axs[1].plot(traj[:, 0].cpu(), traj[:, 1].cpu(), c='g', label='learner')
             axs[2].plot(traj[:, 0].cpu(), traj[:, 1].cpu(), c='g')
+            axs[4].plot(traj[:, 0].cpu(), traj[:, 1].cpu(), c='g')
+            axs[5].plot(traj[:, 0].cpu(), traj[:, 1].cpu(), c='g')
 
+            #plot expert speed
+            e_speeds = torch.linalg.norm(expert_traj[:, 7:10], axis=-1).cpu()
+            l_speeds = traj[:, 3].cpu()
+            times = torch.arange(len(e_speeds)) * self.mppi.model.dt
+            axs[3].plot(times, e_speeds, label='expert speed', c='y')
+            axs[3].plot(times, l_speeds, label='learner speed', c='g')
+
+            axs[0].set_title('FPV')
             axs[1].set_title('heightmap high')
-            axs[2].set_title('irl cost')
+            axs[2].set_title('irl cost (clipped)')
+            axs[3].set_title('speed')
+            axs[4].set_title('speedmap mean')
+            axs[5].set_title('speedmap std')
+
+            for i in [1, 2, 4, 5]:
+                axs[i].set_xlabel('X(m)')
+                axs[i].set_ylabel('Y(m)')
+
+            axs[3].set_xlabel('T(s)')
+            axs[3].set_ylabel('Speed (m/s)')
+            axs[3].legend()
 
             axs[1].legend()
 
             plt.colorbar(m1, ax=axs[2])
+            plt.colorbar(m2, ax=axs[4])
+            plt.colorbar(m3, ax=axs[5])
         return fig, axs
 
     def to(self, device):

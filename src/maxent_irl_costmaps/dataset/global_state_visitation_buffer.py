@@ -26,6 +26,7 @@ class GlobalStateVisitationBuffer:
             bag_dir: The dir to parse for rosbags
             resolution: The discretization of the map
             dt: The dt for the trajectory
+            speed_bins: Allow for binning of speeds in the dataset. Don't do speed bins if None, else expect a set if bin lower edges
         """
         self.config_fp = config_fp
         self.base_fp = bag_dir
@@ -39,6 +40,9 @@ class GlobalStateVisitationBuffer:
             'length_y': config_data['length_y'],
             'resolution': config_data['resolution']
         }
+
+        #you were supposed to destroy the speed bins, not join them
+        self.speed_bins = np.array(config_data.get('speed_bins', None))
 
         self.traj_fps = []
 
@@ -54,6 +58,10 @@ class GlobalStateVisitationBuffer:
         nx = int(self.metadata['length_x'] / self.metadata['resolution'])
         ny = int(self.metadata['length_y'] / self.metadata['resolution'])
         self.data = torch.zeros(nx, ny).long()
+
+        #bring balance to velocity planning, not leave it in darkness
+        if self.speed_bins is not None:
+            self.speed_data = torch.zeros(nx, ny, len(self.speed_bins) + 1).short()
 
         if bag_dir is not None:
             traj_fps = np.array(walk_bags(bag_dir))
@@ -139,6 +147,33 @@ class GlobalStateVisitationBuffer:
         bin_ys = bins % width
 
         self.data[bin_xs, bin_ys] += torch.from_numpy(cnts)
+
+        #I don't think there's a clever way to get out of the iteration one now
+        # that the values don't collapse into a single number
+    
+        #jk the bin trick still works in 3d
+        if self.speed_bins is not None:
+            nbins = len(self.speed_bins)
+            speeds = np.linalg.norm(traj[:, 7:10], axis=-1)
+            speed_bin_idxs = np.digitize(speeds, self.speed_bins, right=True)
+            speed_grid_hash = gxs * (width * nbins) + gys * (nbins) + speed_bin_idxs
+
+            bins2, cnts2 = np.unique(speed_grid_hash, return_counts=True)
+            bin_xs2 = bins2 // (width * nbins)
+            bin_ys2 = (bins2 // nbins) % width
+            bin_ss = bins2 % nbins
+            self.speed_data[bin_xs2, bin_ys2, bin_ss] += torch.tensor(cnts2).short()
+
+    def get_mean_speed_map(self):
+        if self.speed_bins is not None:
+            acc = torch.zeros(*self.data.shape)
+            for i in range(len(self.speed_bins)):
+                acc += self.speed_bins[i] * self.speed_data[:, :, i+1]
+            k = self.speed_data.sum(dim=-1) + 1e-6
+            acc /= k
+            return acc
+        else:
+            print('This GSV doesnt have speed data')
 
     def get_state_visitations(self, poses, crop_params, local=True):
         """

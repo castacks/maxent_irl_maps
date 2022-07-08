@@ -32,7 +32,7 @@ def get_metrics(experiment, gsv = None, metric_fns = {}):
             expert_traj = batch['traj']
 
             #resnet cnn (and actual net interface in general)
-            costmap = experiment.network.forward(map_features.view(1, *map_features.shape))[0, 0]
+            costmap = experiment.network.forward(map_features.view(1, *map_features.shape))['costmap'][0, 0]
 
             #initialize solver
             initial_state = expert_traj[0]
@@ -88,7 +88,7 @@ def get_metrics(experiment, gsv = None, metric_fns = {}):
             global_state_visitations = gsv.get_state_visitations(poses, crop_params, local=True)[0]
 
             for k, fn in metric_fns.items():
-                res[k].append(fn(costmap, expert_traj, traj, expert_state_visitations, learner_state_visitations))
+                res[k].append(fn(costmap, expert_traj, traj, expert_state_visitations, learner_state_visitations, global_state_visitations))
 
             xmin = map_metadata['origin'][0].cpu()
             ymin = map_metadata['origin'][1].cpu()
@@ -106,7 +106,7 @@ def get_metrics(experiment, gsv = None, metric_fns = {}):
             axs[0].imshow(batch['image'].permute(1, 2, 0)[:, :, [2, 1, 0]].cpu())
             axs[0].set_title('FPV')
 
-            axs[1].imshow(costmap.cpu(), origin='lower', cmap='plasma', extent=(xmin, xmax, ymin, ymax))
+            axs[1].imshow(costmap.cpu(), origin='lower', cmap='plasma', extent=(xmin, xmax, ymin, ymax), vmin=0., vmax=30.)
             axs[1].plot(expert_traj[:, 0], expert_traj[:, 1], c='y', label='expert')
             axs[1].plot(traj[:, 0], traj[:, 1], c='g', label='learner')
             axs[1].set_title('costmap')
@@ -139,20 +139,59 @@ def get_metrics(experiment, gsv = None, metric_fns = {}):
 
     return {k:torch.tensor(v) for k,v in res.items()}
 
-def expert_cost(costmap, expert_traj, learner_traj, expert_state_visitations, learner_state_visitations):
+def expert_cost(
+                costmap,
+                expert_traj,
+                learner_traj,
+                expert_state_visitations,
+                learner_state_visitations,
+                global_state_visitations
+                ):
     return (costmap * expert_state_visitations).sum()
 
-def learner_cost(costmap, expert_traj, learner_traj, expert_state_visitations, learner_state_visitations):
+def learner_cost(
+                costmap,
+                expert_traj,
+                learner_traj,
+                expert_state_visitations,
+                learner_state_visitations,
+                global_state_visitations
+                ):
     return (costmap * learner_state_visitations).sum()
 
-def position_distance(costmap, expert_traj, learner_traj, expert_state_visitations, learner_state_visitations):
+def position_distance(
+                costmap,
+                expert_traj,
+                learner_traj,
+                expert_state_visitations,
+                learner_state_visitations,
+                global_state_visitations
+                ):
     return torch.linalg.norm(expert_traj[:, :2] - learner_traj[:, :2], dim=-1).sum()
 
-def kl_divergence(costmap, expert_traj, learner_traj, expert_state_visitations, learner_state_visitations):
+def kl_divergence(
+                costmap,
+                expert_traj,
+                learner_traj,
+                expert_state_visitations,
+                learner_state_visitations,
+                global_state_visitations
+                ):
     #We want learner onto expert
     #KL(p||q) = sum_p[p(x) * log(p(x)/q(x))]
     return (learner_state_visitations * torch.log((learner_state_visitations + 1e-6) / (expert_state_visitations + 1e-6))).sum()
 
+def kl_divergence_global(
+                costmap,
+                expert_traj,
+                learner_traj,
+                expert_state_visitations,
+                learner_state_visitations,
+                global_state_visitations
+                ):
+    #We want learner onto global
+    #KL(p||q) = sum_p[p(x) * log(p(x)/q(x))]
+    return (learner_state_visitations * torch.log((learner_state_visitations + 1e-6) / (global_state_visitations + 1e-6))).sum()
 if __name__ == '__main__':
     experiment_fp = '/home/striest/Desktop/experiments/yamaha_maxent_irl/2022-06-29-11-21-25_trail_driving_cnn_deeper_bnorm_exp/itr_50.pt'
     experiment = torch.load(experiment_fp, map_location='cpu')

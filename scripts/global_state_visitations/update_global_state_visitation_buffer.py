@@ -56,3 +56,4 @@ if __name__ == '__main__':
     fig, axs = plot_gsv(buf, args.utm_zone, fig, axs)
     plt.pause(1e-2)
     input('done (enter to exit)')
+

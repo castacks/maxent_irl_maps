@@ -5,3 +5,6 @@ origin:
 resolution: 1.0
 length_x: 1500.
 length_y: 1500.
+
+#there are implied [0, 1] and [10., inf] bins
+speed_bins: [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0]

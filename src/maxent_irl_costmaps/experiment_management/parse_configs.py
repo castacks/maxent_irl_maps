@@ -12,8 +12,9 @@ from torch_mpc.algos.mppi import MPPI
 from torch_mpc.cost_functions.waypoint_costmap import WaypointCostMapCostFunction
 
 from maxent_irl_costmaps.algos.mppi_irl import MPPIIRL
+from maxent_irl_costmaps.algos.mppi_irl_speedmaps import MPPIIRLSpeedmaps
 
-from maxent_irl_costmaps.networks.resnet import ResnetCostmapCNN
+from maxent_irl_costmaps.networks.resnet import ResnetCostmapCNN, ResnetCostmapSpeedmapCNN
 from maxent_irl_costmaps.networks.unet import UNet
 
 from maxent_irl_costmaps.dataset.maxent_irl_dataset import MaxEntIRLDataset
@@ -65,12 +66,20 @@ def setup_experiment(fp):
 
     #setup network
     network_params = experiment_dict['network']
-    if network_params['type'] == 'ResnetCostMapCNN':
+    if network_params['type'] == 'ResnetCostmapCNN':
         res['network'] = ResnetCostmapCNN(
             in_channels = len(res['dataset'].feature_keys),
             out_channels = 1,
             **network_params['params']
         ).to(device)
+
+    elif network_params['type'] == 'ResnetCostmapSpeedmapCNN':
+        res['network'] = ResnetCostmapSpeedmapCNN(
+            in_channels = len(res['dataset'].feature_keys),
+            out_channels = 1,
+            **network_params['params']
+        ).to(device)
+
     elif network_params['type'] == 'UNet':
         channels = len(res['dataset'].feature_keys)
         nx = int(res['dataset'].metadata['width'] / res['dataset'].metadata['resolution'])
@@ -135,7 +144,16 @@ def setup_experiment(fp):
             expert_dataset = res['dataset'],
             mppi = res['trajopt'],
             **algo_params['params']
-    ).to(device)
+        ).to(device)
+
+    elif algo_params['type'] == 'MPPIIRLSpeedmaps':
+        res['algo'] = MPPIIRLSpeedmaps(
+            network = res['network'],
+            opt = res['netopt'],
+            expert_dataset = res['dataset'],
+            mppi = res['trajopt'],
+            **algo_params['params']
+        ).to(device)
 
     #setup experiment
     experiment_params = experiment_dict['experiment']
@@ -149,7 +167,7 @@ def setup_experiment(fp):
 
 #TEST
 if __name__ == '__main__':
-    fp = '../../../configs/training/yamaha_atv.yaml'
+    fp = '../../../configs/training/yamaha_atv_speedmaps.yaml'
     res = setup_experiment(fp)
 
     print({k:v.shape if isinstance(v, torch.Tensor) else v for k,v in res['dataset'][1].items()})

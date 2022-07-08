@@ -5,6 +5,7 @@ Viz script for visualizing a global state visitation buffer on top of satellite 
 import torch
 import numpy as np
 import pandas as pd
+import matplotlib
 import matplotlib.pyplot as plt
 import os
 import argparse
@@ -38,13 +39,16 @@ def get_lat_long_grid(gsv, utm_zone):
     lon, lat = proj(-grid[:, :, 1], grid[:, :, 0], inverse=True)
     return np.stack([lat, lon], axis=-1)
 
-def plot_gsv(gsv, utm_zone, fig=None, axs=None):
+def plot_gsv(gsv, utm_zone, fig=None, axs=None, plot_speed=False):
     """
     use google maps API to get satellite imagery and heatmap the global state visitations on top of it
     """
     if fig is None or axs is None:
-        fig, axs = plt.subplots(1, 1, figsize=(12, 12))
-        axs = [axs]
+        if plot_speed:
+            fig, axs = plt.subplots(1, 2, figsize=(24, 12))
+        else:
+            fig, axs = plt.subplots(1, 1, figsize=(12, 12))
+            axs = [axs]
 
     ox = gsv.metadata['origin'][0].item()
     oy = gsv.metadata['origin'][1].item()
@@ -78,26 +82,30 @@ def plot_gsv(gsv, utm_zone, fig=None, axs=None):
         grid_px_df['x_pixel'].to_numpy()
     ], axis=-1)
     grid_px = grid_px.reshape(grid.shape)
+    speed_data = gsv.get_mean_speed_map()
 
     mask = (gsv.data > 0).numpy()
 
     mask_px = grid_px[mask]
     mask_val = gsv.data[mask].numpy()
+    mask_speed_val = speed_data[mask].numpy()
 
-    #img is not a numpy array, so transpose the data instead of the background
+    cmap = matplotlib.cm.get_cmap('coolwarm')
 
     if mask.sum() > 0:
-        fn = lambda x: np.log(x)
-        q = fn(mask_val) / np.max(fn(mask_val) + 1e-6)
-        mask_color = np.stack([
-            q,
-            np.zeros_like(mask_val),
-            1. - q,
-            np.ones_like(mask_val)
-        ], axis=-1)
-        axs[0].scatter(mask_px[:, 1], mask_px[:, 0], s=1., c=mask_color)
+        r1 = axs[0].scatter(mask_px[:, 1], mask_px[:, 0], s=1., c=np.log(mask_val), cmap=cmap)
+#        fig.colorbar(r1, ax=axs[0])
+
+        if plot_speed:
+            r2 = axs[1].scatter(mask_px[:, 1], mask_px[:, 0], s=1., c=mask_speed_val, cmap=cmap)
+#            fig.colorbar(r2, ax=axs[1])
 
     axs[0].imshow(img)
+    axs[0].set_title('Log State Visitations')
+
+    if plot_speed:
+        axs[1].imshow(img)
+        axs[1].set_title('Speeds')
     return fig, axs
 
 def plot_utm_traj(gsv, utm_zone, traj, fig=None, axs=None, plt_kwargs=None):
@@ -105,8 +113,7 @@ def plot_utm_traj(gsv, utm_zone, traj, fig=None, axs=None, plt_kwargs=None):
     Plot a traj in utm on a gsv
     """
     if fig is None or axs is None:
-        fig, axs = plt.subplots(1, 1, figsize=(12, 12))
-        axs = [axs]
+        fig, axs = plt.subplots(1, 2, figsize=(24, 12))
 
     ox = gsv.metadata['origin'][0].item()
     oy = gsv.metadata['origin'][1].item()
@@ -138,7 +145,9 @@ def plot_utm_traj(gsv, utm_zone, traj, fig=None, axs=None, plt_kwargs=None):
         grid_px_df['y_pixel'].to_numpy(),
         grid_px_df['x_pixel'].to_numpy()
     ], axis=-1)
+
     axs[0].plot(grid_px[:, 1], grid_px[:, 0], **plt_kwargs)
+
     return fig, axs
 
 if __name__ == '__main__':
