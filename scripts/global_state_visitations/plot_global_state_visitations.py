@@ -82,13 +82,13 @@ def plot_gsv(gsv, utm_zone, fig=None, axs=None, plot_speed=False):
         grid_px_df['x_pixel'].to_numpy()
     ], axis=-1)
     grid_px = grid_px.reshape(grid.shape)
-    speed_data = gsv.get_mean_speed_map()
+#    speed_data = gsv.get_mean_speed_map()
 
     mask = (gsv.data > 0).numpy()
 
     mask_px = grid_px[mask]
     mask_val = gsv.data[mask].numpy()
-    mask_speed_val = speed_data[mask].numpy()
+#    mask_speed_val = speed_data[mask].numpy()
 
     cmap = matplotlib.cm.get_cmap('coolwarm')
 
@@ -96,16 +96,16 @@ def plot_gsv(gsv, utm_zone, fig=None, axs=None, plot_speed=False):
         r1 = axs[0].scatter(mask_px[:, 1], mask_px[:, 0], s=1., c=np.log(mask_val), cmap=cmap)
 #        fig.colorbar(r1, ax=axs[0])
 
-        if plot_speed:
-            r2 = axs[1].scatter(mask_px[:, 1], mask_px[:, 0], s=1., c=mask_speed_val, cmap=cmap)
+#        if plot_speed:
+#            r2 = axs[1].scatter(mask_px[:, 1], mask_px[:, 0], s=1., c=mask_speed_val, cmap=cmap)
 #            fig.colorbar(r2, ax=axs[1])
 
     axs[0].imshow(img)
     axs[0].set_title('Log State Visitations')
 
-    if plot_speed:
-        axs[1].imshow(img)
-        axs[1].set_title('Speeds')
+#    if plot_speed:
+#        axs[1].imshow(img)
+#        axs[1].set_title('Speeds')
     return fig, axs
 
 def plot_utm_traj(gsv, utm_zone, traj, fig=None, axs=None, plt_kwargs=None):

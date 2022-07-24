@@ -70,7 +70,8 @@ class CostmapperNode:
 
         map_feats_norm = (map_feats - self.feature_mean.view(-1, 1, 1)) / self.feature_std.view(-1, 1, 1)
         with torch.no_grad():
-            costmap = self.network.forward(map_feats_norm.view(1, *map_feats_norm.shape))[0]
+            res = self.network.forward(map_feats_norm.view(1, *map_feats_norm.shape))
+            costmap = res['costmap'][0]
 
         #experiment w/ normalizing
         rospy.loginfo_throttle(1.0, "min = {:.4f}, max = {:.4f}".format(costmap.min(), costmap.max()))
