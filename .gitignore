@@ -1,6 +1,4 @@
 *.bag
 *.mp4
 *.swp
-*.pt
-!models/*.pt
 *__pycache__*

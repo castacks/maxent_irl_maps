@@ -14,7 +14,7 @@ from torch_mpc.cost_functions.waypoint_costmap import WaypointCostMapCostFunctio
 from maxent_irl_costmaps.algos.mppi_irl import MPPIIRL
 from maxent_irl_costmaps.algos.mppi_irl_speedmaps import MPPIIRLSpeedmaps
 
-from maxent_irl_costmaps.networks.resnet import ResnetCostmapCNN, ResnetCostmapSpeedmapCNN
+from maxent_irl_costmaps.networks.resnet import ResnetCostmapCNN, ResnetCostmapSpeedmapCNN, ResnetCostmapSpeedmapCNNEnsemble, ResnetCostmapSpeedmapCNNEnsemble2
 from maxent_irl_costmaps.networks.unet import UNet
 
 from maxent_irl_costmaps.dataset.maxent_irl_dataset import MaxEntIRLDataset
@@ -69,14 +69,24 @@ def setup_experiment(fp):
     if network_params['type'] == 'ResnetCostmapCNN':
         res['network'] = ResnetCostmapCNN(
             in_channels = len(res['dataset'].feature_keys),
-            out_channels = 1,
             **network_params['params']
         ).to(device)
 
     elif network_params['type'] == 'ResnetCostmapSpeedmapCNN':
         res['network'] = ResnetCostmapSpeedmapCNN(
             in_channels = len(res['dataset'].feature_keys),
-            out_channels = 1,
+            **network_params['params']
+        ).to(device)
+
+    elif network_params['type'] == 'ResnetCostmapSpeedmapCNNEnsemble':
+        res['network'] = ResnetCostmapSpeedmapCNNEnsemble(
+            in_channels = len(res['dataset'].feature_keys),
+            **network_params['params']
+        ).to(device)
+
+    elif network_params['type'] == 'ResnetCostmapSpeedmapCNNEnsemble2':
+        res['network'] = ResnetCostmapSpeedmapCNNEnsemble2(
+            in_channels = len(res['dataset'].feature_keys),
             **network_params['params']
         ).to(device)
 
@@ -167,7 +177,7 @@ def setup_experiment(fp):
 
 #TEST
 if __name__ == '__main__':
-    fp = '../../../configs/training/yamaha_atv_speedmaps.yaml'
+    fp = '../../../configs/training/yamaha_atv_speedmaps_ensemble.yaml'
     res = setup_experiment(fp)
 
     print({k:v.shape if isinstance(v, torch.Tensor) else v for k,v in res['dataset'][1].items()})

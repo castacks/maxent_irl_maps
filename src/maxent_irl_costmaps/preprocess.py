@@ -49,7 +49,7 @@ def load_traj(bag_fp, odom_topic, dt):
 
     return traj
 
-def load_data(bag_fp, map_features_topic, odom_topic, image_topic, horizon, dt, fill_value, steer_angle_topic='/ros_talon/current_position', gps_topic='/odometry/filtered_odom'):
+def load_data(bag_fp, map_features_topic, odom_topic, image_topic, horizon, dt, fill_value, steer_angle_topic='/ros_talon/current_position', gps_topic='/odometry/filtered_odom', cmd_topic='/cmd'):
     """
     Extract map features and trajectory data from the bag.
     """
@@ -67,8 +67,12 @@ def load_data(bag_fp, map_features_topic, odom_topic, image_topic, horizon, dt, 
     gps_poses = []
     gps_timestamps = []
 
+    #cmd needed for models
+    cmds = []
+    cmd_timestamps = []
+
     bag = rosbag.Bag(bag_fp, 'r')
-    for topic, msg, t in bag.read_messages(topics=[map_features_topic, odom_topic, steer_angle_topic, gps_topic]):
+    for topic, msg, t in bag.read_messages(topics=[map_features_topic, odom_topic, steer_angle_topic, gps_topic, cmd_topic]):
         if topic == odom_topic:
             pose = msg.pose.pose
             twist = msg.twist.twist
@@ -121,6 +125,14 @@ def load_data(bag_fp, map_features_topic, odom_topic, image_topic, horizon, dt, 
                 gps_poses.append(gps_state)
                 gps_timestamps.append(msg.header.stamp.to_sec())
 
+        elif topic == cmd_topic:
+            cmd = np.array([
+                msg.twist.linear.x,
+                msg.twist.angular.z
+            ])
+            cmds.append(cmd)
+            cmd_timestamps.append(msg.header.stamp.to_sec())
+
     traj = np.stack(traj, axis=0)
     timestamps = np.array(timestamps)
 
@@ -143,6 +155,12 @@ def load_data(bag_fp, map_features_topic, odom_topic, image_topic, horizon, dt, 
         gps_traj = np.stack(gps_poses, axis=0)
         gps_timestamps = np.array(gps_timestamps)
         gps_interp = TrajectoryInterpolator(gps_timestamps, gps_traj)
+
+    if len(cmds) > 0:
+        cmds = np.stack(cmds, axis=0)
+        cmd_timestamps = np.array(cmd_timestamps)
+        cmd_throttle_interp = scipy.interpolate.interp1d(cmd_timestamps, cmds[:, 0], fill_value='extrapolate')
+        cmd_steer_interp = scipy.interpolate.interp1d(cmd_timestamps, cmds[:, 1], fill_value='extrapolate')
 
     map_target_times = []
 
@@ -190,6 +208,12 @@ def load_data(bag_fp, map_features_topic, odom_topic, image_topic, horizon, dt, 
         if len(gps_poses) > 0:
             gps_subtraj = gps_interp(targets)
 
+        if len(cmds) > 0:
+            cmd_subtraj = np.stack([
+                cmd_throttle_interp(targets),
+                cmd_steer_interp(targets)
+            ], axis=-1)
+
         #handle transforms to deserialize map/costmap
         map_metadata = map_features.info
         xmin = map_metadata.pose.position.x - 0.5 * (map_metadata.length_x)
@@ -206,6 +230,7 @@ def load_data(bag_fp, map_features_topic, odom_topic, image_topic, horizon, dt, 
 
         data = {
             'traj':torch.tensor(traj).float(),
+            'cmd':torch.tensor(cmd_subtraj).float() if len(cmds) > 0 else None,
             'gps_traj':torch.tensor(gps_subtraj).float() if len(gps_poses) > 0 else None,
             'steer': torch.tensor(steers).float() if len(steer_angles) > 0 else None,
             'feature_keys': map_feature_keys,
@@ -220,6 +245,7 @@ def load_data(bag_fp, map_features_topic, odom_topic, image_topic, horizon, dt, 
     dataset = {
         'map_features':[x['map_features'] for x in dataset],
         'traj':[x['traj'] for x in dataset],
+        'cmd':[x['cmd'] for x in dataset],
         'gps_traj':[x['gps_traj'] for x in dataset],
         'metadata':[x['metadata'] for x in dataset],
         'steer':[x['steer'] for x in dataset]

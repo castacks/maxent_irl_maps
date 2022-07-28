@@ -33,6 +33,7 @@ if __name__ == '__main__':
     dataset = MaxEntIRLDataset(bag_fp=args.bag_fp, preprocess_fp=args.preprocess_fp, map_features_topic=args.map_topic, odom_topic=args.odom_topic, image_topic=args.image_topic, horizon=model.expert_dataset.horizon)
 
     model.expert_dataset = dataset
+    model.network.eval()
 
     maybe_mkdir(args.save_fp, force=False)
 

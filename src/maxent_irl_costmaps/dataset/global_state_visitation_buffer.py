@@ -299,6 +299,8 @@ class GlobalStateVisitationBuffer:
             axs[1].set_xlabel('X (local)')
             axs[1].set_ylabel('Y (local)')
 
+        get_frame(10, fig, axs)
+
         anim = FuncAnimation(fig, lambda t: get_frame(t, fig, axs), frames = np.arange(traj.shape[0] - 10), interval=300*self.dt)
 
         plt.show()

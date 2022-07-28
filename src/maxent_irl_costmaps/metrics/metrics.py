@@ -27,6 +27,7 @@ def get_metrics(experiment, gsv = None, metric_fns = {}):
         for i, batch in enumerate(experiment.expert_dataset):
             print('{}/{}'.format(i+1, len(experiment.expert_dataset)), end='\r')
 
+#            import pdb;pdb.set_trace()
             map_features = batch['map_features']
             map_metadata = batch['metadata']
             expert_traj = batch['traj']

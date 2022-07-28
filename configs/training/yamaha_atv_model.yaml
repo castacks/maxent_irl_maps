@@ -1,0 +1,67 @@
+experiment:
+    save_to: /home/striest/Desktop/experiments/yamaha_maxent_irl
+    name: small_net_costmaps_speedmaps_ablation_sigmoid
+    device: cuda
+    epochs: 200
+    steps_per_epoch: 10
+    save_every: 1
+
+algo:
+    type: MPPIIRLSpeedmaps
+    params:
+        mppi_itrs: 10
+        batch_size: 12
+#        reg_coeff: 1.0e-07
+        reg_coeff: 0.0
+        speed_coeff: 1.0e-3
+
+dataset:
+    type: MaxEntIRLDataset
+    params:
+        bag_fp: /home/striest/Desktop/datasets/yamaha_maxent_irl/big_gridmaps_pointclouds/rosbags_test/2022-06-30
+        preprocess_fp: /home/striest/Desktop/datasets/yamaha_maxent_irl/big_gridmaps_pointclouds/torch_model_test
+        map_features_topic: /local_gridmap
+        odom_topic: /integrated_to_init
+        image_topic: /multisense/left/image_rect_color
+        horizon: 100
+
+network:
+    type: ResnetCostmapSpeedmapCNN
+    params:
+        hidden_channels: [64, 64]
+        activation_type: sigmoid
+        activation_scale: 1.0
+
+netopt:
+    type: Adam
+    params: {}
+
+cost_function:
+    type: WaypointCostMapCostFunction
+    params:
+        unknown_cost: 0.
+        goal_cost: 20.0
+
+model:
+    type: SteerSetpointKBM
+    params:
+        L: 3.0
+        v_target_lim: [2.0, 15.0]
+        steer_lim: [-0.5, 0.5]
+        steer_rate_lim: 0.5
+        v_Kp: 1.0
+        w_Kp: 10.0
+
+trajopt:
+    type: MPPI
+    params: 
+        num_samples: 2048
+        control_params:
+            sys_noise: [5.0, 0.25]
+            temperature: 0.1
+            use_ou: True
+            ou_alpha: 0.9
+            ou_scale: 10.0
+            d_ou_scale: 5.0
+
+metrics:

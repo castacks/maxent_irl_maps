@@ -1,6 +1,6 @@
 experiment:
     save_to: /home/striest/Desktop/experiments/yamaha_maxent_irl
-    name: small_net_costmaps_speedmaps_ablation_relu
+    name: small_net_costmaps_speedmaps_with_dropout
     device: cuda
     epochs: 200
     steps_per_epoch: 10
@@ -29,8 +29,10 @@ network:
     type: ResnetCostmapSpeedmapCNN
     params:
         hidden_channels: [64, 64]
-        activation_type: relu
+        hidden_activation: tanh
+        activation_type: exponential
         activation_scale: 1.0
+        dropout: 0.2
 
 netopt:
     type: Adam

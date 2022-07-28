@@ -223,7 +223,7 @@ class MPPIIRLSpeedmaps:
             
             axs[0].imshow(data['image'].permute(1, 2, 0)[:, :, [2, 1, 0]].cpu())
             axs[1].imshow(map_features[idx].cpu(), origin='lower', cmap='gray', extent=(xmin, xmax, ymin, ymax))
-            m1 = axs[2].imshow(costmap.cpu(), origin='lower', cmap='plasma', extent=(xmin, xmax, ymin, ymax), vmin=0., vmax=3.0)
+            m1 = axs[2].imshow(costmap.cpu(), origin='lower', cmap='plasma', extent=(xmin, xmax, ymin, ymax), vmin=0., vmax=30.)
             m2 = axs[4].imshow(speedmap.loc.cpu(), origin='lower', cmap='bwr', extent=(xmin, xmax, ymin, ymax))
             m3 = axs[5].imshow(speedmap.scale.cpu(), origin='lower', cmap='bwr', extent=(xmin, xmax, ymin, ymax))
 
