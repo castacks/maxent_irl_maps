@@ -15,7 +15,7 @@ from torch_mpc.cost_functions.waypoint_costmap import WaypointCostMapCostFunctio
 
 from maxent_irl_costmaps.dataset.maxent_irl_dataset import MaxEntIRLDataset
 from maxent_irl_costmaps.costmappers.linear_costmapper import LinearCostMapper
-from maxent_irl_costmaps.utils import get_feature_counts, get_state_visitations, get_speedmap
+from maxent_irl_costmaps.utils import get_state_visitations, get_speedmap
 
 from maxent_irl_costmaps.networks.mlp import MLP
 from maxent_irl_costmaps.networks.resnet import ResnetCostmapCNN
@@ -79,6 +79,8 @@ class MPPIIRLSpeedmaps:
         print('_____ITR {}_____'.format(self.itr))
 
     def gradient_step(self, batch):
+        assert batch['metadata']['resolution'].std() < 1e-4, "got mutliple resolutions in a batch, which we currently don't support"
+
         grads = []
         speed_loss = []
 
@@ -88,6 +90,90 @@ class MPPIIRLSpeedmaps:
         costmap_cache = []
 
         #TODO: Use the batch MPPI interface
+
+        #first generate all the costmaps
+        res = self.network.forward(batch['map_features'])
+        costmaps = res['costmap'][:, 0]
+        speedmaps = res['speedmap']
+
+        #initialize metadata for cost function
+        map_params = {
+            'resolution': batch['metadata']['resolution'].mean().item(),
+            'height': batch['metadata']['height'].mean().item(),
+            'width': batch['metadata']['width'].mean().item(),
+            'origin': batch['metadata']['origin']
+        }
+
+        #initialize goals for cost function
+        expert_traj = batch['traj']
+        goals = [traj[[-1], :2] for traj in expert_traj]
+
+        #initialize initial state for MPPI
+        initial_states = expert_traj[:, 0]
+        x0 = {
+            'state': initial_states,
+            'steer_angle': batch['steer'][:, [0]] if 'steer' in batch.keys() else torch.zeros(initial_states.shape[0], device=initial_state.device)
+        }
+        x = self.mppi.model.get_observations(x0)
+
+        #set up the solver
+        self.mppi.reset()
+        self.mppi.cost_fn.update_map_params(map_params)
+        self.mppi.cost_fn.update_costmap(costmaps)
+        self.mppi.cost_fn.update_goals(goals)
+
+        #run MPPI
+        for ii in range(self.mppi_itrs):
+            with torch.no_grad():
+                self.mppi.get_control(x, step=False)
+
+        #SAM RESUME HERE AFTER MEETING
+        #weighting version
+        trajs = self.mppi.noisy_states.clone()
+        weights = self.mppi.last_weights.clone()
+
+        self.mppi.reset()
+
+        #afaik, this op is not batch-able because of torch.bincount
+        #so just loop it - this is not the speed bottleneck
+        learner_state_visitations = []
+        expert_state_visitations = []
+        for bi in range(trajs.shape[0]):
+            map_params_b = {
+                'resolution': batch['metadata']['resolution'].mean().item(),
+                'height': batch['metadata']['height'].mean().item(),
+                'width': batch['metadata']['width'].mean().item(),
+                'origin': batch['metadata']['origin'][bi]
+            }
+            lsv = get_state_visitations(trajs[bi], map_params_b, weights[bi])
+            esv = get_state_visitations(expert_traj[bi].unsqueeze(0), map_params_b)
+            learner_state_visitations.append(lsv)
+            expert_state_visitations.append(esv)
+
+        learner_state_visitations = torch.stack(learner_state_visitations, dim=0)
+        expert_state_visitations = torch.stack(expert_state_visitations, dim=0)
+
+        grads = (expert_state_visitations - learner_state_visitations) / trajs.shape[0]
+
+        #Speedmaps here:
+        expert_speedmaps = []
+        for bi in range(trajs.shape[0]):
+            map_params_b = {
+                'resolution': batch['metadata']['resolution'].mean().item(),
+                'height': batch['metadata']['height'].mean().item(),
+                'width': batch['metadata']['width'].mean().item(),
+                'origin': batch['metadata']['origin'][bi]
+            }
+            esm = get_speedmap(expert_traj[bi].unsqueeze(0), map_params_b).view(speedmaps.loc[bi].shape)
+            expert_speedmaps.append(esm)
+
+        expert_speedmaps = torch.stack(expert_speedmaps, dim=0)
+
+        mask = (expert_speedmaps > 1e-2) #only need the cells that the expert drove in
+        ll = -speedmaps.log_prob(expert_speedmaps)[mask]
+        speed_loss = ll.mean() * self.speed_coeff
+
+        """
         for i in range(batch['traj'].shape[0]):
             map_features = batch['map_features'][i]
             map_metadata = {k:v[i] for k,v in batch['metadata'].items()}
@@ -158,16 +244,18 @@ class MPPIIRLSpeedmaps:
 
         speed_loss = torch.stack(speed_loss).mean() * self.speed_coeff
 
-        print('IRL GRAD:   {:.4f}'.format(torch.linalg.norm(grads).detach().cpu().item()))
-        print('SPEED LOSS: {:.4f}'.format(speed_loss.detach().item()))
+        """
+
+#        print('IRL GRAD:   {:.4f}'.format(torch.linalg.norm(grads).detach().cpu().item()))
+#        print('SPEED LOSS: {:.4f}'.format(speed_loss.detach().item()))
 
         #add regularization
-        reg = self.reg_coeff * costmap_cache
+        reg = self.reg_coeff * costmaps
 
         #kinda jank, but since we're multi-headed and have a loss and a gradient,
         # I think we need two backward passes through the computation graph.
         self.network_opt.zero_grad()
-        costmap_cache.backward(gradient=(grads + reg), retain_graph=True)
+        costmaps.backward(gradient=(grads + reg), retain_graph=True)
         speed_loss.backward()
         self.network_opt.step()
 
@@ -178,7 +266,8 @@ class MPPIIRLSpeedmaps:
         with torch.no_grad():
             data = self.expert_dataset[idx]
 
-            map_features = data['map_features']
+            #hack back to single dim
+            map_features = torch.stack([data['map_features']] * self.mppi.B, dim=0)
             metadata = data['metadata']
             xmin = metadata['origin'][0].cpu()
             ymin = metadata['origin'][1].cpu()
@@ -188,32 +277,35 @@ class MPPIIRLSpeedmaps:
 
             #compute costmap
             #resnet cnn
-            res = self.network.forward(map_features.view(1, *map_features.shape))
-            costmap = res['costmap'][0, 0]
-            speedmap = torch.distributions.Normal(loc=res['speedmap'].loc[0], scale=res['speedmap'].scale[0])
+            res = self.network.forward(map_features)
+            costmap = res['costmap'][:, 0]
+            speedmap = torch.distributions.Normal(loc=res['speedmap'].loc, scale=res['speedmap'].scale)
 
             #initialize solver
             initial_state = expert_traj[0]
             x0 = {"state":initial_state, "steer_angle":data["steer"][[0]] if "steer" in data.keys() else torch.zeros(1, device=initial_state.device)}
-            x = self.mppi.model.get_observations(x0)
+            x = torch.stack([self.mppi.model.get_observations(x0)] * self.mppi.B, dim=0)
 
             map_params = {
                 'resolution': metadata['resolution'],
                 'height': metadata['height'],
                 'width': metadata['width'],
-                'origin': metadata['origin']
+                'origin': torch.stack([metadata['origin']] * self.mppi.B, dim=0)
             }
+
+            goals = [expert_traj[[-1], :2]] * self.mppi.B
+
             self.mppi.reset()
             self.mppi.cost_fn.update_map_params(map_params)
             self.mppi.cost_fn.update_costmap(costmap)
-            self.mppi.cost_fn.update_goal(expert_traj[-1, :2])
+            self.mppi.cost_fn.update_goals(goals)
 
             #solve for traj
             for ii in range(self.mppi_itrs):
                 self.mppi.get_control(x, step=False)
 
-            #regular version
-            traj = self.mppi.last_states
+            tidx = self.mppi.last_cost.argmin()
+            traj = self.mppi.last_states[tidx]
 
             metadata = data['metadata']
             fig, axs = plt.subplots(2, 3, figsize=(18, 12))
@@ -222,10 +314,11 @@ class MPPIIRLSpeedmaps:
             idx = self.expert_dataset.feature_keys.index('height_high')
             
             axs[0].imshow(data['image'].permute(1, 2, 0)[:, :, [2, 1, 0]].cpu())
-            axs[1].imshow(map_features[idx].cpu(), origin='lower', cmap='gray', extent=(xmin, xmax, ymin, ymax))
-            m1 = axs[2].imshow(costmap.cpu(), origin='lower', cmap='plasma', extent=(xmin, xmax, ymin, ymax), vmin=0., vmax=30.)
-            m2 = axs[4].imshow(speedmap.loc.cpu(), origin='lower', cmap='bwr', extent=(xmin, xmax, ymin, ymax))
-            m3 = axs[5].imshow(speedmap.scale.cpu(), origin='lower', cmap='bwr', extent=(xmin, xmax, ymin, ymax))
+            axs[1].imshow(map_features[tidx][idx].cpu(), origin='lower', cmap='gray', extent=(xmin, xmax, ymin, ymax))
+#            m1 = axs[2].imshow(costmap[tidx].cpu(), origin='lower', cmap='plasma', extent=(xmin, xmax, ymin, ymax), vmin=0., vmax=30.)
+            m1 = axs[2].imshow(costmap[tidx].cpu(), origin='lower', cmap='plasma', extent=(xmin, xmax, ymin, ymax))
+            m2 = axs[4].imshow(speedmap.loc[tidx].cpu(), origin='lower', cmap='bwr', extent=(xmin, xmax, ymin, ymax))
+            m3 = axs[5].imshow(speedmap.scale[tidx].cpu(), origin='lower', cmap='bwr', extent=(xmin, xmax, ymin, ymax))
 
             axs[1].plot(expert_traj[:, 0].cpu(), expert_traj[:, 1].cpu(), c='y', label='expert')
             axs[2].plot(expert_traj[:, 0].cpu(), expert_traj[:, 1].cpu(), c='y')

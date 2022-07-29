@@ -10,6 +10,8 @@ from torch_mpc.models.skid_steer import SkidSteer
 
 from torch_mpc.algos.mppi import MPPI
 from torch_mpc.cost_functions.waypoint_costmap import WaypointCostMapCostFunction
+from torch_mpc.algos.batch_mppi import BatchMPPI
+from torch_mpc.cost_functions.batch_multi_waypoint_costmap import BatchMultiWaypointCostMapCostFunction
 
 from maxent_irl_costmaps.algos.mppi_irl import MPPIIRL
 from maxent_irl_costmaps.algos.mppi_irl_speedmaps import MPPIIRLSpeedmaps
@@ -123,8 +125,8 @@ def setup_experiment(fp):
 
     #setup cost function
     cost_function_params = experiment_dict['cost_function']
-    if cost_function_params['type'] == 'WaypointCostMapCostFunction':
-        res['cost_function'] = WaypointCostMapCostFunction(
+    if cost_function_params['type'] == 'BatchMultiWaypointCostMapCostFunction':
+        res['cost_function'] = BatchMultiWaypointCostMapCostFunction(
             map_params = res['dataset'].metadata,
             **cost_function_params['params']
         ).to(device)
@@ -134,11 +136,12 @@ def setup_experiment(fp):
 
     #setup trajopt
     trajopt_params = experiment_dict['trajopt']
-    if trajopt_params['type'] == 'MPPI':
-        res['trajopt'] = MPPI(
+    if trajopt_params['type'] == 'BatchMPPI':
+        res['trajopt'] = BatchMPPI(
             model = res['model'],
             cost_fn = res['cost_function'],
             num_timesteps = res['dataset'].horizon,
+            batch_size = experiment_dict['algo']['params']['batch_size'],
             **trajopt_params['params']
         ).to(device)
     else:
@@ -177,7 +180,7 @@ def setup_experiment(fp):
 
 #TEST
 if __name__ == '__main__':
-    fp = '../../../configs/training/yamaha_atv_speedmaps_ensemble.yaml'
+    fp = '../../../configs/training/test.yaml'
     res = setup_experiment(fp)
 
     print({k:v.shape if isinstance(v, torch.Tensor) else v for k,v in res['dataset'][1].items()})

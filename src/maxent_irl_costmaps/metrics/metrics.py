@@ -107,7 +107,7 @@ def get_metrics(experiment, gsv = None, metric_fns = {}):
             axs[0].imshow(batch['image'].permute(1, 2, 0)[:, :, [2, 1, 0]].cpu())
             axs[0].set_title('FPV')
 
-            axs[1].imshow(costmap.cpu(), origin='lower', cmap='plasma', extent=(xmin, xmax, ymin, ymax), vmin=0., vmax=30.)
+            axs[1].imshow(costmap.cpu(), origin='lower', cmap='plasma', extent=(xmin, xmax, ymin, ymax))
             axs[1].plot(expert_traj[:, 0], expert_traj[:, 1], c='y', label='expert')
             axs[1].plot(traj[:, 0], traj[:, 1], c='g', label='learner')
             axs[1].set_title('costmap')
@@ -193,6 +193,22 @@ def kl_divergence_global(
     #We want learner onto global
     #KL(p||q) = sum_p[p(x) * log(p(x)/q(x))]
     return (learner_state_visitations * torch.log((learner_state_visitations + 1e-6) / (global_state_visitations + 1e-6))).sum()
+
+def modified_hausdorff_distance(
+                costmap,
+                expert_traj,
+                learner_traj,
+                expert_state_visitations,
+                learner_state_visitations,
+                global_state_visitations
+                ):
+    ap = expert_traj[:, :2]
+    bp = learner_traj[:, :2]
+    dist_mat = torch.linalg.norm(ap.unsqueeze(0) - bp.unsqueeze(1), dim=-1)
+    mhd1 = dist_mat.min(dim=0)[0].mean()
+    mhd2 = dist_mat.min(dim=1)[0].mean()
+    return max(mhd1, mhd2)
+
 if __name__ == '__main__':
     experiment_fp = '/home/striest/Desktop/experiments/yamaha_maxent_irl/2022-06-29-11-21-25_trail_driving_cnn_deeper_bnorm_exp/itr_50.pt'
     experiment = torch.load(experiment_fp, map_location='cpu')
@@ -205,6 +221,7 @@ if __name__ == '__main__':
         'learner_cost':learner_cost,
         'traj':position_distance,
         'kl':kl_divergence,
+        'mhd':maidified_hausdorff_distance
     }
 
     res = get_metrics(experiment, gsv, metrics)
