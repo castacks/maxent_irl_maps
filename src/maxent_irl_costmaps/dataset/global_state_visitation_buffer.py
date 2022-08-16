@@ -49,6 +49,12 @@ class GlobalStateVisitationBuffer:
         self.initialize(bag_dir=bag_dir)
         self.device = device
 
+    def to(self, device):
+        self.device = device
+        self.data = self.data.to(device)
+        self.metadata['origin'] = self.metadata['origin'].to(device)
+        return self
+
     def initialize(self, bag_dir=None):
         """
         Set map bounds and occgrid

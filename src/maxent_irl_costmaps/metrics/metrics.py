@@ -21,54 +21,69 @@ def get_metrics(experiment, gsv = None, metric_fns = {}):
     axs = axs.flatten()
     plt.show(block=False)
 
-    res = {k:[] for k in metric_fns.keys()}
+    metrics_res = {k:[] for k in metric_fns.keys()}
 
     with torch.no_grad():
-        for i, batch in enumerate(experiment.expert_dataset):
+        for i, data in enumerate(experiment.expert_dataset):
             print('{}/{}'.format(i+1, len(experiment.expert_dataset)), end='\r')
 
-#            import pdb;pdb.set_trace()
-            map_features = batch['map_features']
-            map_metadata = batch['metadata']
-            expert_traj = batch['traj']
+            #hack back to single dim
+            map_features = torch.stack([data['map_features']] * experiment.mppi.B, dim=0)
+            metadata = data['metadata']
+            xmin = metadata['origin'][0].cpu()
+            ymin = metadata['origin'][1].cpu()
+            xmax = xmin + metadata['width']
+            ymax = ymin + metadata['height']
+            expert_traj = data['traj']
 
-            #resnet cnn (and actual net interface in general)
-            costmap = experiment.network.forward(map_features.view(1, *map_features.shape))['costmap'][0, 0]
+            #compute costmap
+
+            #ensemble
+            if hasattr(experiment.network, 'ensemble_forward'):
+                #save GPU space in batch (they're copied anyways)
+                res = experiment.network.ensemble_forward(map_features[[0]])
+                costmap = res['costmap'].mean(dim=1)[0]
+                costmap = torch.cat([costmap] * experiment.mppi.B, dim=0)
+
+            #no ensemble
+            else:
+                res = experiment.network.forward(map_features)
+                costmap = res['costmap'][:, 0]
 
             #initialize solver
             initial_state = expert_traj[0]
-            x0 = {"state":initial_state, "steer_angle":batch["steer"][[0]] if "steer" in batch.keys() else torch.zeros(1, device=initial_state.device)}
-            x = experiment.mppi.model.get_observations(x0)
+            x0 = {"state":initial_state, "steer_angle":data["steer"][[0]] if "steer" in data.keys() else torch.zeros(1, device=initial_state.device)}
+            x = torch.stack([experiment.mppi.model.get_observations(x0)] * experiment.mppi.B, dim=0)
 
             map_params = {
-                'resolution': map_metadata['resolution'],
-                'height': map_metadata['height'],
-                'width': map_metadata['width'],
-                'origin': map_metadata['origin']
+                'resolution': metadata['resolution'],
+                'height': metadata['height'],
+                'width': metadata['width'],
+                'origin': torch.stack([metadata['origin']] * experiment.mppi.B, dim=0)
             }
+
+            goals = [expert_traj[[-1], :2]] * experiment.mppi.B
+
             experiment.mppi.reset()
             experiment.mppi.cost_fn.update_map_params(map_params)
             experiment.mppi.cost_fn.update_costmap(costmap)
-            experiment.mppi.cost_fn.update_goal(expert_traj[-1, :2])
+            experiment.mppi.cost_fn.update_goals(goals)
 
             #solve for traj
             for ii in range(experiment.mppi_itrs):
                 experiment.mppi.get_control(x, step=False)
 
-            #regular version
-            traj = experiment.mppi.last_states
+            tidx = experiment.mppi.last_cost.argmin()
+            traj = experiment.mppi.last_states[tidx].clone()
 
-            #weighting version
-            trajs = experiment.mppi.noisy_states.clone()
-            weights = experiment.mppi.last_weights.clone()
+            trajs = experiment.mppi.noisy_states[tidx].clone()
+            weights = experiment.mppi.last_weights[tidx].clone()
 
-            experiment.mppi.reset()
-
-            learner_state_visitations = get_state_visitations(trajs, map_metadata, weights)
-            expert_state_visitations = get_state_visitations(expert_traj.unsqueeze(0), map_metadata)
+            learner_state_visitations = get_state_visitations(trajs, metadata, weights)
+            expert_state_visitations = get_state_visitations(expert_traj.unsqueeze(0), metadata)
 
             #GET GLOBAL STATE VISITATIONS
-            gps_x0 = batch['gps_traj'][[0]]
+            gps_x0 = data['gps_traj'][[0]]
             expert_x0 = expert_traj[[0]]
 
             #calculate the rotation offset to account for frame diff in SO and GPS
@@ -89,12 +104,12 @@ def get_metrics(experiment, gsv = None, metric_fns = {}):
             global_state_visitations = gsv.get_state_visitations(poses, crop_params, local=True)[0]
 
             for k, fn in metric_fns.items():
-                res[k].append(fn(costmap, expert_traj, traj, expert_state_visitations, learner_state_visitations, global_state_visitations))
+                metrics_res[k].append(fn(costmap, expert_traj, traj, expert_state_visitations, learner_state_visitations, global_state_visitations).cpu().item())
 
-            xmin = map_metadata['origin'][0].cpu()
-            ymin = map_metadata['origin'][1].cpu()
-            xmax = xmin + map_metadata['width']
-            ymax = ymin + map_metadata['height']
+            xmin = metadata['origin'][0].cpu()
+            ymin = metadata['origin'][1].cpu()
+            xmax = xmin + metadata['width']
+            ymax = ymin + metadata['height']
 
             gxmin = gsv.metadata['origin'][0].cpu()
             gymin = gsv.metadata['origin'][1].cpu()
@@ -104,33 +119,33 @@ def get_metrics(experiment, gsv = None, metric_fns = {}):
             for ax in axs:
                 ax.cla()
 
-            axs[0].imshow(batch['image'].permute(1, 2, 0)[:, :, [2, 1, 0]].cpu())
+            axs[0].imshow(data['image'].permute(1, 2, 0)[:, :, [2, 1, 0]].cpu())
             axs[0].set_title('FPV')
 
-            axs[1].imshow(costmap.cpu(), origin='lower', cmap='plasma', extent=(xmin, xmax, ymin, ymax))
-            axs[1].plot(expert_traj[:, 0], expert_traj[:, 1], c='y', label='expert')
-            axs[1].plot(traj[:, 0], traj[:, 1], c='g', label='learner')
+            axs[1].imshow(costmap[0].cpu(), origin='lower', cmap='plasma', extent=(xmin, xmax, ymin, ymax), vmax=30.)
+            axs[1].plot(expert_traj[:, 0].cpu(), expert_traj[:, 1].cpu(), c='y', label='expert')
+            axs[1].plot(traj[:, 0].cpu(), traj[:, 1].cpu(), c='g', label='learner')
             axs[1].set_title('costmap')
             axs[1].legend()
 
-            axs[2].imshow(gsv.data.T, origin='lower', extent=(gxmin, gxmax, gymin, gymax), vmin=0., vmax=5.)
-            axs[2].scatter(gps_x0[0, 0], gps_x0[0, 1], color='r', marker='>', s=5.)
+            axs[2].imshow(gsv.data.T.cpu(), origin='lower', extent=(gxmin, gxmax, gymin, gymax), vmin=0., vmax=5.)
+            axs[2].scatter(gps_x0[0, 0].cpu(), gps_x0[0, 1].cpu(), color='r', marker='>', s=5.)
             axs[2].set_title('global visitations')
 
-            axs[-3].imshow(learner_state_visitations, origin='lower', extent=(xmin, xmax, ymin, ymax))
+            axs[-3].imshow(learner_state_visitations.cpu(), origin='lower', extent=(xmin, xmax, ymin, ymax))
             axs[-3].set_title('learner SV')
 
-            axs[-2].imshow(expert_state_visitations, origin='lower', extent=(xmin, xmax, ymin, ymax))
+            axs[-2].imshow(expert_state_visitations.cpu(), origin='lower', extent=(xmin, xmax, ymin, ymax))
             axs[-2].set_title('expert SV')
 
-            axs[-1].imshow(global_state_visitations, origin='lower', extent=(xmin, xmax, ymin, ymax))
+            axs[-1].imshow(global_state_visitations.cpu(), origin='lower', extent=(xmin, xmax, ymin, ymax))
             axs[-1].set_title('global SV')
 
             for ax in axs[-3:]:
-                ax.scatter(traj[0, 0], traj[0, 1], c='r', marker='.')
+                ax.scatter(traj[0, 0].cpu(), traj[0, 1].cpu(), c='r', marker='.')
 
             title = ''
-            for k,v in res.items():
+            for k,v in metrics_res.items():
                 title += '{}:{:.4f}    '.format(k, v[-1])
             plt.suptitle(title)
             plt.pause(1e-2)
@@ -138,7 +153,7 @@ def get_metrics(experiment, gsv = None, metric_fns = {}):
             if i == (len(experiment.expert_dataset)-1):
                 break
 
-    return {k:torch.tensor(v) for k,v in res.items()}
+    return {k:torch.tensor(v) for k,v in metrics_res.items()}
 
 def expert_cost(
                 costmap,

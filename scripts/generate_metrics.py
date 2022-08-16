@@ -31,12 +31,13 @@ if __name__ == '__main__':
     parser.add_argument('--odom_topic', type=str, required=False, default='/integrated_to_init', help='topic to extract odom from')
     parser.add_argument('--image_topic', type=str, required=False, default='/multisense/left/image_rect_color', help='topic to extract images from')
     parser.add_argument('--baseline', action='store_true', required=False, help='set this flag to run baseline map')
+    parser.add_argument('--device', type=str, required=False, default='cpu', help='device to run script on')
     args = parser.parse_args()
 
-    model = torch.load(args.model_fp, map_location='cpu')
+    model = torch.load(args.model_fp, map_location='cpu').to(args.device)
     model.network.eval()
 
-    dataset = MaxEntIRLDataset(bag_fp=args.bag_fp, preprocess_fp=args.preprocess_fp, map_features_topic=args.map_topic, odom_topic=args.odom_topic, image_topic=args.image_topic, horizon=model.expert_dataset.horizon)
+    dataset = MaxEntIRLDataset(bag_fp=args.bag_fp, preprocess_fp=args.preprocess_fp, map_features_topic=args.map_topic, odom_topic=args.odom_topic, image_topic=args.image_topic, horizon=model.expert_dataset.horizon).to(args.device)
 
     model.expert_dataset = dataset
 
@@ -46,9 +47,9 @@ if __name__ == '__main__':
     model.mppi.K = model.mppi.K1 + model.mppi.K2
 
     if args.baseline:
-        model.network = LethalHeightCostmap(dataset)
+        model.network = LethalHeightCostmap(dataset).to(args.device)
 
-    gsv = torch.load(args.gsv_buffer_fp, map_location='cpu')
+    gsv = torch.load(args.gsv_buffer_fp, map_location='cpu').to(args.device)
 
     maybe_mkdir(args.save_fp, force=False)
     metrics = {

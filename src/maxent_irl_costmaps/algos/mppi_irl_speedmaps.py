@@ -71,10 +71,15 @@ class MPPIIRLSpeedmaps:
         self.itr += 1
         dl = DataLoader(self.expert_dataset, batch_size=self.batch_size, shuffle=True)
         for i, batch in enumerate(dl):
-            print('{}/{}'.format(i+1, int(len(self.expert_dataset)/self.batch_size)), end='\r')
-            self.gradient_step(batch)
             if n > -1 and i >= n:
                 break
+
+            #skip the last batch in the dataset as MPPI batching forces a fixed size
+            if batch['traj'].shape[0] < self.batch_size:
+                break
+
+            print('{}/{}'.format(i+1, int(len(self.expert_dataset)/self.batch_size)), end='\r')
+            self.gradient_step(batch)
 
         print('_____ITR {}_____'.format(self.itr))
 
@@ -315,8 +320,8 @@ class MPPIIRLSpeedmaps:
             
             axs[0].imshow(data['image'].permute(1, 2, 0)[:, :, [2, 1, 0]].cpu())
             axs[1].imshow(map_features[tidx][idx].cpu(), origin='lower', cmap='gray', extent=(xmin, xmax, ymin, ymax))
-#            m1 = axs[2].imshow(costmap[tidx].cpu(), origin='lower', cmap='plasma', extent=(xmin, xmax, ymin, ymax), vmin=0., vmax=30.)
-            m1 = axs[2].imshow(costmap[tidx].cpu(), origin='lower', cmap='plasma', extent=(xmin, xmax, ymin, ymax))
+            m1 = axs[2].imshow(costmap[tidx].cpu(), origin='lower', cmap='plasma', extent=(xmin, xmax, ymin, ymax), vmin=0., vmax=30.)
+#            m1 = axs[2].imshow(costmap[tidx].cpu(), origin='lower', cmap='plasma', extent=(xmin, xmax, ymin, ymax))
             m2 = axs[4].imshow(speedmap.loc[tidx].cpu(), origin='lower', cmap='bwr', extent=(xmin, xmax, ymin, ymax))
             m3 = axs[5].imshow(speedmap.scale[tidx].cpu(), origin='lower', cmap='bwr', extent=(xmin, xmax, ymin, ymax))
 

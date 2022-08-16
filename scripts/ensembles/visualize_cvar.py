@@ -83,7 +83,9 @@ def visualize_cvar(model, idx):
         for i in range(len(axs2)):
             cm = costmap_cvars[i]
             q = qs[i]
-            r = axs2[i].imshow(cm.cpu(), origin='lower', cmap='plasma', extent=(xmin, xmax, ymin, ymax))
+            import pdb;pdb.set_trace()
+            vmax = torch.quantile(cm, 0.2)
+            r = axs2[i].imshow(cm.cpu(), origin='lower', cmap='plasma', extent=(xmin, xmax, ymin, ymax), vmax=vmax)
             axs2[i].plot(expert_traj[:, 0], expert_traj[:, 1], c='y', label='expert')
             axs2[i].get_xaxis().set_visible(False)
             axs2[i].get_yaxis().set_visible(False)

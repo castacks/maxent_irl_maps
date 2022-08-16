@@ -49,6 +49,8 @@ class ResnetCostmapSpeedmapCNNEnsemble2(nn.Module):
             self.activation = Exponential(scale=activation_scale)
         elif activation_type == 'relu':
             self.activation = torch.nn.ReLU()
+        elif activation_type == 'none':
+            self.activation = nn.Identity()
 
     def forward(self, x, return_features=True):
         idx = torch.randint(self.ensemble_dim, size=(1, ))
@@ -80,6 +82,71 @@ class ResnetCostmapSpeedmapCNNEnsemble2(nn.Module):
         #unsqueeze to make [B x E x C x H x W]
         costmap = self.activation(self.cost_head(features)).view(*batch_dims, 1, *data_dims[1:])
         speed_logits = self.speed_head(features).view(*batch_dims, 2, *data_dims[1:])
+
+        #exponentiate the mean value too, as speeds are always positive
+        speed_dist = torch.distributions.Normal(loc=speed_logits[..., 0, :, :].exp(), scale=(speed_logits[..., 1, :, :].exp() + 1e-6))
+
+        return {
+                    'costmap': costmap,
+                    'speedmap': speed_dist,
+                    'features': features
+                }
+
+class LinearCostmapSpeedmapEnsemble2(nn.Module):
+    """
+    Handle the linear case separately
+    """
+    def __init__(self, in_channels, ensemble_dim=100, dropout=0.0, activation_type='sigmoid', activation_scale=1.0, device='cpu'):
+        """
+        Args:
+            in_channels: The number of channels in the input image
+            out_channels: The number of channels in the output image
+            hidden_channels: A list containing the intermediate channels
+
+        Note that in contrast to regular resnet, there is no end MLP nor pooling
+
+        Same as the first ensemble, but now make the first layer the ensemble
+        """
+        super(LinearCostmapSpeedmapEnsemble2, self).__init__()
+        self.channel_sizes = [in_channels, 1]
+
+        self.ensemble_dim = ensemble_dim
+
+        #last conv to avoid activation (for cost head)
+        self.cost_heads = nn.ModuleList([nn.Conv2d(in_channels=self.channel_sizes[-2], out_channels=1, kernel_size=1, bias=True) for _ in range(self.ensemble_dim)])
+        self.speed_heads = nn.ModuleList([nn.Conv2d(in_channels=self.channel_sizes[-2], out_channels=2, kernel_size=1, bias=True) for _ in range(self.ensemble_dim)])
+
+        if activation_type == 'sigmoid':
+            self.activation = ScaledSigmoid(scale=activation_scale)
+        elif activation_type == 'exponential':
+            self.activation = Exponential(scale=activation_scale)
+        elif activation_type == 'relu':
+            self.activation = torch.nn.ReLU()
+        elif activation_type == 'none':
+            self.activation = nn.Identity()
+
+    def forward(self, x, return_features=True):
+        features = x
+        idx = torch.randint(self.ensemble_dim, size=(1, ))
+        cost_head = self.cost_heads[idx]
+        speed_head = self.speed_heads[idx]
+
+        costmap = self.activation(cost_head(features))
+        speed_logits = speed_head(features)
+
+        #exponentiate the mean value too, as speeds are always positive
+        speed_dist = torch.distributions.Normal(loc=speed_logits[...,0, :, :].exp(), scale=(speed_logits[..., 1, :, :].exp() + 1e-6))
+
+        return {
+                    'costmap': costmap,
+                    'speedmap': speed_dist,
+                    'features': features
+                }
+
+    def ensemble_forward(self, x, return_features=True):
+        features = x
+        costmap = torch.stack([self.activation(f.forward(features)) for f in self.cost_heads], dim=-4)
+        speed_logits = torch.stack([f.forward(features) for f in self.speed_heads], dim=-3)
 
         #exponentiate the mean value too, as speeds are always positive
         speed_dist = torch.distributions.Normal(loc=speed_logits[..., 0, :, :].exp(), scale=(speed_logits[..., 1, :, :].exp() + 1e-6))

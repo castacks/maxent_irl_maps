@@ -16,7 +16,7 @@ from torch_mpc.cost_functions.batch_multi_waypoint_costmap import BatchMultiWayp
 from maxent_irl_costmaps.algos.mppi_irl import MPPIIRL
 from maxent_irl_costmaps.algos.mppi_irl_speedmaps import MPPIIRLSpeedmaps
 
-from maxent_irl_costmaps.networks.resnet import ResnetCostmapCNN, ResnetCostmapSpeedmapCNN, ResnetCostmapSpeedmapCNNEnsemble, ResnetCostmapSpeedmapCNNEnsemble2
+from maxent_irl_costmaps.networks.resnet import ResnetCostmapCNN, ResnetCostmapSpeedmapCNN, ResnetCostmapSpeedmapCNNEnsemble, ResnetCostmapSpeedmapCNNEnsemble2, LinearCostmapSpeedmapEnsemble2
 from maxent_irl_costmaps.networks.unet import UNet
 
 from maxent_irl_costmaps.dataset.maxent_irl_dataset import MaxEntIRLDataset
@@ -88,6 +88,12 @@ def setup_experiment(fp):
 
     elif network_params['type'] == 'ResnetCostmapSpeedmapCNNEnsemble2':
         res['network'] = ResnetCostmapSpeedmapCNNEnsemble2(
+            in_channels = len(res['dataset'].feature_keys),
+            **network_params['params']
+        ).to(device)
+
+    elif network_params['type'] == 'LinearCostmapSpeedmapEnsemble2':
+        res['network'] = LinearCostmapSpeedmapEnsemble2(
             in_channels = len(res['dataset'].feature_keys),
             **network_params['params']
         ).to(device)

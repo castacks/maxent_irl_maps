@@ -40,10 +40,13 @@ class LethalHeightCostmap(torch.nn.Module):
         costmap = self.sharpness * costmap                                       #multiply by a scaling factor to sharpen
         costmap[costmap < self.clip_low] = 0.                                    #apply hysteresis
         costmap[costmap > self.clip_low] = self.cost
+        costmap = torch.tensor(costmap).to(device).unsqueeze(1)
 
         return {
-            'costmap': torch.tensor(costmap).to(device).unsqueeze(1)
+            'costmap': costmap,
+            'speedmap': torch.distributions.Normal(loc=torch.zeros_like(costmap), scale=torch.ones_like(costmap))
         }
 
     def to(self, device):
         self.device = device
+        return self

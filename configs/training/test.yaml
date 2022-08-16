@@ -1,8 +1,8 @@
 experiment:
     save_to: /home/striest/Desktop/experiments/yamaha_maxent_irl
-    name: debug
+    name: 2layer_none
     device: cuda
-    epochs: 100
+    epochs: 50
     steps_per_epoch: -1
     save_every: 1
 
@@ -31,7 +31,7 @@ network:
         ensemble_dim: 32
         hidden_channels: [64, 64]
         hidden_activation: tanh
-        activation_type: exponential
+        activation_type: none
         activation_scale: 1.0
         dropout: 0.2
 

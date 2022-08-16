@@ -103,13 +103,12 @@ def visualize_cvar(model, idx):
         axs1[0].set_title('FPV')
         axs1[1].set_title('Height High')
 
-        vmin = 0.
-        vmax = 10.
         for i in range(len(axs2)):
             cm = costmap_cvars[i]
             q = qs[i]
+            vmax = torch.quantile(cm.flatten(), 0.95)
             cost = model.mppi.last_cost[i]
-            r = axs2[i].imshow(cm.cpu(), origin='lower', cmap='plasma', extent=(xmin, xmax, ymin, ymax))
+            r = axs2[i].imshow(cm.cpu(), origin='lower', cmap='plasma', extent=(xmin, xmax, ymin, ymax), vmax=vmax)
             axs2[i].plot(expert_traj[:, 0].cpu(), expert_traj[:, 1].cpu(), c='y', label='expert')
             axs2[i].plot(trajs[i, :, 0].cpu(), trajs[i, :, 1].cpu(), c='g', label='learner')
             axs2[i].get_xaxis().set_visible(False)
