@@ -1,6 +1,7 @@
 """
 Script for converting experiment yamls into the actual objects to run experiments with
 """
+import argparse
 import yaml
 import torch
 import matplotlib.pyplot as plt

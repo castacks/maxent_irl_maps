@@ -78,14 +78,16 @@ def visualize_cvar(model, idx):
         axs1[1].set_title('Height High')
         axs1[1].legend()
 
-        vmin = 0.
-        vmax = 10.
+#        vmin = torch.quantile(cm, 0.1)
+#        vmax = torch.quantile(cm, 0.9)
+
+        vmin = torch.quantile(torch.stack(costmap_cvars), 0.1)
+        vmax = torch.quantile(torch.stack(costmap_cvars), 0.9)
+
         for i in range(len(axs2)):
             cm = costmap_cvars[i]
             q = qs[i]
-            import pdb;pdb.set_trace()
-            vmax = torch.quantile(cm, 0.2)
-            r = axs2[i].imshow(cm.cpu(), origin='lower', cmap='plasma', extent=(xmin, xmax, ymin, ymax), vmax=vmax)
+            r = axs2[i].imshow(cm.cpu(), origin='lower', cmap='plasma', extent=(xmin, xmax, ymin, ymax), vmin=vmin, vmax=vmax)
             axs2[i].plot(expert_traj[:, 0], expert_traj[:, 1], c='y', label='expert')
             axs2[i].get_xaxis().set_visible(False)
             axs2[i].get_yaxis().set_visible(False)
