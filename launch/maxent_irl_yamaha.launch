@@ -2,8 +2,9 @@
 
 <launch>
     <!-- File management -->
-	<arg name="model_fp" default="../models/yamaha/2022-07-01-resnet.pt"/>
+	<arg name="model_fp" default="../models/yamaha/2022-08-17-resnet5.pt"/>
     <arg name="obstacle_threshold" default="20.0"/>
+    <arg name="publish_gridmap" default="true"/>
     <arg name="device" default="cuda"/>
 
 	<node pkg="maxent_irl_maps" type="gridmap_to_costmap_node.py" name="maxent_irl_node" output="screen"> 
@@ -12,6 +13,7 @@
         <param name="costmap_topic" value="/local_cost_map_final_occupancy_grid"/>
         <param name="odom_topic" value="/integrated_to_init"/>
         <param name="obstacle_threshold" value="$(arg obstacle_threshold)"/>
+        <param name="publish_gridmap" value="$(arg publish_gridmap)"/>
         <param name="device" value="$(arg device)"/>
 	</node>
 

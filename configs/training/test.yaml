@@ -1,6 +1,6 @@
 experiment:
     save_to: /home/striest/Desktop/experiments/yamaha_maxent_irl
-    name: 2layer_none
+    name: 2layer_none_hidden_relu
     device: cuda
     epochs: 50
     steps_per_epoch: -1
@@ -30,7 +30,7 @@ network:
     params:
         ensemble_dim: 32
         hidden_channels: [64, 64]
-        hidden_activation: tanh
+        hidden_activation: relu
         activation_type: none
         activation_scale: 1.0
         dropout: 0.2

@@ -62,6 +62,11 @@ if __name__ == '__main__':
         print('\t' + fp)
 
     metrics = {k:torch.load(k) for k in fps}
+    for k in metrics.keys():
+        print(k)
+        for kk, vv in metrics[k].items():
+            print('\t{}:{:.4f}'.format(kk, vv.mean().item()))
+
     rolling_metrics = make_rolling_metrics(metrics, rolling=50)
     fig, axs = make_plots(rolling_metrics)
     plt.show()
