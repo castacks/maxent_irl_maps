@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 from maxent_irl_costmaps.dataset.global_state_visitation_buffer import GlobalStateVisitationBuffer
 from maxent_irl_costmaps.utils import get_state_visitations, quat_to_yaw
 
-def get_metrics(experiment, gsv = None, metric_fns = {}):
+def get_metrics(experiment, gsv = None, metric_fns = {}, frame_skip=1):
     """
     Wrapper method that generates metrics for an experiment
     Args:
@@ -24,8 +24,10 @@ def get_metrics(experiment, gsv = None, metric_fns = {}):
     metrics_res = {k:[] for k in metric_fns.keys()}
 
     with torch.no_grad():
-        for i, data in enumerate(experiment.expert_dataset):
+        for i in range(0, len(experiment.expert_dataset), frame_skip):
             print('{}/{}'.format(i+1, len(experiment.expert_dataset)), end='\r')
+
+            data = experiment.expert_dataset[i]
 
             #hack back to single dim
             map_features = torch.stack([data['map_features']] * experiment.mppi.B, dim=0)
@@ -153,6 +155,7 @@ def get_metrics(experiment, gsv = None, metric_fns = {}):
             if i == (len(experiment.expert_dataset)-1):
                 break
 
+    plt.close()
     return {k:torch.tensor(v) for k,v in metrics_res.items()}
 
 def expert_cost(

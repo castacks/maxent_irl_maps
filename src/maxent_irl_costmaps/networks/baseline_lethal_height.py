@@ -1,6 +1,6 @@
 import torch
 import numpy as np
-from scipy.ndimage.filters import gaussian_filter
+from scipy.ndimage import gaussian_filter
 
 class LethalHeightCostmap(torch.nn.Module):
     """

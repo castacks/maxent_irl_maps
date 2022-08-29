@@ -1,6 +1,6 @@
 experiment:
-    save_to: /home/offroad/Desktop/experiments/yamaha_maxent_irl/linear_baseline2
-    name: linear_baseline
+    save_to: /home/offroad/Desktop/experiments/yamaha_maxent_irl/random_stuff
+    name: 1layer_none
     device: cuda
     epochs: 50
     steps_per_epoch: -1
@@ -13,7 +13,7 @@ algo:
         batch_size: 12
 #        reg_coeff: 1.0e-07
         reg_coeff: 0.0
-        speed_coeff: 1.0e-3
+        speed_coeff: 0.0
 
 dataset:
     type: MaxEntIRLDataset
@@ -26,12 +26,14 @@ dataset:
         horizon: 75
 
 network:
-    type: LinearCostmapSpeedmapEnsemble2
+    type: ResnetCostmapSpeedmapCNNEnsemble2
     params:
         ensemble_dim: 16
+        hidden_channels: [256, ]
+        hidden_activation: relu
         activation_type: none
         activation_scale: 1.0
-        dropout: 0.2
+        dropout: 0.0
 
 netopt:
     type: Adam
