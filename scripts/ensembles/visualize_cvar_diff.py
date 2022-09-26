@@ -35,11 +35,11 @@ def visualize_cvar(model, idx):
         #compute costmap
         #resnet cnn
         mosaic = """
-        ACDEFG
-        BHIJKL
+        ACD
+        BHI
         """
 
-        fig = plt.figure(tight_layout=True, figsize=(18, 6))
+        fig = plt.figure(tight_layout=True, figsize=(12, 6))
         ax_dict = fig.subplot_mosaic(mosaic)
         all_axs = [ax_dict[k] for k in sorted(ax_dict.keys())]
         axs1 = all_axs[:2]
@@ -86,14 +86,32 @@ def visualize_cvar(model, idx):
         vmin = torch.quantile(torch.stack(costmap_cvars), 0.1)
         vmax = torch.quantile(torch.stack(costmap_cvars), 0.9)
 
-        for i in range(len(axs2)):
-            cm = costmap_cvars[i]
-            q = qs[i]
-            r = axs2[i].imshow(cm.cpu(), origin='lower', cmap='plasma', extent=(xmin, xmax, ymin, ymax), vmin=vmin, vmax=vmax)
-#            axs2[i].plot(expert_traj[:, 0], expert_traj[:, 1], c='y', label='expert')
-            axs2[i].get_xaxis().set_visible(False)
-            axs2[i].get_yaxis().set_visible(False)
-            axs2[i].set_title('Cvar {:.2f}'.format(q))
+        cm_low = costmap_cvars[0]
+        ql = qs[0]
+        r = axs2[0].imshow(cm_low.cpu(), origin='lower', cmap='plasma', extent=(xmin, xmax, ymin, ymax), vmin=vmin, vmax=vmax)
+        axs2[0].get_xaxis().set_visible(False)
+        axs2[0].get_yaxis().set_visible(False)
+        axs2[0].set_title('Cvar {:.2f}'.format(ql))
+
+        cm_high = costmap_cvars[-1]
+        qh = qs[-1]
+        r = axs2[2].imshow(cm_high.cpu(), origin='lower', cmap='plasma', extent=(xmin, xmax, ymin, ymax), vmin=vmin, vmax=vmax)
+        axs2[2].get_xaxis().set_visible(False)
+        axs2[2].get_yaxis().set_visible(False)
+        axs2[2].set_title('Cvar {:.2f}'.format(qh))
+
+        #compute cvar diff
+        low_vmin = torch.quantile(cm_low, 0.1)
+        low_vmax = torch.quantile(cm_low, 0.9)
+        high_vmin = torch.quantile(cm_high, 0.1)
+        high_vmax = torch.quantile(cm_high, 0.9)
+        norm_cm_low = (cm_low - low_vmin) / (low_vmax - low_vmin)
+        norm_cm_high = (cm_high - high_vmin) / (high_vmax - high_vmin)
+        diff = norm_cm_high - norm_cm_low
+        r = axs2[1].imshow(diff.cpu(), origin='lower', cmap='plasma', extent=(xmin, xmax, ymin, ymax), vmin=torch.quantile(diff, 0.1), vmax=torch.quantile(diff, 0.9))
+        axs2[1].get_xaxis().set_visible(False)
+        axs2[1].get_yaxis().set_visible(False)
+        axs2[1].set_title('Cvar {:.2f} - Cvar {:.2f}'.format(qh, ql))
 
 if __name__ == '__main__':
     torch.set_printoptions(sci_mode=False)

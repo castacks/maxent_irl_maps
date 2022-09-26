@@ -139,7 +139,7 @@ class MaxEntIRLDataset(Dataset):
         
         for ax, feat, feat_key in zip(axs, feats, self.feature_keys):
             ax.imshow(feat.cpu(), origin='lower', cmap='gray', extent=(xmin, xmax, ymin, ymax))
-            ax.plot(traj[:, 0].cpu(), traj[:, 1].cpu(), c='y')
+#            ax.plot(traj[:, 0].cpu(), traj[:, 1].cpu(), c='y')
             ax.set_title(feat_key)
 
         if 'image' in data.keys():

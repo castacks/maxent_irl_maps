@@ -12,12 +12,14 @@ from torch_mpc.algos.batch_mppi import BatchMPPI
 from torch_mpc.cost_functions.waypoint_costmap import WaypointCostMapCostFunction
 
 from maxent_irl_costmaps.dataset.maxent_irl_dataset import MaxEntIRLDataset
+from maxent_irl_costmaps.networks.baseline_lethal_height import LethalHeightCostmap
 from maxent_irl_costmaps.os_utils import maybe_mkdir
 
 def visualize_cvar(model, idx):
     """
     Look at network feature maps to see what the activations are doing
     """
+    baseline = LethalHeightCostmap(model.expert_dataset, lethal_height=0.5, blur_sigma=3.0, clip_low=0.5).to(model.device)
     with torch.no_grad():
         if idx == -1:
             idx = np.random.randint(len(model.expert_dataset))
@@ -35,11 +37,11 @@ def visualize_cvar(model, idx):
         #compute costmap
         #resnet cnn
         mosaic = """
-        ACDEFG
-        BHIJKL
+        ACD
+        BHI
         """
 
-        fig = plt.figure(tight_layout=True, figsize=(18, 6))
+        fig = plt.figure(tight_layout=True, figsize=(18, 9))
         ax_dict = fig.subplot_mosaic(mosaic)
         all_axs = [ax_dict[k] for k in sorted(ax_dict.keys())]
         axs1 = all_axs[:2]
@@ -53,7 +55,7 @@ def visualize_cvar(model, idx):
         costmap_std = costmaps.std(dim=0)
 
         #compute cvar
-        qs = torch.linspace(-0.9, 0.9, 10)
+        qs = torch.tensor([-0.9, 0.0, 0.9])
         costmap_cvars = []
         for q in qs:
             if q < 0.:
@@ -86,7 +88,7 @@ def visualize_cvar(model, idx):
         vmin = torch.quantile(torch.stack(costmap_cvars), 0.1)
         vmax = torch.quantile(torch.stack(costmap_cvars), 0.9)
 
-        for i in range(len(axs2)):
+        for i in range(len(axs2)-1):
             cm = costmap_cvars[i]
             q = qs[i]
             r = axs2[i].imshow(cm.cpu(), origin='lower', cmap='plasma', extent=(xmin, xmax, ymin, ymax), vmin=vmin, vmax=vmax)
@@ -94,6 +96,14 @@ def visualize_cvar(model, idx):
             axs2[i].get_xaxis().set_visible(False)
             axs2[i].get_yaxis().set_visible(False)
             axs2[i].set_title('Cvar {:.2f}'.format(q))
+
+        baseline_res = baseline.forward(map_features.view(1, *map_features.shape))
+        baseline_costmap = baseline_res['costmap'][0, 0]
+
+        axs2[-1].imshow(baseline_costmap.cpu(), origin='lower', cmap='plasma')
+        axs2[-1].get_xaxis().set_visible(False)
+        axs2[-1].get_yaxis().set_visible(False)
+        axs2[-1].set_title('Baseline')
 
 if __name__ == '__main__':
     torch.set_printoptions(sci_mode=False)

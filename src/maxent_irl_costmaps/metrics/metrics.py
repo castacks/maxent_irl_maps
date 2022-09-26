@@ -7,6 +7,7 @@ import torch
 import matplotlib.pyplot as plt
 
 from maxent_irl_costmaps.dataset.global_state_visitation_buffer import GlobalStateVisitationBuffer
+from maxent_irl_costmaps.networks.baseline_lethal_height import LethalHeightCostmap
 from maxent_irl_costmaps.utils import get_state_visitations, quat_to_yaw
 
 def get_metrics(experiment, gsv = None, metric_fns = {}, frame_skip=1):
@@ -17,15 +18,17 @@ def get_metrics(experiment, gsv = None, metric_fns = {}, frame_skip=1):
         gsv: global state visitation buffer to use if gps
         metric_fns: A dict of {label:function} (the ones defined in this file) to use to compute metrics
     """
-    fig, axs = plt.subplots(2, 3, figsize=(18, 12))
-    axs = axs.flatten()
-    plt.show(block=False)
+#    plt.show(block=False)
+    baseline = LethalHeightCostmap(experiment.expert_dataset).to(args.device)
 
     metrics_res = {k:[] for k in metric_fns.keys()}
 
     with torch.no_grad():
         for i in range(0, len(experiment.expert_dataset), frame_skip):
             print('{}/{}'.format(i+1, len(experiment.expert_dataset)), end='\r')
+
+            fig, axs = plt.subplots(2, 3, figsize=(18, 12))
+            axs = axs.flatten()
 
             data = experiment.expert_dataset[i]
 
@@ -131,7 +134,7 @@ def get_metrics(experiment, gsv = None, metric_fns = {}, frame_skip=1):
             axs[1].legend()
 
             axs[2].imshow(gsv.data.T.cpu(), origin='lower', extent=(gxmin, gxmax, gymin, gymax), vmin=0., vmax=5.)
-            axs[2].scatter(gps_x0[0, 0].cpu(), gps_x0[0, 1].cpu(), color='r', marker='>', s=5.)
+#            axs[2].scatter(gps_x0[0, 0].cpu(), gps_x0[0, 1].cpu(), color='r', marker='>', s=5.)
             axs[2].set_title('global visitations')
 
             axs[-3].imshow(learner_state_visitations.cpu(), origin='lower', extent=(xmin, xmax, ymin, ymax))
@@ -143,14 +146,15 @@ def get_metrics(experiment, gsv = None, metric_fns = {}, frame_skip=1):
             axs[-1].imshow(global_state_visitations.cpu(), origin='lower', extent=(xmin, xmax, ymin, ymax))
             axs[-1].set_title('global SV')
 
-            for ax in axs[-3:]:
-                ax.scatter(traj[0, 0].cpu(), traj[0, 1].cpu(), c='r', marker='.')
+#            for ax in axs[-3:]:
+#                ax.scatter(traj[0, 0].cpu(), traj[0, 1].cpu(), c='r', marker='.')
 
             title = ''
             for k,v in metrics_res.items():
                 title += '{}:{:.4f}    '.format(k, v[-1])
             plt.suptitle(title)
-            plt.pause(1e-2)
+#            plt.pause(1e-2)
+            plt.show(block=True)
             #idk why I have to do this
             if i == (len(experiment.expert_dataset)-1):
                 break

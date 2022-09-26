@@ -56,5 +56,9 @@ if __name__ == '__main__':
         'mhd': modified_hausdorff_distance
     }
 
-    res = get_metrics(model, gsv, metrics, frame_skip=1)
+#    for i in range(100):
+#        dataset.visualize()
+#        plt.show()
+
+    res = get_metrics(model, gsv, metrics, frame_skip=100)
     torch.save(res, os.path.join(args.save_fp, 'metrics.pt'))

@@ -12,12 +12,14 @@ from torch_mpc.algos.batch_mppi import BatchMPPI
 from torch_mpc.cost_functions.waypoint_costmap import WaypointCostMapCostFunction
 
 from maxent_irl_costmaps.dataset.maxent_irl_dataset import MaxEntIRLDataset
+from maxent_irl_costmaps.networks.baseline_lethal_height import LethalHeightCostmap
 from maxent_irl_costmaps.os_utils import maybe_mkdir
 
 def visualize_cvar(model, idx):
     """
     Look at network feature maps to see what the activations are doing
     """
+    baseline = LethalHeightCostmap(model.expert_dataset, lethal_height=0.5, blur_sigma=3.0, clip_low=0.5).to(model.device)
     with torch.no_grad():
         if idx == -1:
             idx = np.random.randint(len(model.expert_dataset))
@@ -32,16 +34,10 @@ def visualize_cvar(model, idx):
         ymax = ymin + metadata['height']
         expert_traj = data['traj']
 
-        #compute costmap
-        #resnet cnn
-        mosaic = """
-        ACDEFG
-        BHIJKL
-        """
+        res = [plt.subplots(1, 1, figsize=(12, 12)) for _ in range(6)]
 
-        fig = plt.figure(tight_layout=True, figsize=(18, 6))
-        ax_dict = fig.subplot_mosaic(mosaic)
-        all_axs = [ax_dict[k] for k in sorted(ax_dict.keys())]
+        all_figs = [x[0] for x in res]
+        all_axs = [x[1] for x in res]
         axs1 = all_axs[:2]
         axs2 = all_axs[2:]
 
@@ -53,7 +49,7 @@ def visualize_cvar(model, idx):
         costmap_std = costmaps.std(dim=0)
 
         #compute cvar
-        qs = torch.linspace(-0.9, 0.9, 10)
+        qs = torch.tensor([-0.9, 0.0, 0.9])
         costmap_cvars = []
         for q in qs:
             if q < 0.:
@@ -76,8 +72,6 @@ def visualize_cvar(model, idx):
         axs1[1].arrow(expert_traj[0, 0], expert_traj[0, 1], 8.*yaw.cos(), 8.*yaw.sin(), color='r', head_width=2.)
 #        axs1[1].plot(expert_traj[:, 0], expert_traj[:, 1], c='y', label='expert')
 
-        axs1[0].set_title('FPV')
-        axs1[1].set_title('Height High')
 #        axs1[1].legend()
 
 #        vmin = torch.quantile(cm, 0.1)
@@ -86,14 +80,22 @@ def visualize_cvar(model, idx):
         vmin = torch.quantile(torch.stack(costmap_cvars), 0.1)
         vmax = torch.quantile(torch.stack(costmap_cvars), 0.9)
 
-        for i in range(len(axs2)):
+        for i in range(len(axs2)-1):
             cm = costmap_cvars[i]
             q = qs[i]
             r = axs2[i].imshow(cm.cpu(), origin='lower', cmap='plasma', extent=(xmin, xmax, ymin, ymax), vmin=vmin, vmax=vmax)
 #            axs2[i].plot(expert_traj[:, 0], expert_traj[:, 1], c='y', label='expert')
             axs2[i].get_xaxis().set_visible(False)
             axs2[i].get_yaxis().set_visible(False)
-            axs2[i].set_title('Cvar {:.2f}'.format(q))
+
+        baseline_res = baseline.forward(map_features.view(1, *map_features.shape))
+        baseline_costmap = baseline_res['costmap'][0, 0]
+
+        axs2[-1].imshow(baseline_costmap.cpu(), origin='lower', cmap='plasma')
+        axs2[-1].get_xaxis().set_visible(False)
+        axs2[-1].get_yaxis().set_visible(False)
+
+        return all_figs, all_axs
 
 if __name__ == '__main__':
     torch.set_printoptions(sci_mode=False)
@@ -117,14 +119,30 @@ if __name__ == '__main__':
     model.network.eval()
 
     maybe_mkdir(args.save_fp, force=False)
+    subdirs = ['FPV', 'map', 'cvar-0.9', 'cvar0.0', 'cvar0.9', 'baseline']
+    for subdir in subdirs:
+        maybe_mkdir(os.path.join(args.save_fp, subdir), force=True)
 
     for i in range(len(dataset)):
         print('{}/{}'.format(i+1, len(dataset)), end='\r')
-        fig_fp = os.path.join(args.save_fp, '{:05d}.png'.format(i+1))
         if args.viz:
-            visualize_cvar(model, idx=-1)
+            figs, axs = visualize_cvar(model, idx=-1)
             plt.show()
         else:
-            visualize_cvar(model, idx=i)
-            plt.savefig(fig_fp)
-            plt.close()
+            figs, axs = visualize_cvar(model, idx=i)
+
+            for fig, ax, subdir in zip(figs, axs, subdirs):
+                fig_fp = os.path.join(args.save_fp, subdir, '{:05d}.png'.format(i+1))
+                fig.savefig(fig_fp, bbox_inches='tight')
+
+            plt.close('all')
+
+
+
+
+
+
+
+
+
+

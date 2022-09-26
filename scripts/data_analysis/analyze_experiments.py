@@ -62,10 +62,19 @@ if __name__ == '__main__':
         print('\t' + fp)
 
     metrics = {k:torch.load(k) for k in fps}
+    aggregate_metrics = {}
     for k in metrics.keys():
         print(k)
         for kk, vv in metrics[k].items():
             print('\t{}:{:.4f}'.format(kk, vv.mean().item()))
+            if kk not in aggregate_metrics.keys():
+                aggregate_metrics[kk] = []
+            aggregate_metrics[kk].append(vv.mean().item())
+
+    print('_____________')
+    for k,v in aggregate_metrics.items():
+        d = torch.tensor(v)
+        print("{}: {:.4f} +- {:.4f}".format(k, d.mean(), d.std()))
 
     rolling_metrics = make_rolling_metrics(metrics, rolling=50)
     fig, axs = make_plots(rolling_metrics)

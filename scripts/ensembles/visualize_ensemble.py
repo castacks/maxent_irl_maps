@@ -72,13 +72,14 @@ def visualize_ensemble(model, idx):
         axs1[3].set_title('Costmap std')
         axs1[4].set_title('Costmap cvar ({})'.format(q))
 
+        vmin = torch.quantile(costmaps, 0.1)
+        vmax = torch.quantile(costmaps, 0.9)
+
         for i in range(len(axs2)):
             cm = costmaps[i]
-            r = axs2[i].imshow(cm.cpu(), origin='lower', cmap='plasma', extent=(xmin, xmax, ymin, ymax))
+            r = axs2[i].imshow(cm.cpu(), origin='lower', cmap='plasma', extent=(xmin, xmax, ymin, ymax), vmin=vmin, vmax=vmax)
             axs2[i].get_xaxis().set_visible(False)
             axs2[i].get_yaxis().set_visible(False)
-
-        plt.show()
 
 if __name__ == '__main__':
     torch.set_printoptions(sci_mode=False)
@@ -110,6 +111,6 @@ if __name__ == '__main__':
             visualize_ensemble(model, idx=-1)
             plt.show()
         else:
-            model.visualize(idx = i)
+            visualize_ensemble(model, idx=i)
             plt.savefig(fig_fp)
             plt.close()
