@@ -96,14 +96,14 @@ def load_data(bag_fp, map_features_topic, odom_topic, image_topic, horizon, dt, 
                 traj.append(p)
                 timestamps.append(msg.header.stamp.to_sec())
 
-        elif topic == map_features_topic:
+        if topic == map_features_topic:
             map_features_list.append(msg)
 
-        elif topic == steer_angle_topic:
+        if topic == steer_angle_topic:
             steer_angles.append(msg.data)
             steer_timestamps.append(t.to_sec())
 
-        elif topic == gps_topic:
+        if topic == gps_topic:
             pose = msg.pose.pose
             twist = msg.twist.twist
             gps_state = np.array([
@@ -125,7 +125,7 @@ def load_data(bag_fp, map_features_topic, odom_topic, image_topic, horizon, dt, 
                 gps_poses.append(gps_state)
                 gps_timestamps.append(msg.header.stamp.to_sec())
 
-        elif topic == cmd_topic:
+        if topic == cmd_topic:
             cmd = np.array([
                 msg.twist.linear.x,
                 msg.twist.angular.z
