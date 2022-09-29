@@ -4,6 +4,10 @@ Make a costmap of the entirety of gascola
 Note that there are some implementation limitations at the moment:
     1. We currently take in gridmap features and expect a cost function as a member of this class
     2. There may be smarter ways to handle costmaps overlapping, but for now I am just assigning a mean/stddev that is weighted by the distance to the cell
+
+Also note that for use in downstream controls testing, we also need:
+    1. All visited states (i.e. GPS pose)
+    2. height low, height high
 """
 
 import os
@@ -72,6 +76,9 @@ class GlobalCostmap:
         self.costmap_mean = torch.zeros(nx, ny)
         self.minimum_distances = torch.ones(nx, ny) * 1e8
         self.unknowns = torch.ones(nx, ny).bool()
+        self.height_low = torch.ones(nx, ny) * 1e8 * 0.
+        self.height_high = torch.ones(nx, ny) * 1e8 * 0.
+        self.states = torch.zeros(0, 13)
 
         if bag_dir is not None:
             traj_fps = np.array(walk_bags(bag_dir))
@@ -179,6 +186,10 @@ class GlobalCostmap:
             #compute a mask of unknown cells
             unk_idx = batch['feature_keys'].index('unknown')
 
+            #note that height values from the dataset are both relative and normalized
+            height_low_idx = batch['feature_keys'].index('height_low')
+            height_high_idx = batch['feature_keys'].index('height_max')
+
             #have to do this to get around the dataset normalization
             unk_mask = map_features[unk_idx] > map_features[unk_idx].mean()
 
@@ -193,8 +204,10 @@ class GlobalCostmap:
             ix = int((gps_pose[0] - xmin) / self.metadata['resolution'])
             iy = int((gps_pose[1] - ymin) / self.metadata['resolution'])
 
+            #add states and state visitations
             if ix >= 0 and ix < nx and iy >= 0 and iy < ny:
                 self.state_visitations[ix, iy] += 1
+                self.states = torch.cat([self.states, gps_pose.cpu().unsqueeze(0)], dim=0)
 
             #update the costmap
             #first run the net to get costmap
@@ -206,6 +219,19 @@ class GlobalCostmap:
                 else:
                     res = self.model.network.forward(map_features.unsqueeze(0))
                     costmap = res['costmap'].squeeze()
+
+            #get heightmap
+            height_low = map_features[height_low_idx]
+            height_low_mean = self.model.expert_dataset.feature_mean[height_low_idx]
+            height_low_std = self.model.expert_dataset.feature_std[height_low_idx]
+            height_high = map_features[height_high_idx]
+            height_high_mean = self.model.expert_dataset.feature_mean[height_high_idx]
+            height_high_std = self.model.expert_dataset.feature_std[height_high_idx]
+            ego_height = gps_pose[2]
+
+            #need to de-relative/unnormalize
+            height_low = height_low * height_low_std + height_low_mean + ego_height
+            height_high = height_high * height_high_std + height_high_mean + ego_height
 
             #next, calculate cell locations in gps frame
             #note that costmap is in odom frame, and needs to move to gps frame.
@@ -234,6 +260,8 @@ class GlobalCostmap:
 
             costmap_raster = costmap.T.flatten()
             unknown_raster = unk_mask.T.flatten()
+            height_low_raster = height_low.T.flatten()
+            height_high_raster = height_high.T.flatten()
             px_raster = gps_map_poses[...,0].flatten()
             py_raster = gps_map_poses[...,1].flatten()
 
@@ -244,6 +272,8 @@ class GlobalCostmap:
 
             costmap_raster = costmap_raster[in_bounds_mask]
             unknown_raster = unknown_raster[in_bounds_mask]
+            height_low_raster = height_low_raster[in_bounds_mask]
+            height_high_raster = height_high_raster[in_bounds_mask]
             ixs = ixs[in_bounds_mask]
             iys = iys[in_bounds_mask]
             px_raster = px_raster[in_bounds_mask]
@@ -265,16 +295,23 @@ class GlobalCostmap:
             dists = dists[fill_mask]
             costmap_raster = costmap_raster[fill_mask]
             unknown_raster = unknown_raster[fill_mask]
+            height_low_raster = height_low_raster[fill_mask]
+            height_high_raster = height_high_raster[fill_mask]
 
             self.minimum_distances[ixs, iys] = dists.cpu()
             self.costmap_mean[ixs, iys] = costmap_raster.cpu()
             self.unknowns[ixs, iys] = unknown_raster.cpu()
+            self.height_low[ixs, iys] = height_low_raster.cpu()
+            self.height_high[ixs, iys] = height_high_raster.cpu()
 
             #TODO: there is a known issue where if multiple costmap cells query into a single global costmap cell, torch will take the last one. Correct behavior would be to take the closest
 
             #debug
             if i % 10000 == 0 or (i+2 == len(dataset)):
-                fig, axs = plt.subplots(2, 3, figsize=(18, 12))
+                hvmin = torch.quantile(self.height_low[~self.unknowns], 0.01)
+                hvmax = torch.quantile(self.height_high[~self.unknowns], 0.99)
+
+                fig, axs = plt.subplots(2, 5, figsize=(30, 12))
                 axs = axs.flatten()
                 axs[0].imshow(self.state_visitations)
                 axs[1].imshow(self.costmap_mean, cmap='plasma')
@@ -282,6 +319,10 @@ class GlobalCostmap:
                 axs[3].imshow(costmap.cpu(), cmap='plasma')
                 axs[4].imshow(self.unknowns)
                 axs[5].imshow(img.permute(1, 2, 0)[..., [2, 1, 0]].cpu())
+                axs[6].imshow(self.height_low, vmin=hvmin, vmax=hvmax)
+                axs[7].imshow(self.height_high, vmin=hvmin, vmax=hvmax)
+                axs[8].imshow(height_low.cpu(), vmin=hvmin, vmax=hvmax)
+                axs[9].imshow(height_high.cpu(), vmin=hvmin, vmax=hvmax)
 
                 axs[0].set_title('state visitations')
                 axs[1].set_title('global costmap')
@@ -289,6 +330,10 @@ class GlobalCostmap:
                 axs[3].set_title('local costmap')
                 axs[4].set_title('unknowns')
                 axs[5].set_title('FPV')
+                axs[6].set_title('height low')
+                axs[7].set_title('height high')
+                axs[8].set_title('local height low')
+                axs[9].set_title('local height high')
 
                 plt.show()
 
@@ -361,7 +406,7 @@ class GlobalCostmap:
         values = values.view(poses.shape[0], crop_nx, crop_ny)
 
         k1 = invalid_mask.float()
-        values = ((1.-k1)*values + k1*fill_value).swapaxes(-1, -2)
+        values = ((1.-k1)*values + k1*fill_value)
 
         value_sums = values.sum(dim=-1, keepdims=True).sum(dim=-2, keepdims=True) + 1e-4
         value_dist = values / value_sums
@@ -380,7 +425,7 @@ class GlobalCostmap:
         values = values.view(poses.shape[0], crop_nx, crop_ny)
 
         k1 = invalid_mask.float()
-        values = ((1.-k1)*values + k1*fill_value).swapaxes(-1, -2)
+        values = ((1.-k1)*values + k1*fill_value)
 
         #normalize to make a proper distribution
         return values
@@ -434,9 +479,9 @@ class GlobalCostmap:
 
             axs[0].imshow(self.costmap_mean.T, origin='lower', extent = (xmin, xmax, ymin, ymax), cmap='plasma')
             axs[0].arrow(traj[t, 0], traj[t, 1], l*dx/n, l*dy/n, color='r', head_width=l/2.)
-            axs[1].imshow(costmap[0], origin='lower', extent = (cxmin, cxmax, cymin, cymax), cmap='plasma')
+            axs[1].imshow(costmap[0].T, origin='lower', extent = (cxmin, cxmax, cymin, cymax), cmap='plasma')
             axs[1].arrow(-2., 0., 3., 0., color='r', head_width=1.)
-            axs[2].imshow(svs[0], origin='lower', extent = (cxmin, cxmax, cymin, cymax), vmin=0., vmax=0.01)
+            axs[2].imshow(svs[0].T, origin='lower', extent = (cxmin, cxmax, cymin, cymax), vmin=0., vmax=0.01)
             axs[2].arrow(-2., 0., 3., 0., color='r', head_width=1.)
 
             axs[0].set_title('Global costmap')
