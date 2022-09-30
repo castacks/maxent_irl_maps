@@ -151,7 +151,8 @@ class UNet(nn.Module):
             _x = self.conv_blocks[i].forward(_x)
         
         _x = self.last_conv(_x)
-        return self.activation.forward(_x) #squash to [0, 1]
+        return _x
+#        return self.activation.forward(_x) #squash to [0, 1]
 
     def to(self, device):   
         self.device = device

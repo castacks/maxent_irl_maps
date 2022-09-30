@@ -84,10 +84,10 @@ def plot_gsv(gsv, utm_zone, fig=None, axs=None, plot_speed=False):
     grid_px = grid_px.reshape(grid.shape)
 #    speed_data = gsv.get_mean_speed_map()
 
-    mask = (gsv.data > 0).numpy()
+    mask = (gsv.state_visitations > 0).numpy()
 
     mask_px = grid_px[mask]
-    mask_val = gsv.data[mask].numpy()
+    mask_val = gsv.state_visitations[mask].numpy()
 #    mask_speed_val = speed_data[mask].numpy()
 
     cmap = matplotlib.cm.get_cmap('coolwarm')

@@ -92,7 +92,7 @@ class MaxEntIRLDataset(Dataset):
         self.feature_var = torch.zeros(nfeats)
 
         traj_fps = os.listdir(self.preprocess_fp)
-        self.N = len(traj_fps)
+        self.N = len(traj_fps) - 1
         K = 1
         for i, fp in enumerate(traj_fps):
             print('{}/{} ({})'.format(i+1, len(traj_fps), fp), end='\r')
