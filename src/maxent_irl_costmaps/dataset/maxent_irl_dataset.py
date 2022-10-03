@@ -20,7 +20,7 @@ class MaxEntIRLDataset(Dataset):
 
     Ok, the ony diff now is that there are multiple bag files and we save the trajdata to a temporary pt file.
     """
-    def __init__(self, bag_fp, preprocess_fp, map_features_topic='/local_gridmap', odom_topic='/integrated_to_init', image_topic='/multisense/left/image_rect_color', horizon=70, dt=0.1, fill_value=0.):
+    def __init__(self, bag_fp, preprocess_fp, map_features_topic='/local_gridmap', odom_topic='/integrated_to_init', image_topic='/multisense/left/image_rect_color', horizon=70, dt=0.1, fill_value=0, feature_keys=[]):
         """
         Args:
             bag_fp: The bag to get data from
@@ -28,6 +28,7 @@ class MaxEntIRLDataset(Dataset):
             map_features_topic: the topic to read map features from
             odom_topic: the topic to read trajectories from
             horizon: The number of trajectory steps to register onto each map
+            feature_keys: If default, use whatever features are in the rosbags. Otherwise, use the features in this list
 
         Note that since the map changes here, we want to treat each as an MDP and make data samples for each map.
         """
@@ -40,6 +41,7 @@ class MaxEntIRLDataset(Dataset):
         self.dt = dt
         self.fill_value = fill_value #I don't know if this is the best way to do this, but setting the fill value to 0 implies that missing features contribute nothing to the cost.
         self.N = 0
+        self.feature_keys = feature_keys
         self.device = 'cpu'
 
         self.initialize_dataset()
@@ -85,7 +87,11 @@ class MaxEntIRLDataset(Dataset):
         
         #Actually read all the data to get statistics.
         #need number of trajs, and the mean/std of all the map features.
-        self.feature_keys = torch.load(os.path.join(self.preprocess_fp, 'traj_0.pt'))['feature_keys']
+
+        if len(self.feature_keys) == 0:
+            self.feature_keys = torch.load(os.path.join(self.preprocess_fp, 'traj_0.pt'))['feature_keys']
+
+        #TODO: need some logic for feature key selection
         self.metadata = torch.load(os.path.join(self.preprocess_fp, 'traj_0.pt'))['metadata']
         nfeats = len(self.feature_keys)
         self.feature_mean = torch.zeros(nfeats)
@@ -98,7 +104,9 @@ class MaxEntIRLDataset(Dataset):
             print('{}/{} ({})'.format(i+1, len(traj_fps), fp), end='\r')
             traj = torch.load(os.path.join(self.preprocess_fp, fp))
 
-            mapfeats = traj['map_features'][:, 10:-10, 10:-10].reshape(nfeats, -1)
+            fk_idxs = self.feature_idx_select(traj['feature_keys'])
+
+            mapfeats = traj['map_features'][fk_idxs, 10:-10, 10:-10].reshape(nfeats, -1)
             k = mapfeats.shape[-1]
 
             mean_new = (self.feature_mean + (mapfeats.sum(dim=-1) / K)) * (K / (K+k))
@@ -114,6 +122,15 @@ class MaxEntIRLDataset(Dataset):
 
         self.feature_std = self.feature_var.sqrt() + 1e-6
         self.feature_std[~torch.isfinite(self.feature_std)] = 1e-6
+
+    def feature_idx_select(self, feature_inp_keys):
+        """
+        Get the indexes of feature_inp_keys that index self.feature_keys correctly
+        """
+        idxs = []
+        for fk in self.feature_keys:
+            idxs.append(feature_inp_keys.index(fk))
+        return idxs
 
     def visualize(self):
         """
@@ -158,7 +175,9 @@ class MaxEntIRLDataset(Dataset):
 
         data = torch.load(data_fp, map_location=self.device)
 
-        data['map_features'] = ((data['map_features'] - self.feature_mean.view(-1, 1, 1)) / self.feature_std.view(-1, 1, 1)).clip(-5, 5)
+        fk_idxs = self.feature_idx_select(data['feature_keys'])
+
+        data['map_features'] = ((data['map_features'][fk_idxs] - self.feature_mean.view(-1, 1, 1)) / self.feature_std.view(-1, 1, 1)).clip(-5, 5)
 
         return data
 
@@ -172,26 +191,30 @@ if __name__ == '__main__':
     from torch.utils.data import DataLoader
     import matplotlib.pyplot as plt
 
-    bag_fp = '/home/yamaha/Desktop/datasets/yamaha_maxent_irl/rosbags/'
-    pp_fp = '/home/yamaha/Desktop/datasets/yamaha_maxent_irl/torch/'
+    bag_fp = '/home/striest/Desktop/datasets/yamaha_maxent_irl/big_gridmaps/rosbags_test/'
+    pp_fp = '/home/striest/Desktop/datasets/yamaha_maxent_irl/big_gridmaps/torch_test_h75/'
 
-    dataset = MaxEntIRLDataset(bag_fp=bag_fp, preprocess_fp=pp_fp)
+    feature_keys = []
+    dataset = MaxEntIRLDataset(bag_fp=bag_fp, preprocess_fp=pp_fp, feature_keys=feature_keys)
+    dataset.visualize()
+    plt.show()
 
-    dl = DataLoader(dataset, batch_size=32, shuffle=True)
+    feature_keys = ['height_high', 'height_low', 'height_mean', 'height_max', 'unknown']
+    dataset = MaxEntIRLDataset(bag_fp=bag_fp, preprocess_fp=pp_fp, feature_keys=feature_keys)
+    dataset.visualize()
+    plt.show()
 
-    batch = next(iter(dl))
-    for i in range(32):
-        map_feature_data = batch['map_features'][i]
-        traj = batch['traj'][i]
-        metadata = {k:v[i] for k,v in batch['metadata'].items()}
+    feature_keys += ['terrain', 'terrain_slope']
+    dataset = MaxEntIRLDataset(bag_fp=bag_fp, preprocess_fp=pp_fp, feature_keys=feature_keys)
+    dataset.visualize()
+    plt.show()
 
-        idx = dataset.feature_keys.index('height_high')
-        xmin = metadata['origin'][0]
-        xmax = xmin + metadata['width']
-        ymin = metadata['origin'][1]
-        ymax = ymin + metadata['height']
+    feature_keys += ['SVD1', 'SVD2', 'SVD3']
+    dataset = MaxEntIRLDataset(bag_fp=bag_fp, preprocess_fp=pp_fp, feature_keys=feature_keys)
+    dataset.visualize()
+    plt.show()
 
-        plt.title(dataset.feature_keys[idx])
-        plt.imshow(map_feature_data[idx], origin='lower', extent=(xmin, xmax, ymin, ymax))
-        plt.plot(traj[:, 0], traj[:, 1], c='r')
-        plt.show()
+    feature_keys += ['roughness', 'diff']
+    dataset = MaxEntIRLDataset(bag_fp=bag_fp, preprocess_fp=pp_fp, feature_keys=feature_keys)
+    dataset.visualize()
+    plt.show()
