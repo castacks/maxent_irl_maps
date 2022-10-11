@@ -82,6 +82,39 @@ class MaxEntIRLDataset(Dataset):
                             mask = abs(subdata['map_features'][idx] - self.fill_value) < 1e-6
                             subdata['map_features'][idx][~mask] -= subdata['traj'][0, 2]
 
+                    #add kinematic/goal-directed features
+                    xmin = subdata['metadata']['origin'][0].item()
+                    xmax = xmin + subdata['metadata']['width']
+                    ymin = subdata['metadata']['origin'][1].item()
+                    ymax = ymin + subdata['metadata']['height']
+                    map_xs = torch.linspace(xmin, xmax, subdata['map_features'].shape[1])
+                    map_ys = torch.linspace(ymin, ymax, subdata['map_features'].shape[2])
+                    map_poses = torch.stack(torch.meshgrid(map_xs, map_ys, indexing='ij'), dim=-1)
+
+                    ego_pos = subdata['traj'][0, :2]
+                    goal_pos = subdata['traj'][-1, :2]
+                    ego_steer = subdata['steer'][0]
+                    ego_speed = subdata['traj'][0, 3].abs().item()
+
+                    ego_dist_x = map_poses[:, :, 0] - ego_pos[0].item()
+                    ego_dist_y = map_poses[:, :, 1] - ego_pos[1].item()
+                    goal_dist_x = map_poses[:, :, 0] - goal_pos[0].item()
+                    goal_dist_y = map_poses[:, :, 1] - goal_pos[1].item()
+                    ego_steer_map = torch.ones_like(ego_dist_x) * ego_steer
+                    ego_speed_map = torch.ones_like(ego_dist_x) * ego_speed
+
+                    kinematic_features = torch.stack([
+                        ego_dist_x,
+                        ego_dist_y,
+                        goal_dist_x,
+                        goal_dist_y,
+                        ego_steer_map,
+                        ego_speed_map
+                    ])
+
+                    subdata['map_features'] = torch.cat([subdata['map_features'], kinematic_features], dim=0)
+                    subdata['feature_keys'] = feature_keys + ['ego_dist_x', 'ego_dist_y', 'goal_dist_x', 'goal_dist_y', 'ego_steer', 'ego_speed']
+
                     torch.save(subdata, pp_fp)
                     self.N += 1
         
@@ -191,13 +224,12 @@ if __name__ == '__main__':
     from torch.utils.data import DataLoader
     import matplotlib.pyplot as plt
 
-    bag_fp = '/home/striest/Desktop/datasets/yamaha_maxent_irl/big_gridmaps/rosbags_test/'
-    pp_fp = '/home/striest/Desktop/datasets/yamaha_maxent_irl/big_gridmaps/torch_test_h75/'
+    bag_fp = '/home/atv/Desktop/datasets/yamaha_maxent_irl/big_gridmaps/rosbags_test/'
+    pp_fp = '/home/atv/Desktop/datasets/yamaha_maxent_irl/big_gridmaps/torch_test_h75/'
 
     feature_keys = []
     dataset = MaxEntIRLDataset(bag_fp=bag_fp, preprocess_fp=pp_fp, feature_keys=feature_keys)
     dataset.visualize()
-    plt.show()
 
     feature_keys = ['height_high', 'height_low', 'height_mean', 'height_max', 'unknown']
     dataset = MaxEntIRLDataset(bag_fp=bag_fp, preprocess_fp=pp_fp, feature_keys=feature_keys)

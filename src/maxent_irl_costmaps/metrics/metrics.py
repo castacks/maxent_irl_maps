@@ -10,7 +10,7 @@ from maxent_irl_costmaps.dataset.global_state_visitation_buffer import GlobalSta
 from maxent_irl_costmaps.networks.baseline_lethal_height import LethalHeightCostmap
 from maxent_irl_costmaps.utils import get_state_visitations, quat_to_yaw
 
-def get_metrics(experiment, gsv = None, metric_fns = {}, frame_skip=1):
+def get_metrics(experiment, gsv = None, metric_fns = {}, frame_skip=1, viz=True):
     """
     Wrapper method that generates metrics for an experiment
     Args:
@@ -19,16 +19,16 @@ def get_metrics(experiment, gsv = None, metric_fns = {}, frame_skip=1):
         metric_fns: A dict of {label:function} (the ones defined in this file) to use to compute metrics
     """
 #    plt.show(block=False)
-    baseline = LethalHeightCostmap(experiment.expert_dataset).to(args.device)
+    baseline = LethalHeightCostmap(experiment.expert_dataset).to(experiment.device)
 
     metrics_res = {k:[] for k in metric_fns.keys()}
+
+    fig, axs = plt.subplots(2, 3, figsize=(18, 12))
+    axs = axs.flatten()
 
     with torch.no_grad():
         for i in range(0, len(experiment.expert_dataset), frame_skip):
             print('{}/{}'.format(i+1, len(experiment.expert_dataset)), end='\r')
-
-            fig, axs = plt.subplots(2, 3, figsize=(18, 12))
-            axs = axs.flatten()
 
             data = experiment.expert_dataset[i]
 
@@ -153,8 +153,11 @@ def get_metrics(experiment, gsv = None, metric_fns = {}, frame_skip=1):
             for k,v in metrics_res.items():
                 title += '{}:{:.4f}    '.format(k, v[-1])
             plt.suptitle(title)
-#            plt.pause(1e-2)
-            plt.show(block=True)
+
+            if viz:
+                plt.show(block=False)
+                plt.pause(1e-2)
+
             #idk why I have to do this
             if i == (len(experiment.expert_dataset)-1):
                 break

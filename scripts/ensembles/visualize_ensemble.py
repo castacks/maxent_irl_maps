@@ -97,7 +97,8 @@ if __name__ == '__main__':
 
     model = torch.load(args.model_fp, map_location='cpu')
 
-    dataset = MaxEntIRLDataset(bag_fp=args.bag_fp, preprocess_fp=args.preprocess_fp, map_features_topic=args.map_topic, odom_topic=args.odom_topic, image_topic=args.image_topic, horizon=model.expert_dataset.horizon)
+    import pdb;pdb.set_trace()
+    dataset = MaxEntIRLDataset(bag_fp=args.bag_fp, preprocess_fp=args.preprocess_fp, map_features_topic=args.map_topic, odom_topic=args.odom_topic, image_topic=args.image_topic, horizon=model.expert_dataset.horizon, feature_keys=model.expert_dataset.feature_keys)
 
     model.expert_dataset = dataset
     model.network.eval()
