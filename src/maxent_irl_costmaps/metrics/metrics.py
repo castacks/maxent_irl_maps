@@ -61,18 +61,18 @@ def get_metrics(experiment, gsv = None, metric_fns = {}, frame_skip=1, viz=True)
             x = torch.stack([experiment.mppi.model.get_observations(x0)] * experiment.mppi.B, dim=0)
 
             map_params = {
-                'resolution': metadata['resolution'],
-                'height': metadata['height'],
-                'width': metadata['width'],
+                'resolution': torch.tensor([metadata['resolution']] * experiment.mppi.B, device=experiment.mppi.device),
+                'height': torch.tensor([metadata['height']] * experiment.mppi.B, device=experiment.mppi.device),
+                'width': torch.tensor([metadata['width']] * experiment.mppi.B, device=experiment.mppi.device),
                 'origin': torch.stack([metadata['origin']] * experiment.mppi.B, dim=0)
             }
 
             goals = [expert_traj[[-1], :2]] * experiment.mppi.B
 
             experiment.mppi.reset()
-            experiment.mppi.cost_fn.update_map_params(map_params)
-            experiment.mppi.cost_fn.update_costmap(costmap)
-            experiment.mppi.cost_fn.update_goals(goals)
+            experiment.mppi.cost_fn.data['goals'] = goals
+            experiment.mppi.cost_fn.data['costmap'] = costmap
+            experiment.mppi.cost_fn.data['costmap_metadata'] = map_params
 
             #solve for traj
             for ii in range(experiment.mppi_itrs):
@@ -100,10 +100,10 @@ def get_metrics(experiment, gsv = None, metric_fns = {}, frame_skip=1, viz=True)
             ], axis=-1)
 
             crop_params = {
-                'origin':np.array([-map_params['height']/2, -map_params['width']/2]),
-                'length_x': map_params['height'],
-                'length_y': map_params['width'],
-                'resolution': map_params['resolution']
+                'origin':np.array([-map_params['height'][0].item()/2, -map_params['width'][0].item()/2]),
+                'length_x': map_params['height'][0].item(),
+                'length_y': map_params['width'][0].item(),
+                'resolution': map_params['resolution'][0].item()
             }
 
             global_state_visitations = gsv.get_state_visitations(poses, crop_params, local=True)[0]

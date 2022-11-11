@@ -222,9 +222,9 @@ def load_data(bag_fp, map_features_topic, odom_topic, image_topic, horizon, dt, 
         ymax = ymin + map_metadata.length_y
 
         metadata_out = {
-            'resolution': map_metadata.resolution,
-            'height': map_metadata.length_x,
-            'width': map_metadata.length_y,
+            'resolution': torch.tensor(map_metadata.resolution),
+            'height': torch.tensor(map_metadata.length_x),
+            'width': torch.tensor(map_metadata.length_y),
             'origin': torch.tensor([map_metadata.pose.position.x - 0.5 * (map_metadata.length_x), map_metadata.pose.position.y - 0.5 * (map_metadata.length_y)])
         }
 

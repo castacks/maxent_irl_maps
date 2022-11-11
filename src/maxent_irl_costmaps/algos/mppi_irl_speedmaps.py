@@ -102,13 +102,7 @@ class MPPIIRLSpeedmaps:
         speedmaps = res['speedmap']
 
         #initialize metadata for cost function
-        map_params = {
-            'resolution': batch['metadata']['resolution'].mean().item(),
-            'height': batch['metadata']['height'].mean().item(),
-            'width': batch['metadata']['width'].mean().item(),
-            'origin': batch['metadata']['origin']
-        }
-
+        map_params = batch['metadata']
         #initialize goals for cost function
         expert_traj = batch['traj']
         goals = [traj[[-1], :2] for traj in expert_traj]
@@ -123,16 +117,15 @@ class MPPIIRLSpeedmaps:
 
         #set up the solver
         self.mppi.reset()
-        self.mppi.cost_fn.update_map_params(map_params)
-        self.mppi.cost_fn.update_costmap(costmaps)
-        self.mppi.cost_fn.update_goals(goals)
+        self.mppi.cost_fn.data['goals'] = goals
+        self.mppi.cost_fn.data['costmap'] = costmaps
+        self.mppi.cost_fn.data['costmap_metadata'] = map_params
 
         #run MPPI
         for ii in range(self.mppi_itrs):
             with torch.no_grad():
                 self.mppi.get_control(x, step=False)
 
-        #SAM RESUME HERE AFTER MEETING
         #weighting version
         trajs = self.mppi.noisy_states.clone()
         weights = self.mppi.last_weights.clone()
@@ -203,8 +196,8 @@ class MPPIIRLSpeedmaps:
             metadata = data['metadata']
             xmin = metadata['origin'][0].cpu()
             ymin = metadata['origin'][1].cpu()
-            xmax = xmin + metadata['width']
-            ymax = ymin + metadata['height']
+            xmax = xmin + metadata['width'].cpu()
+            ymax = ymin + metadata['height'].cpu()
             expert_traj = data['traj']
 
             #compute costmap
@@ -219,18 +212,18 @@ class MPPIIRLSpeedmaps:
             x = torch.stack([self.mppi.model.get_observations(x0)] * self.mppi.B, dim=0)
 
             map_params = {
-                'resolution': metadata['resolution'],
-                'height': metadata['height'],
-                'width': metadata['width'],
+                'resolution': torch.tensor([metadata['resolution']] * self.mppi.B, device=self.mppi.device),
+                'height': torch.tensor([metadata['height']] * self.mppi.B, device=self.mppi.device),
+                'width': torch.tensor([metadata['width']] * self.mppi.B, device=self.mppi.device),
                 'origin': torch.stack([metadata['origin']] * self.mppi.B, dim=0)
             }
 
             goals = [expert_traj[[-1], :2]] * self.mppi.B
 
             self.mppi.reset()
-            self.mppi.cost_fn.update_map_params(map_params)
-            self.mppi.cost_fn.update_costmap(costmap)
-            self.mppi.cost_fn.update_goals(goals)
+            self.mppi.cost_fn.data['goals'] = goals
+            self.mppi.cost_fn.data['costmap'] = costmap
+            self.mppi.cost_fn.data['costmap_metadata'] = map_params
 
             #solve for traj
             for ii in range(self.mppi_itrs):

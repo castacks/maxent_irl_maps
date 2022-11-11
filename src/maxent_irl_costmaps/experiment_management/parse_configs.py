@@ -9,12 +9,12 @@ import matplotlib.pyplot as plt
 from torch_mpc.models.steer_setpoint_kbm import SteerSetpointKBM
 from torch_mpc.models.skid_steer import SkidSteer
 
-from torch_mpc.algos.mppi import MPPI
-from torch_mpc.cost_functions.waypoint_costmap import WaypointCostMapCostFunction
 from torch_mpc.algos.batch_mppi import BatchMPPI
-from torch_mpc.cost_functions.batch_multi_waypoint_costmap import BatchMultiWaypointCostMapCostFunction
 
-from maxent_irl_costmaps.algos.mppi_irl import MPPIIRL
+from torch_mpc.cost_functions.generic_cost_function import CostFunction
+from torch_mpc.cost_functions.cost_terms.euclidean_distance_to_goal import EuclideanDistanceToGoal
+from torch_mpc.cost_functions.cost_terms.costmap_projection import CostmapProjection
+
 from maxent_irl_costmaps.algos.mppi_irl_speedmaps import MPPIIRLSpeedmaps
 
 from maxent_irl_costmaps.networks.resnet import ResnetCostmapCNN, ResnetCostmapSpeedmapCNN, ResnetCostmapSpeedmapCNNEnsemble, ResnetCostmapSpeedmapCNNEnsemble2, LinearCostmapSpeedmapEnsemble2
@@ -132,14 +132,27 @@ def setup_experiment(fp):
 
     #setup cost function
     cost_function_params = experiment_dict['cost_function']
-    if cost_function_params['type'] == 'BatchMultiWaypointCostMapCostFunction':
-        res['cost_function'] = BatchMultiWaypointCostMapCostFunction(
-            map_params = res['dataset'].metadata,
-            **cost_function_params['params']
-        ).to(device)
-    else:
-        print('Unsupported cost function type {}'.format(cost_function_params['type']))
-        exit(1)
+    terms = []
+    for term in cost_function_params['terms']:
+        params = term['params'] if term['params'] is not None else {}
+
+        if term['type'] == 'EuclideanDistanceToGoal':
+            terms.append((
+                term['weight'],
+                EuclideanDistanceToGoal(**params)
+            ))
+        elif term['type'] == 'CostmapProjection':
+            terms.append((
+                term['weight'],
+                CostmapProjection(**params)
+            ))
+        else:
+            print('Unsupported cost term type {}'.format(cost_function_params['type']))
+            exit(1)
+    
+    res['cost_function'] = CostFunction(
+        terms
+    ).to(device)
 
     #setup trajopt
     trajopt_params = experiment_dict['trajopt']
