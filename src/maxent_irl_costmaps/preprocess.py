@@ -240,6 +240,9 @@ def load_data(bag_fp, map_features_topic, odom_topic, image_topic, horizon, dt, 
 
         dataset.append(data)
 
+#        print({k:data[k].shape for k in ['traj', 'cmd', 'gps_traj', 'steer', 'map_features']})
+        assert data['traj'].shape[0] == data['cmd'].shape[0] == data['gps_traj'].shape[0] == data['steer'].shape[0], 'SHAPE MISMATCH'
+
     #convert from gridmap to occgrid metadata
     feature_keys = dataset[0]['feature_keys']
     dataset = {

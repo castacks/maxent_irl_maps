@@ -212,6 +212,8 @@ class MaxEntIRLDataset(Dataset):
 
         data['map_features'] = ((data['map_features'][fk_idxs] - self.feature_mean.view(-1, 1, 1)) / self.feature_std.view(-1, 1, 1)).clip(-5, 5)
 
+        data['feature_keys'] = self.feature_keys
+
         return data
 
     def to(self, device):

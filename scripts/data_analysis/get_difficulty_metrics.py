@@ -80,6 +80,6 @@ if __name__ == '__main__':
     axs[2].set_ylim(0., 10)
 
 #    fig.suptitle(args.bag_dir)
-    plt.savefig("tartandrive.png")
+    plt.savefig("wenshan.png")
 
 #    plt.show()
