@@ -2,7 +2,7 @@ experiment:
     save_to: /home/atv/Desktop/experiments/yamaha_maxent_irl/behavior_compare
     name: linear_all
     device: cuda
-    epochs: 10
+    epochs: 50
     steps_per_epoch: -1
     save_every: 1
 
@@ -46,7 +46,7 @@ dataset:
 network:
     type: LinearCostmapSpeedmapEnsemble2
     params:
-        ensemble_dim: 4
+        ensemble_dim: 3
         activation_type: none
         activation_scale: 1.0
         dropout: 0.2

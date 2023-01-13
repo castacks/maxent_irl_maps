@@ -3,7 +3,7 @@ experiment:
     name: linear_sam
     device: cuda
     epochs: 10
-    steps_per_epoch: -1
+    steps_per_epoch: 82
     save_every: 1
 
 algo:
@@ -46,7 +46,7 @@ dataset:
 network:
     type: LinearCostmapSpeedmapEnsemble2
     params:
-        ensemble_dim: 4
+        ensemble_dim: 3
         activation_type: none
         activation_scale: 1.0
         dropout: 0.2

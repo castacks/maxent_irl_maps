@@ -116,6 +116,8 @@ def setup_experiment(fp):
     netopt_params = experiment_dict['netopt']
     if netopt_params['type'] == 'Adam':
         res['netopt'] = torch.optim.Adam(res['network'].parameters(), **netopt_params['params'])
+    if netopt_params['type'] == 'AdamW':
+        res['netopt'] = torch.optim.AdamW(res['network'].parameters(), **netopt_params['params'])
     else:
         print('Unsupported netopt type {}'.format(netopt_params['type']))
         exit(1)

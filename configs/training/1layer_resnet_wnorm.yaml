@@ -1,9 +1,9 @@
 experiment:
-    save_to: /home/atv/Desktop/experiments/yamaha_maxent_irl/behavior_compare/
-    name: linear_wenshan
+    save_to: /home/atv/Desktop/experiments/yamaha_maxent_irl/
+    name: 1layer_resnet_wd1e-4
     device: cuda
-    epochs: 10
-    steps_per_epoch: 82
+    epochs: 50
+    steps_per_epoch: -1
     save_every: 1
 
 algo:
@@ -18,8 +18,8 @@ algo:
 dataset:
     type: MaxEntIRLDataset
     params:
-        bag_fp: /home/atv/Desktop/datasets/yamaha_maxent_irl/big_gridmaps/rosbags_train/20221109_wenshan_lap
-        preprocess_fp: /home/atv/Desktop/datasets/yamaha_maxent_irl/big_gridmaps/torch_train_wenshan_lap_h75
+        bag_fp: /home/atv/Desktop/datasets/yamaha_maxent_irl/big_gridmaps/rosbags_train
+        preprocess_fp: /home/atv/Desktop/datasets/yamaha_maxent_irl/big_gridmaps/torch_train_h75
         map_features_topic: /local_gridmap
         odom_topic: /integrated_to_init
         image_topic: /multisense/left/image_rect_color
@@ -43,17 +43,21 @@ dataset:
             - goal_dist_y
             - ego_speed
             - ego_steer
+
 network:
-    type: LinearCostmapSpeedmapEnsemble2
+    type: ResnetCostmapSpeedmapCNNEnsemble2
     params:
-        ensemble_dim: 3
+        ensemble_dim: 1
+        hidden_channels: [256, ]
+        hidden_activation: relu
         activation_type: none
         activation_scale: 1.0
         dropout: 0.2
 
 netopt:
     type: Adam
-    params: {}
+    params:
+        weight_decay: 0.0001
 
 cost_function:
     terms:

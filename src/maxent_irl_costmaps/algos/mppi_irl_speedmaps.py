@@ -41,7 +41,7 @@ class MPPIIRLSpeedmaps:
             d. Get empirical feature counts from the MPPI solver (maybe try the weighted trick)
         e. Match feature expectations
     """
-    def __init__(self, network, opt, expert_dataset, mppi, mppi_itrs=10, batch_size=64, speed_coeff=1.0, reg_coeff=1e-2, device='cpu'):
+    def __init__(self, network, opt, expert_dataset, mppi, mppi_itrs=10, batch_size=64, speed_coeff=1.0, reg_coeff=1e-2, grad_clip=1., device='cpu'):
         """
         Args:
             network: the network to use for predicting costmaps
@@ -63,6 +63,7 @@ class MPPIIRLSpeedmaps:
         self.batch_size = batch_size
         self.reg_coeff = reg_coeff
         self.speed_coeff = speed_coeff
+        self.grad_clip = grad_clip
 
         self.itr = 0
         self.device = device
@@ -182,6 +183,8 @@ class MPPIIRLSpeedmaps:
         self.network_opt.zero_grad()
         costmaps.backward(gradient=(grads + reg), retain_graph=True)
         speed_loss.backward()
+
+        torch.nn.utils.clip_grad_norm_(self.network.parameters(), self.grad_clip)
         self.network_opt.step()
 
     def visualize(self, idx=-1):
