@@ -112,7 +112,7 @@ class MPPIIRLSpeedmaps:
         initial_states = expert_traj[:, 0]
         x0 = {
             'state': initial_states,
-            'steer_angle': batch['steer'][:, [0]] if 'steer' in batch.keys() else torch.zeros(initial_states.shape[0], device=initial_state.device)
+            'steer_angle': batch['steer'][:, [0]] if 'steer' in batch.keys() else torch.zeros(initial_states.shape[0], device=initial_states.device)
         }
         x = self.mppi.model.get_observations(x0)
 
@@ -211,7 +211,7 @@ class MPPIIRLSpeedmaps:
 
             #initialize solver
             initial_state = expert_traj[0]
-            x0 = {"state":initial_state, "steer_angle":data["steer"][[0]] if "steer" in data.keys() else torch.zeros(1, device=initial_state.device)}
+            x0 = {"state":initial_state, "steer_angle":data["steer"][[0]] if 'steer' in data.keys() else torch.zeros(1, device=initial_state.device)}
             x = torch.stack([self.mppi.model.get_observations(x0)] * self.mppi.B, dim=0)
 
             map_params = {
