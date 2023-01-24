@@ -305,6 +305,31 @@ class ResnetCostmapCNN(nn.Module):
                     'costmap': costmap,
                 }
 
+class ResnetCNN(nn.Module):
+    def __init__(self, in_channels, hidden_channels, out_channels, hidden_activation=nn.Tanh, dropout=0.0, activation_type='sigmoid', activation_scale=1.0, device='cpu'):
+        """
+        Args:
+            in_channels: The number of channels in the input image
+            out_channels: The number of channels in the output image
+            hidden_channels: A list containing the intermediate channels
+
+        Note that in contrast to regular resnet, there is no end MLP nor pooling
+        """
+        super(ResnetCNN, self).__init__()
+        self.channel_sizes = [in_channels] + hidden_channels + [out_channels]
+
+        self.cnn = nn.ModuleList()
+        for i in range(len(self.channel_sizes) - 2):
+            self.cnn.append(ResnetCostmapBlock(in_channels=self.channel_sizes[i], out_channels=self.channel_sizes[i+1], activation=hidden_activation, dropout=dropout))
+
+        #last conv to avoid activation
+        self.cnn.append(nn.Conv2d(in_channels=self.channel_sizes[-2], out_channels=out_channels, kernel_size=1, bias=False))
+        self.cnn = torch.nn.Sequential(*self.cnn)
+
+    def forward(self, x):
+        cnn_out = self.cnn.forward(x)
+        return cnn_out
+
 class ResnetCostmapBlock(nn.Module):
     """
     A ResNet-style block that does VGG + residual. Like the VGG-style block, output size is half of input size.
