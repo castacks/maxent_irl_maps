@@ -2,7 +2,7 @@
 
 <launch>
     <!-- File management -->
-	<arg name="model_fp" default="../models/yamaha/icra_resnet.pt"/>
+	<arg name="model_fp" default="../models/yamaha/2023-01-25_resnet_speedmaps.pt"/>
     <arg name="obstacle_threshold" default="10.0"/>
     <arg name="publish_gridmap" default="true"/>
     <arg name="device" default="cuda"/>
@@ -11,8 +11,10 @@
         <param name="model_fp" value="$(dirname)/$(arg model_fp)"/>
 	    <param name="gridmap_topic" value="/local_gridmap"/>
         <param name="costmap_topic" value="/local_costmap"/>
+        <param name="speedmap_topic" value="/local_speedmap"/>
         <param name="odom_topic" value="/integrated_to_init"/>
         <param name="cvar_topic" value="/irl_cvar"/>
+        <param name="speedmap_lcb_topic" value="/speedmap_lcb"/>
         <param name="obstacle_threshold" value="$(arg obstacle_threshold)"/>
         <param name="publish_gridmap" value="$(arg publish_gridmap)"/>
         <param name="device" value="$(arg device)"/>
