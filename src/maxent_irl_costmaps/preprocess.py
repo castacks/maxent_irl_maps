@@ -49,7 +49,7 @@ def load_traj(bag_fp, odom_topic, dt):
 
     return traj
 
-def load_data(bag_fp, map_features_topic, odom_topic, image_topic, horizon, dt, fill_value, steer_angle_topic='/ros_talon/current_position', gps_topic='/odometry/filtered_odom', cmd_topic='/cmd'):
+def load_data(bag_fp, map_features_topic, odom_topic, image_topic, horizon, dt, fill_value, steer_angle_topic='/ros_talon/current_position', gps_topic='/warty/odom', cmd_topic='/warty/rc_teleop/stamped_cmd_vel'):
     """
     Extract map features and trajectory data from the bag.
     """
@@ -238,21 +238,28 @@ def load_data(bag_fp, map_features_topic, odom_topic, image_topic, horizon, dt, 
             'metadata': metadata_out
         }
 
+        data = {k:v for k,v in data.items() if v is not None}
+
         dataset.append(data)
 
-#        print({k:data[k].shape for k in ['traj', 'cmd', 'gps_traj', 'steer', 'map_features']})
-        assert data['traj'].shape[0] == data['cmd'].shape[0] == data['gps_traj'].shape[0] == data['steer'].shape[0], 'SHAPE MISMATCH'
+        trajlen = data['traj'].shape[0]
+        for k in ['traj', 'cmd', 'gps_traj', 'steer']:
+            if k in data.keys():
+                assert data[k].shape[0] == trajlen, 'SHAPE MISMATCH'
 
     #convert from gridmap to occgrid metadata
     feature_keys = dataset[0]['feature_keys']
-    dataset = {
-        'map_features':[x['map_features'] for x in dataset],
-        'traj':[x['traj'] for x in dataset],
-        'cmd':[x['cmd'] for x in dataset],
-        'gps_traj':[x['gps_traj'] for x in dataset],
-        'metadata':[x['metadata'] for x in dataset],
-        'steer':[x['steer'] for x in dataset]
-    }
+    dataset = {k:[x[k] for x in dataset] for k in dataset[0].keys() if k != 'feature_keys'}
+
+#    dataset2 = {
+#        'map_features':[x['map_features'] for x in dataset],
+#        'traj':[x['traj'] for x in dataset],
+#        'cmd':[x['cmd'] for x in dataset],
+#        'gps_traj':[x['gps_traj'] for x in dataset],
+#        'metadata':[x['metadata'] for x in dataset],
+#        'steer':[x['steer'] for x in dataset]
+#    }
+
 
     #If image topic exists, add to bag
     if image_topic is not None:
