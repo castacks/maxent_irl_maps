@@ -41,7 +41,7 @@ class CvarCostmapperNode:
         self.vmin = vmin
         self.vmax = vmax
         self.cvar = 0.
-        self.speedmap_lcb = -1.0
+        self.speedmap_lcb = -0.5
 
         self.publish_gridmap = publish_gridmap
 
