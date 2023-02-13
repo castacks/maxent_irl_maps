@@ -94,7 +94,7 @@ class MaxEntIRLDataset(Dataset):
                     ego_pos = subdata['traj'][0, :2]
                     goal_pos = subdata['traj'][-1, :2]
                     ego_steer = subdata['steer'][0] if 'steer' in subdata.keys() else 0.
-                    ego_speed = subdata['traj'][0, 3].abs().item()
+                    ego_speed = subdata['traj'][0, 7].abs().item() #7th elem is linear x
 
                     ego_dist_x = map_poses[:, :, 0] - ego_pos[0].item()
                     ego_dist_y = map_poses[:, :, 1] - ego_pos[1].item()

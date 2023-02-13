@@ -1,6 +1,6 @@
 experiment:
     save_to: /home/atv/Desktop/experiments/yamaha_maxent_irl/
-    name: 2layer_resnet_adamw_001_nopos
+    name: 1layer_resnet_adamw_001_nopos_less_dou_and_speedmaps
     device: cuda
     epochs: 50
     steps_per_epoch: -1
@@ -12,7 +12,7 @@ algo:
         mppi_itrs: 10
         batch_size: 12
         reg_coeff: 1.0e-08
-        speed_coeff: 0.0
+        speed_coeff: 0.01
         grad_clip: 1.0
 
 dataset:
@@ -42,8 +42,8 @@ dataset:
 network:
     type: ResnetCostmapSpeedmapCNNEnsemble2
     params:
-        ensemble_dim: 1
-        hidden_channels: [128, 128]
+        ensemble_dim: 16
+        hidden_channels: [256]
         hidden_activation: relu
         activation_type: none
         activation_scale: 1.0
@@ -83,6 +83,6 @@ trajopt:
             use_ou: True
             ou_alpha: 0.9
             ou_scale: 10.0
-            d_ou_scale: 5.0
+            d_ou_scale: 2.0
 
 metrics:

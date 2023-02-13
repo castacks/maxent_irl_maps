@@ -49,7 +49,7 @@ def load_traj(bag_fp, odom_topic, dt):
 
     return traj
 
-def load_data(bag_fp, map_features_topic, odom_topic, image_topic, horizon, dt, fill_value, steer_angle_topic='/ros_talon/current_position', gps_topic='/warty/odom', cmd_topic='/warty/rc_teleop/stamped_cmd_vel'):
+def load_data(bag_fp, map_features_topic, odom_topic, image_topic, horizon, dt, fill_value, steer_angle_topic='/ros_talon/current_position', gps_topic='/odometry/filtered_odom', cmd_topic='/cmd'):
     """
     Extract map features and trajectory data from the bag.
     """
@@ -281,7 +281,7 @@ def load_data(bag_fp, map_features_topic, odom_topic, image_topic, horizon, dt, 
                     img = bridge.compressed_imgmsg_to_cv2(msg, "rgb8")
                 else:
                     img = bridge.imgmsg_to_cv2(msg, "rgb8")
-                img = cv2.resize(img, dsize=(224, 224), interpolation=cv2.INTER_AREA)
+                img = cv2.resize(img, dsize=(512, 512), interpolation=cv2.INTER_AREA)
                 images.append(torch.tensor(img).permute(2, 0, 1)[[2, 1, 0]] / 255.)
 
         dataset['image'] = images
