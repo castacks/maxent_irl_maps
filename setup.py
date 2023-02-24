@@ -1,9 +1,9 @@
-from setuptools import setup, find_packages
+from distutils.core import setup
+from catkin_pkg.python_setup import generate_distutils_setup
 
-setup(
-    name='maxent_irl_costmaps',
-    version='0.0',
-    packages=find_packages(),
-    license='MIT License',
-    long_description=open('README.md').read(),
+d = generate_distutils_setup(
+  packages=['maxent_irl_costmaps', 'maxent_irl_costmaps.algos', 'maxent_irl_costmaps.costmappers', 'maxent_irl_costmaps.networks', 'maxent_irl_costmaps.dataset', 'maxent_irl_costmaps.networks.pointpillars'],
+  package_dir={'': 'src'}
 )
+
+setup(**d)

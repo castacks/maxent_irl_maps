@@ -1,3 +1,4 @@
 *.bag
-*.pt
-
+*.mp4
+*.swp
+*__pycache__*
