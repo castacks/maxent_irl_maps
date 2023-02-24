@@ -31,11 +31,12 @@ if __name__ == '__main__':
 
     buf = torch.load(args.costmap_fp)
 
-    dataset = MaxEntIRLDataset(bag_fp=args.bag_fp, preprocess_fp=args.preprocess_fp, map_features_topic=args.map_topic, odom_topic=args.odom_topic, image_topic=args.image_topic, horizon=buf.model.expert_dataset.horizon).to(args.device)
-
-    buf.model.expert_dataset = dataset
     buf.model.network.eval()
     buf.model.network = buf.model.network.to(args.device)
+
+    dataset = MaxEntIRLDataset(bag_fp=args.bag_fp, preprocess_fp=args.preprocess_fp, map_features_topic=args.map_topic, odom_topic=args.odom_topic, image_topic=args.image_topic, horizon=buf.model.expert_dataset.horizon, feature_keys=buf.model.expert_dataset.feature_keys).to(args.device)
+
+    buf.model.expert_dataset = dataset
 
     buf.add_dataset(dataset)
     torch.save(buf, args.costmap_fp)

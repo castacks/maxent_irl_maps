@@ -61,5 +61,5 @@ if __name__ == '__main__':
 #        dataset.visualize()
 #        plt.show()
 
-    res = get_metrics(model, gsv, metrics, frame_skip=1, viz=args.viz)
+    res, fig = get_metrics(model, gsv, metrics, frame_skip=1, viz=args.viz)
     torch.save(res, os.path.join(args.save_fp, 'metrics.pt'))

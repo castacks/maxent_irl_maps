@@ -92,12 +92,15 @@ def load_data(bag_fp, map_features_topic, odom_topic, image_topic, horizon, dt, 
                 twist.angular.z,
             ])
 
-            if len(timestamps) == 0 or (msg.header.stamp.to_sec() - timestamps[-1] > 1e-6):
+#            if len(timestamps) == 0 or (msg.header.stamp.to_sec() - timestamps[-1] > 1e-6):
+            if len(timestamps) == 0 or (t.to_sec() - timestamps[-1] > 1e-6):
                 traj.append(p)
-                timestamps.append(msg.header.stamp.to_sec())
+#                timestamps.append(msg.header.stamp.to_sec())
+                timestamps.append(t.to_sec())
 
-        if topic == map_features_topic:
-            map_features_list.append(msg)
+        ## TODO: handle maps in their own loop ## 
+#        if topic == map_features_topic:
+#            map_features_list.append(msg)
 
         if topic == steer_angle_topic:
             steer_angles.append(msg.data)
@@ -121,9 +124,11 @@ def load_data(bag_fp, map_features_topic, odom_topic, image_topic, horizon, dt, 
                 twist.angular.y,
                 twist.angular.z,
             ])
-            if len(gps_timestamps) == 0 or (msg.header.stamp.to_sec() - gps_timestamps[-1] > 1e-6):
+#            if len(gps_timestamps) == 0 or (msg.header.stamp.to_sec() - gps_timestamps[-1] > 1e-6):
+            if len(gps_timestamps) == 0 or (t.to_sec() - gps_timestamps[-1] > 1e-6):
                 gps_poses.append(gps_state)
-                gps_timestamps.append(msg.header.stamp.to_sec())
+#                gps_timestamps.append(msg.header.stamp.to_sec())
+                gps_timestamps.append(t.to_sec())
 
         if topic == cmd_topic:
             cmd = np.array([
@@ -131,7 +136,8 @@ def load_data(bag_fp, map_features_topic, odom_topic, image_topic, horizon, dt, 
                 msg.twist.angular.z
             ])
             cmds.append(cmd)
-            cmd_timestamps.append(msg.header.stamp.to_sec())
+#            cmd_timestamps.append(msg.header.stamp.to_sec())
+            cmd_timestamps.append(t.to_sec())
 
     traj = np.stack(traj, axis=0)
     timestamps = np.array(timestamps)
@@ -140,10 +146,10 @@ def load_data(bag_fp, map_features_topic, odom_topic, image_topic, horizon, dt, 
     idxs = np.argsort(timestamps)
 
     #filter out maps that dont have enough trajectory
-    map_features_list = [x for x in map_features_list if (x.info.header.stamp.to_sec() > timestamps.min()) and (x.info.header.stamp.to_sec() < timestamps.max() - (horizon*dt))]
+#    map_features_list = [x for x in map_features_list if (x.info.header.stamp.to_sec() > timestamps.min()) and (x.info.header.stamp.to_sec() < timestamps.max() - (horizon*dt))]
 
-    if len(map_features_list) == 0:
-        return None, None
+#    if len(map_features_list) == 0:
+#        return None, None
 
     traj_interp = TrajectoryInterpolator(timestamps, traj)
 
@@ -164,9 +170,11 @@ def load_data(bag_fp, map_features_topic, odom_topic, image_topic, horizon, dt, 
 
     map_target_times = []
 
+    ## TODO: make this loop through the bag (add a break witht he above filter) ##
     #get a registered trajectory for each map.
-    for i, map_features in enumerate(map_features_list):
-        print('{}/{}'.format(i+1, len(map_features_list)), end='\r')
+    i = 0
+    for topic, map_features, t in bag.read_messages(topics=[map_features_topic]):
+        print('{}'.format(i+1), end='\r')
         map_feature_data = []
         map_feature_keys = []
         mf_nx = int(map_features.info.length_x/map_features.info.resolution)
@@ -190,10 +198,20 @@ def load_data(bag_fp, map_features_topic, odom_topic, image_topic, horizon, dt, 
                 map_feature_data.append(data)
 
         map_feature_data = np.stack(map_feature_data, axis=0)
-        map_feature_data[~np.isfinite(map_feature_data)] = fill_value
+        map_feature_data[~np.isfinite(map_feature_data) | (np.abs(map_feature_data) > 1e6)] = fill_value
 
-        start_time = map_features.info.header.stamp.to_sec()
+#        start_time = map_features.info.header.stamp.to_sec()
+        start_time = t.to_sec()
         targets = start_time + np.arange(horizon) * dt
+
+        if targets.min() < timestamps.min():
+            print('skipping...')
+            continue
+
+        if targets.max() > timestamps.max():
+            print('done')
+            break
+
         map_target_times.append(start_time)
 
         traj = traj_interp(targets)
@@ -246,8 +264,12 @@ def load_data(bag_fp, map_features_topic, odom_topic, image_topic, horizon, dt, 
         for k in ['traj', 'cmd', 'gps_traj', 'steer']:
             if k in data.keys():
                 assert data[k].shape[0] == trajlen, 'SHAPE MISMATCH'
+        i += 1
 
     #convert from gridmap to occgrid metadata
+    if len(dataset) == 0:
+        return None, None
+
     feature_keys = dataset[0]['feature_keys']
     dataset = {k:[x[k] for x in dataset] for k in dataset[0].keys() if k != 'feature_keys'}
 
@@ -281,7 +303,7 @@ def load_data(bag_fp, map_features_topic, odom_topic, image_topic, horizon, dt, 
                     img = bridge.compressed_imgmsg_to_cv2(msg, "rgb8")
                 else:
                     img = bridge.imgmsg_to_cv2(msg, "rgb8")
-                img = cv2.resize(img, dsize=(512, 512), interpolation=cv2.INTER_AREA)
+                img = cv2.resize(img, dsize=(224, 224), interpolation=cv2.INTER_AREA)
                 images.append(torch.tensor(img).permute(2, 0, 1)[[2, 1, 0]] / 255.)
 
         dataset['image'] = images

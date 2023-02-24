@@ -85,6 +85,7 @@ def visualize_cvar(model, idx):
             q = qs[i]
             r = axs2[i].imshow(cm.cpu(), origin='lower', cmap='plasma', extent=(xmin, xmax, ymin, ymax), vmin=vmin, vmax=vmax)
 #            axs2[i].plot(expert_traj[:, 0], expert_traj[:, 1], c='y', label='expert')
+            axs2[i].arrow(expert_traj[0, 0], expert_traj[0, 1], 8.*yaw.cos(), 8.*yaw.sin(), color='r', head_width=2.)
             axs2[i].get_xaxis().set_visible(False)
             axs2[i].get_yaxis().set_visible(False)
 
@@ -113,7 +114,7 @@ if __name__ == '__main__':
 
     model = torch.load(args.model_fp, map_location='cpu')
 
-    dataset = MaxEntIRLDataset(bag_fp=args.bag_fp, preprocess_fp=args.preprocess_fp, map_features_topic=args.map_topic, odom_topic=args.odom_topic, image_topic=args.image_topic, horizon=model.expert_dataset.horizon)
+    dataset = MaxEntIRLDataset(bag_fp=args.bag_fp, preprocess_fp=args.preprocess_fp, map_features_topic=args.map_topic, odom_topic=args.odom_topic, image_topic=args.image_topic, horizon=model.expert_dataset.horizon, feature_keys=model.expert_dataset.feature_keys)
 
     model.expert_dataset = dataset
     model.network.eval()

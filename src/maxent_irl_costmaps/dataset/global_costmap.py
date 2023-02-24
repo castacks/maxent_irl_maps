@@ -176,6 +176,7 @@ class GlobalCostmap:
         for i, batch in enumerate(dataset):
             if i+1 == len(dataset):
                 break
+
             print('{}/{}'.format(i+1, len(dataset)), end='\r')
             map_features = batch['map_features']
             gps_traj = batch['gps_traj']
@@ -188,10 +189,10 @@ class GlobalCostmap:
 
             #note that height values from the dataset are both relative and normalized
             height_low_idx = batch['feature_keys'].index('height_low')
-            height_high_idx = batch['feature_keys'].index('height_max')
+            height_high_idx = batch['feature_keys'].index('height_high')
 
             #have to do this to get around the dataset normalization
-            unk_mask = map_features[unk_idx] > map_features[unk_idx].mean()
+            unk_mask = map_features[unk_idx] < map_features[unk_idx].mean()
 
             gps_pose = gps_traj[0]
             odom_pose = odom_traj[0]

@@ -90,6 +90,7 @@ def visualize_cvar(model, idx):
             cm = costmap_cvars[i]
             q = qs[i]
             r = axs2[i].imshow(cm.cpu(), origin='lower', cmap='plasma', extent=(xmin, xmax, ymin, ymax), vmin=vmin, vmax=vmax)
+            axs2[i].arrow(expert_traj[0, 0], expert_traj[0, 1], 8.*yaw.cos(), 8.*yaw.sin(), color='r', head_width=2.)
 #            axs2[i].plot(expert_traj[:, 0], expert_traj[:, 1], c='y', label='expert')
             axs2[i].get_xaxis().set_visible(False)
             axs2[i].get_yaxis().set_visible(False)
