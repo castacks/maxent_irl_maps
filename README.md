@@ -1,1 +1,44 @@
-testing for maxent IRL on map features
+# maxent_irl_maps
+
+Code for running MaxEnt IRL for offroad navigation
+
+## Dependencies
+
+[ROS noetic](http://wiki.ros.org/noetic/Installation/Ubuntu)
+
+`torch_mpc`: Currently a private repo, ask @striest for access
+
+## Key Scripts/Files
+
+`scritps/run_experiment.py`: Main driver script. Need to provide a `--setup_fp` arg that points to a config file (a good example is: `configs/training/racer_perception/1layer_resnet_wadam_no_position.yaml`).
+
+`scripts/generate_metrics.py`: After running experiment, evaluate/visualize network with this script. 
+
+`scripts/ros/gridmap_to_cvar_costmap.py`: ROS node that runs the trained CVaR IRL map in ROS.
+
+`src/maxent_irl_costmaps/algos/mppi_irl_speedmaps.py`: Main IRL training code
+
+`src/maxent_irl_costmaps/preprocess.py`: Preprocessing code to convert rosbags into IRL datasets
+
+`src/maxent_irl_costmaps/experiment_management/parse_configs.py`: Registry of strings->files to set up IRL experiments. New network definitions should be added here.
+
+## Usage
+
+Run via: 
+
+```
+cd scripts
+python3 run_experiment.py --setup_fp <your config here>
+```
+
+This code is designed to train a network for inverse RL for a ROS-based autonomy stack similar to [TartanDrive](https://github.com/castacks/tartan_drive_2.0). At a high level, its input is rosbags with the following:
+
+1. [GridMaps](https://github.com/ANYbotics/grid_map) of local terrain
+2. [Odometry](http://docs.ros.org/en/noetic/api/nav_msgs/html/msg/Odometry.html) of robot state
+3. [Images](http://docs.ros.org/en/noetic/api/sensor_msgs/html/msg/Image.html) FPV images (viz only for now)
+4. (optional) [Steering Angle (as stamped Float32 in deg, robot specific)]
+5. GPS Odometry
+
+Note that we require both grid maps and odometry to be in the same frame.
+
+Outputs will be a directory of trained networks that can be run on robot with the ROS script.

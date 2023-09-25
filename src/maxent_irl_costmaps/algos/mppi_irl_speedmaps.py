@@ -69,6 +69,9 @@ class MPPIIRLSpeedmaps:
         self.device = device
 
     def update(self, n=-1):
+        """
+        High-level method that runs training for one epoch.
+        """
         self.itr += 1
         dl = DataLoader(self.expert_dataset, batch_size=self.batch_size, shuffle=True)
         for i, batch in enumerate(dl):
@@ -85,6 +88,9 @@ class MPPIIRLSpeedmaps:
         print('_____ITR {}_____'.format(self.itr))
 
     def gradient_step(self, batch):
+        """
+        Apply the MaxEnt update to the network given a batch
+        """
         assert batch['metadata']['resolution'].std() < 1e-4, "got mutliple resolutions in a batch, which we currently don't support"
 
         grads = []
@@ -94,8 +100,6 @@ class MPPIIRLSpeedmaps:
         lfc = []
         rfc = []
         costmap_cache = []
-
-        #TODO: Use the batch MPPI interface
 
         #first generate all the costmaps
         res = self.network.forward(batch['map_features'])
@@ -188,6 +192,9 @@ class MPPIIRLSpeedmaps:
         self.network_opt.step()
 
     def visualize(self, idx=-1):
+        """
+        Create a visualization of MaxEnt IRL inputs/outputs for the idx-th datapoint.
+        """
         if idx == -1:
             idx = np.random.randint(len(self.expert_dataset))
 
