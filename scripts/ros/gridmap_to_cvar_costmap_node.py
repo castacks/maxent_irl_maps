@@ -73,7 +73,7 @@ class CvarCostmapperNode:
         self.cvar_sub = rospy.Subscriber(cvar_topic, Float32, self.handle_cvar, queue_size=1)
         self.speedmap_lcb_sub = rospy.Subscriber(speedmap_lcb_topic, Float32, self.handle_lcb, queue_size=1)
 
-        self.cost_map_viz_pub = rospy.Publisher(cost_map_topic + '/viz', OccupancyGrid, queue_size=1)
+        self.cost_map_viz_pub = rospy.Publisher(cost_map_topic + '/viz', GridMap, queue_size=1)
 
         if publish_gridmap:
             self.cost_map_pub = rospy.Publisher(cost_map_topic, GridMap, queue_size=1)
@@ -162,20 +162,34 @@ class CvarCostmapperNode:
         vmax_val = torch.quantile(cvar_costmap, self.vmax)
 
         #convert to occgrid scaling. Also apply the obstacle threshold
-        mask = (cvar_costmap >=self.obstacle_threshold).cpu().numpy()
-        costmap_viz = (100. * (cvar_costmap - vmin_val) / (vmax_val - vmin_val)).clip(0., 100.).long().cpu().numpy()
-        costmap_viz[mask] = 100
+        mask = (cvar_costmap >= self.obstacle_threshold).cpu().numpy()
+
         costmap_occgrid = (cvar_costmap).long().cpu().numpy()
         costmap_occgrid[mask] = 100
+
+        costmap_viz = ((cvar_costmap - vmin_val) / (vmax_val - vmin_val)).clip(0., 1.)
+        costmap_viz[mask] = 1.
+
+        costmap_color = torch.stack([
+            torch.ones_like(costmap_viz),
+            1.-costmap_viz,
+            torch.zeros_like(costmap_viz)
+        ], dim=-1) #[W x H x 3]
+        costmap_color[costmap_viz > 0.9] = 0.
+        costmap_color[costmap_viz < 0.1] = 0.8
+        costmap_color = (255.*costmap_color).cpu().numpy().astype(np.int32)
+        costmap_color = np.moveaxis(costmap_color, -1, 0) #[3 x W x H]
+        costmap_color = costmap_color[0]*(2**16) + costmap_color[1]*(2**8) + costmap_color[2]
+        costmap_color = costmap_color.view(dtype=np.float32)
+
+        costmap_color_msg = self.costmap_to_gridmap(costmap_color, msg, costmap_layer='costmap_color')
+        self.cost_map_viz_pub.publish(costmap_color_msg)
 
         costmap_msg = self.costmap_to_gridmap(costmap_occgrid, msg) if self.publish_gridmap else self.costmap_to_occgrid(costmap_occgrid, msg)
         self.cost_map_pub.publish(costmap_msg)
 
         speedmap_msg = self.costmap_to_gridmap(cvar_speedmap.cpu().numpy(), msg, costmap_layer='speedmap')
         self.speed_map_pub.publish(speedmap_msg)
-
-        costmap_viz_msg = self.costmap_to_occgrid(costmap_viz, msg)
-        self.cost_map_viz_pub.publish(costmap_viz_msg)
 
         t2 = rospy.Time.now().to_sec()
         rospy.loginfo_throttle(1.0, "inference time: {:.4f}s".format(t2-t1))
@@ -210,6 +224,7 @@ class CvarCostmapperNode:
                 stride=costmap.shape[0] * costmap.shape[1]
             )
         )
+
         costmap_layer_msg.data = costmap[::-1, ::-1].flatten()
         costmap_msg.data.append(costmap_layer_msg)
         return costmap_msg
