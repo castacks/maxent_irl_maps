@@ -162,13 +162,10 @@ class CvarCostmapperNode:
         vmax_val = torch.quantile(cvar_costmap, self.vmax)
 
         #convert to occgrid scaling. Also apply the obstacle threshold
-        mask = (cvar_costmap >= self.obstacle_threshold).cpu().numpy()
+#        mask = (cvar_costmap >= self.obstacle_threshold).cpu().numpy()
 
-        costmap_occgrid = (cvar_costmap).long().cpu().numpy()
-        costmap_occgrid[mask] = 100
-
+        costmap_occgrid = cvar_costmap.cpu().numpy()
         costmap_viz = ((cvar_costmap - vmin_val) / (vmax_val - vmin_val)).clip(0., 1.)
-        costmap_viz[mask] = 1.
 
         costmap_color = torch.stack([
             torch.ones_like(costmap_viz),
@@ -185,7 +182,7 @@ class CvarCostmapperNode:
         costmap_color_msg = self.costmap_to_gridmap(costmap_color, msg, costmap_layer='costmap_color')
         self.cost_map_viz_pub.publish(costmap_color_msg)
 
-        costmap_msg = self.costmap_to_gridmap(costmap_occgrid, msg) if self.publish_gridmap else self.costmap_to_occgrid(costmap_occgrid, msg)
+        costmap_msg = self.costmap_to_gridmap(costmap_occgrid, msg) if self.publish_gridmap else self.costmap_to_occgrid(costmap_occgrid.astype(np.int32), msg)
         self.cost_map_pub.publish(costmap_msg)
 
         speedmap_msg = self.costmap_to_gridmap(cvar_speedmap.cpu().numpy(), msg, costmap_layer='speedmap')
