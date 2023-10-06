@@ -10,8 +10,8 @@ from torch.utils.data import DataLoader
 
 from torch_mpc.models.steer_setpoint_kbm import SteerSetpointKBM
 from torch_mpc.algos.batch_mppi import BatchMPPI
-from torch_mpc.algos.mppi import MPPI
-from torch_mpc.cost_functions.waypoint_costmap import WaypointCostMapCostFunction
+#from torch_mpc.algos.mppi import MPPI
+#from torch_mpc.cost_functions.waypoint_costmap import WaypointCostMapCostFunction
 
 from maxent_irl_costmaps.dataset.maxent_irl_dataset import MaxEntIRLDataset
 from maxent_irl_costmaps.costmappers.linear_costmapper import LinearCostMapper
