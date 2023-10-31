@@ -18,8 +18,8 @@ algo:
 dataset:
     type: MaxEntIRLDataset
     params:
-        bag_fp: /media/atv/Extreme SSD/racer_perception_res/rosbags_train
-        preprocess_fp: //media/atv/Extreme SSD/racer_perception_res/rosbags_train/aaaaa
+        bag_fp: /home/atv/Desktop/datasets/yamaha_maxent_irl/torch_train_h75
+        preprocess_fp: /home/atv/Desktop/datasets/yamaha_maxent_irl/torch_train_h75
         map_features_topic: /local_gridmap
         odom_topic: /integrated_to_init
         image_topic: /multisense/left/image_rect_color
