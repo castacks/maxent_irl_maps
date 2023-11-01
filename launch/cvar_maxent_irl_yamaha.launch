@@ -2,7 +2,7 @@
 
 <launch>
     <!-- File management -->
-	<arg name="model_fp" default="../models/yamaha/2023-01-25_resnet_speedmaps.pt"/>
+	<arg name="model_fp" default="../models/yamaha/2023-11-01_3layer.pt"/>
     <arg name="obstacle_threshold" default="10.0"/>
     <arg name="publish_gridmap" default="true"/>
     <arg name="device" default="cuda"/>

@@ -9,13 +9,11 @@ import matplotlib.pyplot as plt
 from torch_mpc.models.steer_setpoint_kbm import SteerSetpointKBM
 from torch_mpc.models.skid_steer import SkidSteer
 
-from torch_mpc.algos.batch_mppi import BatchMPPI
-
-from torch_mpc.cost_functions.generic_cost_function import CostFunction
-from torch_mpc.cost_functions.cost_terms.euclidean_distance_to_goal import EuclideanDistanceToGoal
-from torch_mpc.cost_functions.cost_terms.costmap_projection import CostmapProjection
+from torch_mpc.setup_mpc import setup_mpc
 
 from maxent_irl_costmaps.algos.mppi_irl_speedmaps import MPPIIRLSpeedmaps
+
+from maxent_irl_costmaps.geometry_utils import make_footprint
 
 from maxent_irl_costmaps.networks.resnet import ResnetCostmapCNN, ResnetCostmapSpeedmapCNN, ResnetCostmapSpeedmapCNNEnsemble, ResnetCostmapSpeedmapCNNEnsemble2, LinearCostmapSpeedmapEnsemble2
 from maxent_irl_costmaps.networks.unet import UNet
@@ -44,9 +42,8 @@ def setup_experiment(fp):
         'dataset',
         'network',
         'netopt',
-        'trajopt',
-        'cost_function',
-        'model',
+        'footprint',
+        'mpc',
         'metrics'
     ]
     res = {}
@@ -122,53 +119,17 @@ def setup_experiment(fp):
         print('Unsupported netopt type {}'.format(netopt_params['type']))
         exit(1)
 
-    #setup model
-    model_params = experiment_dict['model']
-    if model_params['type'] == 'SteerSetpointKBM':
-        res['model'] = SteerSetpointKBM(**model_params['params']).to(device)
-    elif model_params['type'] == 'SkidSteer':
-        res['model'] = SkidSteer(**model_params['params']).to(device)
-    else:
-        print('Unsupported model type {}'.format(model_params['type']))
-        exit(1)
+    #setup footprint
+    footprint_config = experiment_dict['footprint']
+    res['footprint'] = make_footprint(**footprint_config['params'])
 
-    #setup cost function
-    cost_function_params = experiment_dict['cost_function']
-    terms = []
-    for term in cost_function_params['terms']:
-        params = term['params'] if term['params'] is not None else {}
+    #setup mpc
+    mpc_config = yaml.safe_load(open(experiment_dict['mpc']['mpc_fp'], 'r'))
+    #have to make batching params match top-level config
+    mpc_config['common']['B'] = experiment_dict['algo']['params']['batch_size']
+    mpc_config['common']['H'] = experiment_dict['dataset']['params']['horizon']
 
-        if term['type'] == 'EuclideanDistanceToGoal':
-            terms.append((
-                term['weight'],
-                EuclideanDistanceToGoal(**params)
-            ))
-        elif term['type'] == 'CostmapProjection':
-            terms.append((
-                term['weight'],
-                CostmapProjection(**params)
-            ))
-        else:
-            print('Unsupported cost term type {}'.format(cost_function_params['type']))
-            exit(1)
-    
-    res['cost_function'] = CostFunction(
-        terms
-    ).to(device)
-
-    #setup trajopt
-    trajopt_params = experiment_dict['trajopt']
-    if trajopt_params['type'] == 'BatchMPPI':
-        res['trajopt'] = BatchMPPI(
-            model = res['model'],
-            cost_fn = res['cost_function'],
-            num_timesteps = res['dataset'].horizon,
-            batch_size = experiment_dict['algo']['params']['batch_size'],
-            **trajopt_params['params']
-        ).to(device)
-    else:
-        print('Unsupported trajopt function type {}'.format(trajopt_params['type']))
-        exit(1)
+    res['trajopt'] = setup_mpc(mpc_config)
 
     #setup algo
     algo_params = experiment_dict['algo']
@@ -187,6 +148,7 @@ def setup_experiment(fp):
             opt = res['netopt'],
             expert_dataset = res['dataset'],
             mppi = res['trajopt'],
+            footprint = res['footprint'],
             **algo_params['params']
         ).to(device)
 

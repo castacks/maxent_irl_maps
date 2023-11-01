@@ -134,11 +134,12 @@ class CvarCostmapperNode:
                 geometric_map_feats[idx] -= self.current_height
 
         ## create ego features ##
-        ego_map_feats = self.create_ego_features(self.ego_feature_keys, nx, ny)
-
         map_feats = torch.zeros(len(self.feature_keys), nx, ny, device=self.device)
         map_feats[self.gridmap_feature_idxs] = geometric_map_feats
-        map_feats[self.ego_feature_idxs] = ego_map_feats
+
+        if len(self.ego_feature_idxs) > 0:
+            ego_map_feats = self.create_ego_features(self.ego_feature_keys, nx, ny)
+            map_feats[self.ego_feature_idxs] = ego_map_feats
 
         map_feats[~torch.isfinite(map_feats)] = 0.
         map_feats[map_feats.abs() > 100.] = 0.
@@ -158,8 +159,10 @@ class CvarCostmapperNode:
         rospy.loginfo_throttle(1.0, "cost min = {:.4f}, max = {:.4f}".format(cvar_costmap.min(), cvar_costmap.max()))
         rospy.loginfo_throttle(1.0, "speed min = {:.4f}, max = {:.4f}".format(cvar_speedmap.min(), cvar_speedmap.max()))
 
-        vmin_val = torch.quantile(cvar_costmap, self.vmin)
-        vmax_val = torch.quantile(cvar_costmap, self.vmax)
+#        vmin_val = torch.quantile(cvar_costmap, self.vmin)
+#        vmax_val = torch.quantile(cvar_costmap, self.vmax)
+        vmin_val = 0.
+        vmax_val = 5.
 
         #convert to occgrid scaling. Also apply the obstacle threshold
 #        mask = (cvar_costmap >= self.obstacle_threshold).cpu().numpy()
