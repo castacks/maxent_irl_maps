@@ -8,14 +8,10 @@ import scipy.interpolate
 
 from torch.utils.data import DataLoader
 
-from torch_mpc.models.steer_setpoint_kbm import SteerSetpointKBM
-from torch_mpc.algos.batch_mppi import BatchMPPI
-#from torch_mpc.algos.mppi import MPPI
-#from torch_mpc.cost_functions.waypoint_costmap import WaypointCostMapCostFunction
-
 from maxent_irl_costmaps.dataset.maxent_irl_dataset import MaxEntIRLDataset
 from maxent_irl_costmaps.costmappers.linear_costmapper import LinearCostMapper
 from maxent_irl_costmaps.utils import get_state_visitations, get_speedmap
+from maxent_irl_costmaps.geometry_utils import apply_footprint
 
 from maxent_irl_costmaps.networks.mlp import MLP
 from maxent_irl_costmaps.networks.resnet import ResnetCostmapCNN
@@ -41,15 +37,17 @@ class MPPIIRLSpeedmaps:
             d. Get empirical feature counts from the MPPI solver (maybe try the weighted trick)
         e. Match feature expectations
     """
-    def __init__(self, network, opt, expert_dataset, mppi, mppi_itrs=10, batch_size=64, speed_coeff=1.0, reg_coeff=1e-2, grad_clip=1., device='cpu'):
+    def __init__(self, network, opt, expert_dataset, mppi, footprint, mppi_itrs=10, batch_size=64, speed_coeff=1.0, reg_coeff=1e-2, grad_clip=1., device='cpu'):
         """
         Args:
             network: the network to use for predicting costmaps
             opt: the optimizer for the network
             expert_dataset: The dataset containing expert demonstrations to imitate
+            footprint: "smear" state visitations with this
             mppi: The MPPI object to optimize with
         """
         self.expert_dataset = expert_dataset
+        self.footprint = footprint
         self.mppi = mppi
         self.mppi_itrs = mppi_itrs
 
@@ -120,11 +118,22 @@ class MPPIIRLSpeedmaps:
         }
         x = self.mppi.model.get_observations(x0)
 
+        #also get KBM states for expert
+        X_expert = {
+            'state': expert_traj,
+            'steer_angle': batch['steer'].unsqueeze(-1) if 'steer' in batch.keys() else torch.zeros(self.mppi.B, self.mppi.T, 1, device=initial_states.device)
+        }
+        expert_kbm_traj = self.mppi.model.get_observations(X_expert)
+
         #set up the solver
         self.mppi.reset()
         self.mppi.cost_fn.data['goals'] = goals
         self.mppi.cost_fn.data['costmap'] = costmaps
         self.mppi.cost_fn.data['costmap_metadata'] = map_params
+
+        #TEMP HACK - Sam TODO: clean up once data is on cluster
+        self.mppi.cost_fn.data['costmap_metadata']['length_x'] = self.mppi.cost_fn.data['costmap_metadata']['width']
+        self.mppi.cost_fn.data['costmap_metadata']['length_y'] = self.mppi.cost_fn.data['costmap_metadata']['height']
 
         #run MPPI
         for ii in range(self.mppi_itrs):
@@ -148,15 +157,44 @@ class MPPIIRLSpeedmaps:
                 'width': batch['metadata']['width'].mean().item(),
                 'origin': batch['metadata']['origin'][bi]
             }
-            lsv = get_state_visitations(trajs[bi], map_params_b, weights[bi])
-            esv = get_state_visitations(expert_traj[bi].unsqueeze(0), map_params_b)
+
+            footprint_learner_traj = apply_footprint(trajs[bi], self.footprint).view(self.mppi.K, -1, 2)
+            footprint_expert_traj = apply_footprint(expert_kbm_traj[bi].unsqueeze(0), self.footprint).view(1, -1, 2)
+
+            lsv = get_state_visitations(footprint_learner_traj, map_params_b, weights[bi])
+            esv = get_state_visitations(footprint_expert_traj, map_params_b)
             learner_state_visitations.append(lsv)
             expert_state_visitations.append(esv)
+
+            """
+            fig, axs = plt.subplots(1, 2)
+            axs[0].plot(trajs[bi][weights[bi].argmax(), :, 0].cpu(), trajs[bi][weights[bi].argmax(), :, 1].cpu(), c='r')
+            axs[0].imshow(lsv.cpu(), origin='lower', extent=(
+                map_params_b['origin'][0].item(),
+                map_params_b['origin'][0].item() + map_params_b['height'],
+                map_params_b['origin'][1].item(),
+                map_params_b['origin'][1].item() + map_params_b['width'],
+            ))
+            axs[0].set_title('learner')
+
+            axs[1].plot(expert_traj[bi][:, 0].cpu(), expert_traj[bi][:, 1].cpu(), c='r')
+            axs[1].imshow(esv.cpu(), origin='lower', extent=(
+                map_params_b['origin'][0].item(),
+                map_params_b['origin'][0].item() + map_params_b['height'],
+                map_params_b['origin'][1].item(),
+                map_params_b['origin'][1].item() + map_params_b['width'],
+            ))
+            axs[1].set_title('expert')
+            plt.show()
+            """
 
         learner_state_visitations = torch.stack(learner_state_visitations, dim=0)
         expert_state_visitations = torch.stack(expert_state_visitations, dim=0)
 
         grads = (expert_state_visitations - learner_state_visitations) / trajs.shape[0]
+
+        if not torch.isfinite(grads).all():
+            import pdb;pdb.set_trace()
 
         #Speedmaps here:
         expert_speedmaps = []
@@ -190,6 +228,7 @@ class MPPIIRLSpeedmaps:
 
         torch.nn.utils.clip_grad_norm_(self.network.parameters(), self.grad_clip)
         self.network_opt.step()
+
 
     def visualize(self, idx=-1):
         """
@@ -235,6 +274,10 @@ class MPPIIRLSpeedmaps:
             self.mppi.cost_fn.data['costmap'] = costmap
             self.mppi.cost_fn.data['costmap_metadata'] = map_params
 
+            #TEMP HACK - Sam TODO: clean up once data is on cluster
+            self.mppi.cost_fn.data['costmap_metadata']['length_x'] = self.mppi.cost_fn.data['costmap_metadata']['width']
+            self.mppi.cost_fn.data['costmap_metadata']['length_y'] = self.mppi.cost_fn.data['costmap_metadata']['height']
+
             #solve for traj
             for ii in range(self.mppi_itrs):
                 self.mppi.get_control(x, step=False)
@@ -250,10 +293,10 @@ class MPPIIRLSpeedmaps:
             
             axs[0].imshow(data['image'].permute(1, 2, 0)[:, :, [2, 1, 0]].cpu())
             axs[1].imshow(map_features[tidx][idx].cpu(), origin='lower', cmap='gray', extent=(xmin, xmax, ymin, ymax))
-            m1 = axs[2].imshow(costmap[tidx].cpu(), origin='lower', cmap='plasma', extent=(xmin, xmax, ymin, ymax), vmin=0., vmax=30.)
+            m1 = axs[2].imshow(costmap[tidx].cpu(), origin='lower', cmap='plasma', extent=(xmin, xmax, ymin, ymax), vmin=-5., vmax=5.)
 #            m1 = axs[2].imshow(costmap[tidx].cpu(), origin='lower', cmap='plasma', extent=(xmin, xmax, ymin, ymax))
-            m2 = axs[4].imshow(speedmap.loc[tidx].cpu(), origin='lower', cmap='bwr', extent=(xmin, xmax, ymin, ymax))
-            m3 = axs[5].imshow(speedmap.scale[tidx].cpu(), origin='lower', cmap='bwr', extent=(xmin, xmax, ymin, ymax))
+            m2 = axs[4].imshow(speedmap.loc[tidx].cpu(), origin='lower', cmap='bwr', extent=(xmin, xmax, ymin, ymax), vmax=10.)
+            m3 = axs[5].imshow(speedmap.scale[tidx].cpu(), origin='lower', cmap='bwr', extent=(xmin, xmax, ymin, ymax), vmax=10.)
 
             axs[1].plot(expert_traj[:, 0].cpu(), expert_traj[:, 1].cpu(), c='y', label='expert')
             axs[2].plot(expert_traj[:, 0].cpu(), expert_traj[:, 1].cpu(), c='y')
@@ -299,36 +342,5 @@ class MPPIIRLSpeedmaps:
         self.expert_dataset = self.expert_dataset.to(device)
         self.mppi = self.mppi.to(device)
         self.network = self.network.to(device)
+        self.footprint = self.footprint.to(device)
         return self
-
-if __name__ == '__main__':
-    torch.set_printoptions(sci_mode=False)
-    np.set_printoptions(suppress=True)
-
-    horizon = 70
-    batch_size = 100
-
-    bag_fp = '/home/yamaha/Desktop/datasets/yamaha_maxent_irl/rosbags/'
-    pp_fp = '/home/yamaha/Desktop/datasets/yamaha_maxent_irl/torch/'
-
-    dataset = MaxEntIRLDataset(bag_fp=bag_fp, preprocess_fp=pp_fp)
-
-    kbm = SteerSetpointKBM(L=3.0, v_target_lim=[3.0, 8.0], steer_lim=[-0.3, 0.3], steer_rate_lim=0.2)
-
-    parameters = {
-        'log_K_delta':torch.tensor(10.0)
-    }
-    kbm.update_parameters(parameters)
-    cfn = WaypointCostMapCostFunction(unknown_cost=0., goal_cost=0., map_params=dataset.metadata)
-    mppi = MPPI(model=kbm, cost_fn=cfn, num_samples=2048, num_timesteps=horizon, control_params={'sys_noise':torch.tensor([2.0, 0.5]), 'temperature':0.05})
-
-    mppi_irl = MPPIIRL(dataset, mppi)
-
-    for i in range(100):
-        mppi_irl.update()
-        with torch.no_grad():
-            torch.save({'net':mppi_irl.network, 'keys':mppi_irl.expert_dataset.feature_keys}, 'learner_net_2layer/weights_itr_{}.pt'.format(i + 1))
-
-#        if (i % 10) == 0:
-            #visualize
-    mppi_irl.visualize()

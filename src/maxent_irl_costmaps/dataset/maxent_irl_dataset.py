@@ -137,6 +137,9 @@ class MaxEntIRLDataset(Dataset):
             print('{}/{} ({})'.format(i+1, len(traj_fps), fp), end='\r')
             traj = torch.load(os.path.join(self.preprocess_fp, fp))
 
+            if torch.any(traj['map_features'].abs() > 1e6):
+                continue
+
             fk_idxs = self.feature_idx_select(traj['feature_keys'])
 
             mapfeats = traj['map_features'][fk_idxs, 10:-10, 10:-10].reshape(nfeats, -1)
@@ -155,6 +158,9 @@ class MaxEntIRLDataset(Dataset):
 
         self.feature_std = self.feature_var.sqrt() + 1e-6
         self.feature_std[~torch.isfinite(self.feature_std)] = 1e-6
+
+        print('feat mean = {}'.format(self.feature_mean))
+        print('feat std  = {}'.format(self.feature_std))
 
     def feature_idx_select(self, feature_inp_keys):
         """
@@ -210,7 +216,7 @@ class MaxEntIRLDataset(Dataset):
 
         fk_idxs = self.feature_idx_select(data['feature_keys'])
 
-        data['map_features'] = ((data['map_features'][fk_idxs] - self.feature_mean.view(-1, 1, 1)) / self.feature_std.view(-1, 1, 1)).clip(-5, 5)
+        data['map_features'] = ((data['map_features'][fk_idxs] - self.feature_mean.view(-1, 1, 1)) / self.feature_std.view(-1, 1, 1)).clip(-10, 10)
 
         data['feature_keys'] = self.feature_keys
 
