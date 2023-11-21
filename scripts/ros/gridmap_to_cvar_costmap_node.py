@@ -161,7 +161,7 @@ class CvarCostmapperNode:
 
 #        vmin_val = torch.quantile(cvar_costmap, self.vmin)
 #        vmax_val = torch.quantile(cvar_costmap, self.vmax)
-        vmin_val = 0.
+        vmin_val = -2.
         vmax_val = 5.
 
         #convert to occgrid scaling. Also apply the obstacle threshold
