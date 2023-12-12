@@ -1,0 +1,16 @@
+src_dir: /home/physics_atv/workspace/datasets/irl_data_postproc
+dst_dir: /home/physics_atv/workspace/datasets/irl_data_postpostproc
+
+pointpillars: /home/physics_atv/workspace/experiments/tartanair_mapping/pointpillars_60m_rgb_unc_longer/itr_41.pt
+
+H: 100
+dt: 0.1
+
+#data folders
+cmd: cmd
+steer_angle: steer_angle
+odom: odom
+gps_odom: gps_odom
+local_gridmap: local_gridmap
+pcl: pcl
+img: image_left_color

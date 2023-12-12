@@ -54,7 +54,7 @@ class MPPIIRLSpeedmaps:
         self.network = network
 
         print(self.network)
-        print(sum([x.numel() for x in self.network.parameters()]))
+        print('({} params)'.format(sum([x.numel() for x in self.network.parameters()])))
         print(expert_dataset.feature_keys)
         self.network_opt = opt
 
@@ -289,12 +289,18 @@ class MPPIIRLSpeedmaps:
             fig, axs = plt.subplots(2, 3, figsize=(18, 12))
             axs = axs.flatten()
             
-            idx = self.expert_dataset.feature_keys.index('height_high')
+            fk = None
+            fklist = ['height_high', 'step']
+            for f in fklist:
+                if f in self.expert_dataset.feature_keys:
+                    fk = f
+                    idx = self.expert_dataset.feature_keys.index(fk)
+                    break
             
             axs[0].imshow(data['image'].permute(1, 2, 0)[:, :, [2, 1, 0]].cpu())
             axs[1].imshow(map_features[tidx][idx].cpu(), origin='lower', cmap='gray', extent=(xmin, xmax, ymin, ymax))
-            m1 = axs[2].imshow(costmap[tidx].cpu(), origin='lower', cmap='plasma', extent=(xmin, xmax, ymin, ymax), vmin=-5., vmax=5.)
-#            m1 = axs[2].imshow(costmap[tidx].cpu(), origin='lower', cmap='plasma', extent=(xmin, xmax, ymin, ymax))
+#            m1 = axs[2].imshow(costmap[tidx].cpu(), origin='lower', cmap='plasma', extent=(xmin, xmax, ymin, ymax), vmin=-5., vmax=5.)
+            m1 = axs[2].imshow(costmap[tidx].cpu(), origin='lower', cmap='plasma', extent=(xmin, xmax, ymin, ymax))
             m2 = axs[4].imshow(speedmap.loc[tidx].cpu(), origin='lower', cmap='bwr', extent=(xmin, xmax, ymin, ymax), vmax=10.)
             m3 = axs[5].imshow(speedmap.scale[tidx].cpu(), origin='lower', cmap='bwr', extent=(xmin, xmax, ymin, ymax), vmax=10.)
 
@@ -316,7 +322,7 @@ class MPPIIRLSpeedmaps:
             axs[3].plot(times, l_speeds, label='learner speed', c='g')
 
             axs[0].set_title('FPV')
-            axs[1].set_title('heightmap high')
+            axs[1].set_title('gridmap {}'.format(fk))
             axs[2].set_title('irl cost (clipped)')
             axs[3].set_title('speed')
             axs[4].set_title('speedmap mean')

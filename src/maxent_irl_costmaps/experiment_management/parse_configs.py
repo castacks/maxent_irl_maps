@@ -19,6 +19,7 @@ from maxent_irl_costmaps.networks.resnet import ResnetCostmapCNN, ResnetCostmapS
 from maxent_irl_costmaps.networks.unet import UNet
 
 from maxent_irl_costmaps.dataset.maxent_irl_dataset import MaxEntIRLDataset
+from maxent_irl_costmaps.dataset.preprocess_pointpillars_dataset import PreprocessPointpillarsDataset
 
 from maxent_irl_costmaps.experiment_management.experiment import Experiment
 
@@ -60,6 +61,8 @@ def setup_experiment(fp):
     dataset_params = experiment_dict['dataset']
     if dataset_params['type'] == 'MaxEntIRLDataset':
         res['dataset'] = MaxEntIRLDataset(**dataset_params['params']).to(device)
+    elif dataset_params['type'] == 'PreprocessPointpillarsDataset':
+        res['dataset'] = PreprocessPointpillarsDataset(**dataset_params['params']).to(device)
     else:
         print('Unsupported dataset type {}'.format(dataset_params['type']))
         exit(1)
@@ -127,7 +130,7 @@ def setup_experiment(fp):
     mpc_config = yaml.safe_load(open(experiment_dict['mpc']['mpc_fp'], 'r'))
     #have to make batching params match top-level config
     mpc_config['common']['B'] = experiment_dict['algo']['params']['batch_size']
-    mpc_config['common']['H'] = experiment_dict['dataset']['params']['horizon']
+    mpc_config['common']['H'] = res['dataset'].horizon
 
     res['trajopt'] = setup_mpc(mpc_config)
 

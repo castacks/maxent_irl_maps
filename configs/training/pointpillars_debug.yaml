@@ -1,0 +1,58 @@
+experiment:
+    save_to: /home/physics_atv/workspace/experiments/irl_pointpillars
+    name: debug
+    device: cuda
+    epochs: 10
+    steps_per_epoch: 100
+    save_every: 1
+
+footprint:
+    params:
+        length: 5.0
+        width: 3.0
+        length_offset: -1.0
+        width_offset: 0.0
+        nl: 15
+        nw: 15
+
+algo:
+    type: MPPIIRLSpeedmaps
+    params:
+        mppi_itrs: 10
+        batch_size: 8
+        reg_coeff: 1.0e-08
+        speed_coeff: 0.0 #turn off speedmaps for now
+        grad_clip: 1.0
+
+dataset:
+    type: PreprocessPointpillarsDataset
+    params:
+        preprocess_fp: /home/physics_atv/workspace/datasets/irl_data_postpostproc/train
+        gridmap_type: gridmap #for nonlearned
+#        gridmap_type: learned_gridmap #for learned
+
+network:
+    type: LinearCostmapSpeedmapEnsemble2
+    params:
+        ensemble_dim: 4
+        activation_type: none
+        activation_scale: 1.0
+        dropout: 0.0
+
+#    type: ResnetCostmapSpeedmapCNNEnsemble2
+#    params:
+#        ensemble_dim: 4
+#        hidden_channels: [64, ]
+#        hidden_activation: relu
+#        activation_type: none
+#        activation_scale: 1.0
+#        dropout: 0.0
+
+netopt:
+    type: AdamW
+    params: {}
+
+mpc:
+    mpc_fp: /home/physics_atv/physics_atv_ws/src/perception/maxent_irl_maps/configs/mpc/throttle_mppi.yaml
+
+metrics:
