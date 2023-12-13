@@ -1,9 +1,9 @@
 experiment:
     save_to: /home/physics_atv/workspace/experiments/irl_pointpillars
-    name: debug
+    name: debug_pp_resnet
     device: cuda
     epochs: 10
-    steps_per_epoch: 100
+    steps_per_epoch: -1
     save_every: 1
 
 footprint:
@@ -28,25 +28,25 @@ dataset:
     type: PreprocessPointpillarsDataset
     params:
         preprocess_fp: /home/physics_atv/workspace/datasets/irl_data_postpostproc/train
-        gridmap_type: gridmap #for nonlearned
-#        gridmap_type: learned_gridmap #for learned
+#        gridmap_type: gridmap #for nonlearned
+        gridmap_type: learned_gridmap #for learned
 
 network:
-    type: LinearCostmapSpeedmapEnsemble2
-    params:
-        ensemble_dim: 4
-        activation_type: none
-        activation_scale: 1.0
-        dropout: 0.0
-
-#    type: ResnetCostmapSpeedmapCNNEnsemble2
+#    type: LinearCostmapSpeedmapEnsemble2
 #    params:
 #        ensemble_dim: 4
-#        hidden_channels: [64, ]
-#        hidden_activation: relu
 #        activation_type: none
 #        activation_scale: 1.0
 #        dropout: 0.0
+
+    type: ResnetCostmapSpeedmapCNNEnsemble2
+    params:
+        ensemble_dim: 4
+        hidden_channels: [64, 64]
+        hidden_activation: tanh
+        activation_type: none
+        activation_scale: 1.0
+        dropout: 0.0
 
 netopt:
     type: AdamW

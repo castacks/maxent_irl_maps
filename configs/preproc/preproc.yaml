@@ -1,7 +1,8 @@
 src_dir: /home/physics_atv/workspace/datasets/irl_data_postproc
 dst_dir: /home/physics_atv/workspace/datasets/irl_data_postpostproc
+save_every: 10 #add every n-th frame
 
-pointpillars: /home/physics_atv/workspace/experiments/tartanair_mapping/pointpillars_60m_rgb_unc_longer/itr_41.pt
+pointpillars: /home/physics_atv/workspace/experiments/tartanair_mapping/pointpillars_60m_rgb_unc/itr_48.pt
 
 H: 100
 dt: 0.1

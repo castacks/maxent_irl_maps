@@ -228,7 +228,8 @@ def run_preproc_traj(traj_fp, dst_fp, config, pointpillars):
                 'learned_gridmap_feature_keys': learned_gridmap_feature_keys
             }
 
-            torch.save(res, os.path.join(res_fp, '{:06d}.pt'.format(valid_cnt)))
+            if valid_cnt % config['save_every'] == 0:
+                torch.save(res, os.path.join(res_fp, '{:06d}.pt'.format(valid_cnt//config['save_every'])))
 
             # note that this viz may be off but the maxent viz is ok
 #            if valid_cnt % 400 == 0:
