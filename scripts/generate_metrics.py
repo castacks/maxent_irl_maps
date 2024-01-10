@@ -23,6 +23,7 @@ if __name__ == '__main__':
     parser.add_argument('--model_fp', type=str, required=True, help='Costmap weights file')
     parser.add_argument('--preprocess_fp', type=str, required=True, help='dir to save preprocessed data to')
     parser.add_argument('--viz', action='store_true', required=False, help='set this flag to visualize output')
+    parser.add_argument('--use_planner', action='store_true', required=False, help='set this if optimizer is planner')
     parser.add_argument('--device', type=str, required=False, default='cpu', help='device to run script on')
     args = parser.parse_args()
 
@@ -41,7 +42,7 @@ if __name__ == '__main__':
     metrics = {
         'expert_cost':expert_cost,
         'learner_cost':learner_cost,
-        'traj':position_distance,
+#        'traj':position_distance,
         'kl':kl_divergence,
 #        'kl_global':kl_divergence_global,
         'mhd': modified_hausdorff_distance
@@ -51,5 +52,9 @@ if __name__ == '__main__':
 #        dataset.visualize()
 #        plt.show()
 
-    res, fig = get_metrics(model, metrics, frame_skip=1, viz=args.viz, save_fp=args.save_fp)
+    if args.use_planner:
+        res = get_metrics_planner(model, metrics, frame_skip=1, viz=args.viz, save_fp=args.save_fp)
+    else:
+        res = get_metrics(model, metrics, frame_skip=1, viz=args.viz, save_fp=args.save_fp)
+
     torch.save(res, os.path.join(args.save_fp, 'metrics.pt'))

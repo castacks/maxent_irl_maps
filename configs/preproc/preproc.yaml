@@ -2,7 +2,10 @@ src_dir: /home/physics_atv/workspace/datasets/irl_data_postproc
 dst_dir: /home/physics_atv/workspace/datasets/irl_data_postpostproc
 save_every: 10 #add every n-th frame
 
-pointpillars: /home/physics_atv/workspace/experiments/tartanair_mapping/pointpillars_60m_rgb_unc/itr_48.pt
+pointpillars: /home/physics_atv/workspace/experiments/tartanair_mapping/pointpillars_60m_rgb_unc_longer_111_velo/itr_71.pt
+
+#amount to inflate aggregated unc by (1.0 = standard kf, higher->trust recent measurements more)
+kf_decay: 1.02
 
 H: 100
 dt: 0.1

@@ -165,7 +165,7 @@ def run_preproc_traj(traj_fp, dst_fp, config, pointpillars):
                 'resolution': gridmap_metadata['resolution'].item()
             }
 
-            kf = update_kf(kf, kf_update, decay=1.0)
+            kf = update_kf(kf, kf_update, decay=config['kf_decay'])
 
             geometry_kf = kf['geometry']
             semantics_kf = kf['semantics']

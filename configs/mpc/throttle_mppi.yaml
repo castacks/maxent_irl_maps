@@ -44,7 +44,7 @@ sampling_strategies:
                 type: gaussian
                 scale: [0.5, 0.0]
             alpha: [0.0, 0.0]   #low-pass on noise
-            scale: [0.000, 0.005]  #sample scale on change of noise
+            scale: [0.000, 0.01]  #sample scale on change of noise
 
 cost_function:
     terms:

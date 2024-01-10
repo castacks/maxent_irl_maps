@@ -11,7 +11,10 @@ from torch_mpc.models.skid_steer import SkidSteer
 
 from torch_mpc.setup_mpc import setup_mpc
 
+from torch_state_lattice_planner.setup_planner import setup_planner
+
 from maxent_irl_costmaps.algos.mppi_irl_speedmaps import MPPIIRLSpeedmaps
+from maxent_irl_costmaps.algos.planner_irl_speedmaps import PlannerIRLSpeedmaps
 
 from maxent_irl_costmaps.geometry_utils import make_footprint
 
@@ -44,7 +47,7 @@ def setup_experiment(fp):
         'network',
         'netopt',
         'footprint',
-        'mpc',
+        'solver',
         'metrics'
     ]
     res = {}
@@ -116,7 +119,7 @@ def setup_experiment(fp):
     netopt_params = experiment_dict['netopt']
     if netopt_params['type'] == 'Adam':
         res['netopt'] = torch.optim.Adam(res['network'].parameters(), **netopt_params['params'])
-    if netopt_params['type'] == 'AdamW':
+    elif netopt_params['type'] == 'AdamW':
         res['netopt'] = torch.optim.AdamW(res['network'].parameters(), **netopt_params['params'])
     else:
         print('Unsupported netopt type {}'.format(netopt_params['type']))
@@ -127,12 +130,17 @@ def setup_experiment(fp):
     res['footprint'] = make_footprint(**footprint_config['params'])
 
     #setup mpc
-    mpc_config = yaml.safe_load(open(experiment_dict['mpc']['mpc_fp'], 'r'))
-    #have to make batching params match top-level config
-    mpc_config['common']['B'] = experiment_dict['algo']['params']['batch_size']
-    mpc_config['common']['H'] = res['dataset'].horizon
+    solver_params = experiment_dict['solver']
+    if solver_params['type'] == 'mpc':
+        mpc_config = yaml.safe_load(open(experiment_dict['solver']['mpc_fp'], 'r'))
+        #have to make batching params match top-level config
+        mpc_config['common']['B'] = experiment_dict['algo']['params']['batch_size']
+        mpc_config['common']['H'] = res['dataset'].horizon
+        res['trajopt'] = setup_mpc(mpc_config)
 
-    res['trajopt'] = setup_mpc(mpc_config)
+    elif solver_params['type'] == 'planner':
+        planner_config = yaml.safe_load(open(experiment_dict['solver']['planner_fp'], 'r'))
+        res['planner'] = setup_planner(planner_config, device)
 
     #setup algo
     algo_params = experiment_dict['algo']
@@ -151,6 +159,16 @@ def setup_experiment(fp):
             opt = res['netopt'],
             expert_dataset = res['dataset'],
             mppi = res['trajopt'],
+            footprint = res['footprint'],
+            **algo_params['params']
+        ).to(device)
+
+    elif algo_params['type'] == 'PlannerIRLSpeedmaps':
+        res['algo'] = PlannerIRLSpeedmaps(
+            network = res['network'],
+            opt = res['netopt'],
+            expert_dataset = res['dataset'],
+            planner = res['planner'],
             footprint = res['footprint'],
             **algo_params['params']
         ).to(device)

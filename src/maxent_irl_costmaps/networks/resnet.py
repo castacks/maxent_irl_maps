@@ -3,7 +3,7 @@ import torch
 from torch import nn
 
 from maxent_irl_costmaps.networks.mlp import MLP
-from maxent_irl_costmaps.networks.misc import ScaledSigmoid, Exponential
+from maxent_irl_costmaps.networks.misc import ScaledSigmoid, Exponential, AddMin
 
 """
 A collection of basic CNN blocks to try.
@@ -47,6 +47,8 @@ class ResnetCostmapSpeedmapCNNEnsemble2(nn.Module):
             self.activation = ScaledSigmoid(scale=activation_scale)
         elif activation_type == 'exponential':
             self.activation = Exponential(scale=activation_scale)
+        elif activation_type == 'addmin':
+            self.activation = AddMin()
         elif activation_type == 'relu':
             self.activation = torch.nn.ReLU()
         elif activation_type == 'none':

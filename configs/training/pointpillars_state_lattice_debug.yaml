@@ -1,6 +1,6 @@
 experiment:
     save_to: /home/physics_atv/workspace/experiments/irl_pointpillars
-    name: debug_pp_resnet_speed
+    name: debug_planner_pointpillas
     device: cuda
     epochs: 10
     steps_per_epoch: -1
@@ -16,12 +16,11 @@ footprint:
         nw: 15
 
 algo:
-    type: MPPIIRLSpeedmaps
+    type: PlannerIRLSpeedmaps
     params:
-        mppi_itrs: 10
         batch_size: 8
         reg_coeff: 1.0e-08
-        speed_coeff: 0.01 #turn off speedmaps for now
+        speed_coeff: 0.0 #turn off speedmaps for now
         grad_clip: 1.0
 
 dataset:
@@ -44,16 +43,16 @@ network:
         ensemble_dim: 4
         hidden_channels: [64, 64]
         hidden_activation: tanh
-        activation_type: none
+        activation_type: addmin #planner needs nonnegative costs
         activation_scale: 1.0
         dropout: 0.0
 
 netopt:
-    type: AdamW
+    type: Adam
     params: {}
 
 solver:
-    type: mpc
-    mpc_fp: /home/physics_atv/physics_atv_ws/src/perception/maxent_irl_maps/configs/mpc/throttle_mppi.yaml
+    type: planner
+    planner_fp: /home/physics_atv/physics_atv_ws/src/perception/maxent_irl_maps/configs/planner/planner_config.yaml
 
 metrics:
