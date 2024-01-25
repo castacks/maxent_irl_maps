@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 import argparse
 
 from maxent_irl_costmaps.dataset.preprocess_pointpillars_dataset import PreprocessPointpillarsDataset
+from maxent_irl_costmaps.dataset.dino_map_dataset import DinoMapDataset
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -13,7 +14,13 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     res = torch.load(args.model_fp).to(args.device)
-    dataset = PreprocessPointpillarsDataset(preprocess_fp=args.preprocess_fp, gridmap_type=res.expert_dataset.gridmap_type, feature_mean=res.expert_dataset.feature_mean, feature_std=res.expert_dataset.feature_std).to(args.device)
+#    dataset = PreprocessPointpillarsDataset(preprocess_fp=args.preprocess_fp, gridmap_type=res.expert_dataset.gridmap_type, feature_mean=res.expert_dataset.feature_mean, feature_std=res.expert_dataset.feature_std).to(args.device)
+
+    dataset = DinoMapDataset(
+        fp=args.preprocess_fp,
+        dino_n=res.expert_dataset.dino_n,
+        positional_n=res.expert_dataset.positional_n,
+    ).to(args.device)
     res.expert_dataset = dataset
 
     for i in range(args.n):

@@ -23,6 +23,7 @@ from maxent_irl_costmaps.networks.unet import UNet
 
 from maxent_irl_costmaps.dataset.maxent_irl_dataset import MaxEntIRLDataset
 from maxent_irl_costmaps.dataset.preprocess_pointpillars_dataset import PreprocessPointpillarsDataset
+from maxent_irl_costmaps.dataset.dino_map_dataset import DinoMapDataset
 
 from maxent_irl_costmaps.experiment_management.experiment import Experiment
 
@@ -66,6 +67,8 @@ def setup_experiment(fp):
         res['dataset'] = MaxEntIRLDataset(**dataset_params['params']).to(device)
     elif dataset_params['type'] == 'PreprocessPointpillarsDataset':
         res['dataset'] = PreprocessPointpillarsDataset(**dataset_params['params']).to(device)
+    elif dataset_params['type'] == 'DinoMapDataset':
+        res['dataset'] = DinoMapDataset(**dataset_params['params']).to(device)
     else:
         print('Unsupported dataset type {}'.format(dataset_params['type']))
         exit(1)

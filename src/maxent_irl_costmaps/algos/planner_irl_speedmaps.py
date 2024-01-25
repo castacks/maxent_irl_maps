@@ -115,8 +115,21 @@ class PlannerIRLSpeedmaps:
             self.quat_to_yaw(expert_traj[:, :, 3:7]) % (2*np.pi)
         ], dim=-1)
 
+        #have the goal be the last traj point still in map bounds
         initial_pos = expert_kbm_traj[:, 0]
-        goal_pos = expert_kbm_traj[:, -1]
+
+        goal_pos = []
+        for bi in range(initial_pos.shape[0]):
+            map_params_b = {
+                'resolution': batch['metadata']['resolution'].mean().item(),
+                'height': batch['metadata']['height'].mean().item(),
+                'width': batch['metadata']['width'].mean().item(),
+                'origin': batch['metadata']['origin'][bi]
+            }
+            etraj = expert_kbm_traj[bi]
+            goal_pos.append(self.clip_to_map_bounds(etraj, map_params_b))
+
+        goal_pos = torch.stack(goal_pos, dim=0)
 
         # setup start state
         angles = torch.linspace(0., 2*np.pi, self.planner.primitives['angnum']+1, device=self.planner.device).view(1, -1)
@@ -246,7 +259,7 @@ class PlannerIRLSpeedmaps:
                 expert_traj[:, 0],
                 expert_traj[:, 1],
                 self.quat_to_yaw(expert_traj[:, 3:7]) % (2*np.pi)
-            ])
+            ], dim=-1)
 
             #compute costmap
             #resnet cnn
@@ -256,8 +269,8 @@ class PlannerIRLSpeedmaps:
             speedmap = torch.distributions.Normal(loc=res['speedmap'].loc, scale=res['speedmap'].scale)
 
             #initialize solver
-            initial_pos = expert_kbm_traj[:, 0]
-            goal_pos = expert_kbm_traj[:, -1]
+            initial_pos = expert_kbm_traj[0]
+            goal_pos = self.clip_to_map_bounds(expert_kbm_traj, metadata)
 
             # setup start state
             angles = torch.linspace(0., 2*np.pi, self.planner.primitives['angnum']+1, device=self.planner.device)
@@ -331,6 +344,22 @@ class PlannerIRLSpeedmaps:
         #quats are x,y,z,w
         qx, qy, qz, qw = q.moveaxis(-1, 0)
         return torch.atan2(2 * (qw*qz + qx*qy), 1 - 2 * (qy*qy + qz*qz))
+
+    def clip_to_map_bounds(self, traj, metadata):
+        """
+        Given traj, find last point (temporally) in the map bounds
+        """
+        ox = metadata['origin'][0]
+        oy = metadata['origin'][1]
+        lx = metadata['height']
+        ly = metadata['width']
+        xs = traj[:, 0]
+        ys = traj[:, 1]
+
+        in_bounds = (xs > ox) & (xs < ox+lx) & (ys > oy) & (ys < oy+ly)
+        idx = (torch.arange(in_bounds.shape[0], device=self.device) * in_bounds).argmax(dim=0)
+
+        return traj[idx]
 
     def to(self, device):
         self.device = device
