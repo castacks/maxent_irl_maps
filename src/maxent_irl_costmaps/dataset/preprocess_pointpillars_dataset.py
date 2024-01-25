@@ -30,7 +30,7 @@ class PreprocessPointpillarsDataset(Dataset):
         preprocess = self.feature_mean is None or self.feature_std is None
 
         if preprocess:
-            nfeats = len(torch.load(self.fps[0])['{}_feature_keys'.format(self.gridmap_type)])
+            nfeats = len(torch.load(self.fps[0])['{}_feature_keys'.format(self.gridmap_type)]) if self.gridmap_type == 'learned_gridmap' else  len(torch.load(self.fps[0])['{}_feature_keys'.format(self.gridmap_type)]) -4
             self.feature_mean = torch.zeros(nfeats)
             self.feature_var = torch.zeros(nfeats)
             self.feature_std = torch.zeros(nfeats)
@@ -46,7 +46,7 @@ class PreprocessPointpillarsDataset(Dataset):
             for i, fp in enumerate(self.fps):
                 print('{}/{} ({})'.format(i+1, len(self), fp), end='\r')
                 traj = torch.load(self.fps[i])
-                mapfeats = traj['{}_data'.format(self.gridmap_type)]
+                mapfeats = traj['{}_data'.format(self.gridmap_type)] if self.gridmap_type == 'learned_gridmap' else traj['{}_data'.format(self.gridmap_type)][4:]
 
                 if torch.any(mapfeats.abs() > 1e6):
                     continue
@@ -83,12 +83,12 @@ class PreprocessPointpillarsDataset(Dataset):
         dpt = torch.load(self.fps[idx], map_location=self.device)
 
         data = {
-            'map_features': dpt['{}_data'.format(self.gridmap_type)],
+            'map_features': dpt['{}_data'.format(self.gridmap_type)] if self.gridmap_type == 'learned_gridmap' else dpt['{}_data'.format(self.gridmap_type)][4:],
             'metadata': {k:v for k,v in dpt['{}_metadata'.format(self.gridmap_type)].items() if k != 'feature_keys'},
             'steer': dpt['steer'],
             'traj': dpt['traj'],
             'image': dpt['image'],
-            'feature_keys': dpt['{}_feature_keys'.format(self.gridmap_type)]
+            'feature_keys': dpt['{}_feature_keys'.format(self.gridmap_type)] if self.gridmap_type == 'learned_gridmap' else dpt['{}_feature_keys'.format(self.gridmap_type)][4:]
         }
 
         data['map_features'] = ((data['map_features'] - self.feature_mean.view(-1, 1, 1)) / self.feature_std.view(-1, 1, 1)).clip(-10, 10)

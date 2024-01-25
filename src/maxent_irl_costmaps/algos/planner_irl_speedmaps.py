@@ -49,6 +49,7 @@ class PlannerIRLSpeedmaps:
         self.expert_dataset = expert_dataset
         self.footprint = footprint
         self.planner = planner
+        self.length_weight = 0.05
 
         self.network = network
 
@@ -120,14 +121,14 @@ class PlannerIRLSpeedmaps:
         # setup start state
         angles = torch.linspace(0., 2*np.pi, self.planner.primitives['angnum']+1, device=self.planner.device).view(1, -1)
 
-        sgx = (initial_pos[:, 0] - map_params['origin'][:, 0] / self.planner.primitives['lindisc']).round().clip(0, self.planner.states.shape[0]-1)
-        sgy = (initial_pos[:, 1] - map_params['origin'][:, 1] / self.planner.primitives['lindisc']).round().clip(0, self.planner.states.shape[1]-1)
+        sgx = ((initial_pos[:, 0] - map_params['origin'][:, 0]) / self.planner.primitives['lindisc']).round().clip(0, self.planner.states.shape[0]-1)
+        sgy = ((initial_pos[:, 1] - map_params['origin'][:, 1]) / self.planner.primitives['lindisc']).round().clip(0, self.planner.states.shape[1]-1)
         sga = (initial_pos[:, [2]] - angles).abs().argmin(dim=-1) % self.planner.primitives['angnum']
         start_state = torch.stack([sgx, sgy, sga], dim=-1).long()
 
         # setup goal state
-        ggx = (goal_pos[:, 0] - map_params['origin'][:, 0] / self.planner.primitives['lindisc']).round().clip(0, self.planner.states.shape[0]-1)
-        ggy = (goal_pos[:, 1] - map_params['origin'][:, 1] / self.planner.primitives['lindisc']).round().clip(0, self.planner.states.shape[1]-1)
+        ggx = ((goal_pos[:, 0] - map_params['origin'][:, 0]) / self.planner.primitives['lindisc']).round().clip(0, self.planner.states.shape[0]-1)
+        ggy = ((goal_pos[:, 1] - map_params['origin'][:, 1]) / self.planner.primitives['lindisc']).round().clip(0, self.planner.states.shape[1]-1)
         gga = (goal_pos[:, [2]] - angles).abs().argmin(dim=-1) % self.planner.primitives['angnum']
 
         goal_state = torch.stack([ggx, ggy, gga], dim=-1).long()
@@ -144,7 +145,7 @@ class PlannerIRLSpeedmaps:
                 'origin': batch['metadata']['origin'][bi]
             }
 
-            self.planner.load_costmap(costmaps[bi].T, length_weight=0.1)
+            self.planner.load_costmap(costmaps[bi].T, length_weight=self.length_weight)
             solution = self.planner.solve(goal_states = goal_state[bi].unsqueeze(0), max_itrs=1000)
             traj = self.planner.extract_solution_parallel(solution, start_state[bi].unsqueeze(0))[0].float()
             traj[:, 0] += initial_pos[bi, 0]
@@ -237,8 +238,8 @@ class PlannerIRLSpeedmaps:
             metadata = data['metadata']
             xmin = metadata['origin'][0].cpu()
             ymin = metadata['origin'][1].cpu()
-            xmax = xmin + metadata['width'].cpu()
-            ymax = ymin + metadata['height'].cpu()
+            xmax = xmin + metadata['length_x'].cpu()
+            ymax = ymin + metadata['length_y'].cpu()
 
             expert_traj = data['traj']
             expert_kbm_traj = torch.stack([
@@ -251,6 +252,7 @@ class PlannerIRLSpeedmaps:
             #resnet cnn
             res = self.network.forward(map_features)
             costmap = res['costmap'][:, 0]
+
             speedmap = torch.distributions.Normal(loc=res['speedmap'].loc, scale=res['speedmap'].scale)
 
             #initialize solver
@@ -260,19 +262,21 @@ class PlannerIRLSpeedmaps:
             # setup start state
             angles = torch.linspace(0., 2*np.pi, self.planner.primitives['angnum']+1, device=self.planner.device)
 
-            sgx = (initial_pos[0] - metadata['origin'][0] / self.planner.primitives['lindisc']).round().clip(0, self.planner.states.shape[0]-1)
-            sgy = (initial_pos[1] - metadata['origin'][1] / self.planner.primitives['lindisc']).round().clip(0, self.planner.states.shape[1]-1)
+            sgx = ((initial_pos[0] - metadata['origin'][0]) / self.planner.primitives['lindisc']).round().clip(0, self.planner.states.shape[0]-1)
+            sgy = ((initial_pos[1] - metadata['origin'][1]) / self.planner.primitives['lindisc']).round().clip(0, self.planner.states.shape[1]-1)
             sga = (initial_pos[2] - angles).abs().argmin() % self.planner.primitives['angnum']
             start_state = torch.stack([sgx, sgy, sga], dim=-1).long()
 
             # setup goal state
-            ggx = (goal_pos[0] - metadata['origin'][0] / self.planner.primitives['lindisc']).round().clip(0, self.planner.states.shape[0]-1)
-            ggy = (goal_pos[1] - metadata['origin'][1] / self.planner.primitives['lindisc']).round().clip(0, self.planner.states.shape[1]-1)
+            ggx = ((goal_pos[0] - metadata['origin'][0]) / self.planner.primitives['lindisc']).round().clip(0, self.planner.states.shape[0]-1)
+            ggy = ((goal_pos[1] - metadata['origin'][1]) / self.planner.primitives['lindisc']).round().clip(0, self.planner.states.shape[1]-1)
             gga = (goal_pos[2] - angles).abs().argmin() % self.planner.primitives['angnum']
 
             goal_state = torch.stack([ggx, ggy, gga], dim=-1).long()
 
-            self.planner.load_costmap(costmap[0].T, length_weight=0.1)
+            plt.show()
+
+            self.planner.load_costmap(costmap[0].T, length_weight=self.length_weight)
             solution = self.planner.solve(goal_states = goal_state.unsqueeze(0), max_itrs=1000)
             traj = self.planner.extract_solution_parallel(solution, start_state.unsqueeze(0))[0]
             traj[:, 0] += initial_pos[0]

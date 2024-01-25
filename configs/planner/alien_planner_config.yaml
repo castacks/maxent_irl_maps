@@ -1,0 +1,17 @@
+primitives:
+    L: 1.0
+    linear_resolution: 0.5
+    angular_discretization: 16
+    angular_weight: 1.
+    maxdist: 2.0
+
+state_lattice:
+    length_x: 20.
+    length_y: 20.
+    origin: [-10., -10.]
+
+costmap:
+    length_x: 20.
+    length_y: 20.
+    resolution: 0.05
+    origin: [-10., -10.]
