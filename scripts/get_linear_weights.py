@@ -17,6 +17,12 @@ if __name__ == '__main__':
 
     fks = model.expert_dataset.feature_keys
 
-    for i,fk in enumerate(fks):
+    wmean = weights.mean(dim=0)
+    wstd = weights.std(dim=0)
+    wzs = torch.abs(wmean / wstd)
+    zidxs = torch.argsort(wzs, descending=True)
+
+    for i in zidxs:
+        fk = fks[i]
         ws = weights[:, i]
-        print('{:<20}:\t{:.2f} += {:.2f}'.format(fk, ws.mean(), ws.std()))
+        print('{:<20}:\t{:.2f} += {:.2f} (z+{:.2f})'.format(fk, ws.mean(), ws.std(), wzs[i]))

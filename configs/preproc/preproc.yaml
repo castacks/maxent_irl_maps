@@ -1,11 +1,6 @@
-src_dir: /home/physics_atv/workspace/datasets/irl_data_postproc
-dst_dir: /home/physics_atv/workspace/datasets/irl_data_postpostproc
-save_every: 10 #add every n-th frame
-
-pointpillars: /home/physics_atv/workspace/experiments/tartanair_mapping/pointpillars_60m_rgb_unc_longer_111_velo/itr_71.pt
-
-#amount to inflate aggregated unc by (1.0 = standard kf, higher->trust recent measurements more)
-kf_decay: 1.02
+src_dir: /home/physics_atv/workspace/datasets/irl_postproc
+dst_dir: /home/physics_atv/workspace/datasets/irl_postpostproc
+save_every: 20 #add every n-th frame
 
 H: 100
 dt: 0.1
@@ -16,5 +11,6 @@ steer_angle: steer_angle
 odom: odom
 gps_odom: gps_odom
 local_gridmap: local_gridmap
+local_dino_map: local_dino_map
 pcl: pcl
 img: image_left_color

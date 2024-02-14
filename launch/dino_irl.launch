@@ -2,14 +2,15 @@
 
 <launch>
     <!-- File management -->
-	<arg name="model_fp" default="../models/yamaha/geom_resnet.pt"/>
+	<arg name="model_fp" default="../models/yamaha/dino_resnet.pt"/>
     <arg name="obstacle_threshold" default="10.0"/>
     <arg name="publish_gridmap" default="true"/>
     <arg name="device" default="cuda"/>
 
-	<node pkg="maxent_irl_maps" type="gridmap_to_cvar_costmap_node.py" name="maxent_irl_node" output="screen"> 
+	<node pkg="maxent_irl_maps" type="gridmap_dino_map_to_cvar_costmap_node.py" name="maxent_irl_node" output="screen"> 
         <param name="model_fp" value="$(dirname)/$(arg model_fp)"/>
 	    <param name="gridmap_topic" value="/local_gridmap"/>
+	    <param name="dino_map_topic" value="/dino_gridmap"/>
         <param name="costmap_topic" value="/local_costmap"/>
         <param name="speedmap_topic" value="/local_speedmap"/>
         <param name="odom_topic" value="/integrated_to_init"/>

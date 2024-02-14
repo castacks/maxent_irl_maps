@@ -124,6 +124,8 @@ class LinearCostmapSpeedmapEnsemble2(nn.Module):
             self.activation = Exponential(scale=activation_scale)
         elif activation_type == 'relu':
             self.activation = torch.nn.ReLU()
+        elif activation_type == 'addmin':
+            self.activation = AddMin()
         elif activation_type == 'none':
             self.activation = nn.Identity()
 

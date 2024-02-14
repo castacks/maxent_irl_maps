@@ -15,10 +15,11 @@ class CvarCostmapperNode:
     Node that listens to gridmaps from perception and uses IRL nets to make them into costmaps
     In addition to the baseline costmappers, take in a CVaR value from -1.0 to 1.0 and use an ensemble of costmaps
     """
-    def __init__(self, grid_map_topic, cost_map_topic, speed_map_topic, odom_topic, cvar_topic, speedmap_lcb_topic, dataset, network, obstacle_threshold, vmin, vmax, publish_gridmap, device):
+    def __init__(self, grid_map_topic, dino_map_topic, cost_map_topic, speed_map_topic, odom_topic, cvar_topic, speedmap_lcb_topic, dataset, network, obstacle_threshold, vmin, vmax, publish_gridmap, device):
         """
         Args:
             grid_map_topic: the topic to get map features from
+            dino_map_topic: the topic to get dino features from
             cost_map_topic: The topic to publish costmaps to
             speed_map_topic: The topic to publish speedmaps to
             odom_topic: The topic to get height from 
@@ -49,6 +50,7 @@ class CvarCostmapperNode:
 
         self.current_height = 0.
         self.current_speed = 0.
+        self.dino_map_msg = None
 
         #note that there are some map features that are state-dependent (like speed)
         #we won't pass them into the gridmap convert, and generate them at the end
@@ -69,6 +71,7 @@ class CvarCostmapperNode:
         self.grid_map_cvt = GridMapConvert(channels=self.gridmap_feature_keys, size=[1, 1])
 
         self.grid_map_sub = rospy.Subscriber(grid_map_topic, GridMap, self.handle_grid_map, queue_size=1)
+        self.dino_map_sub = rospy.Subscriber(dino_map_topic, GridMap, self.handle_dino_map, queue_size=1)
         self.odom_sub = rospy.Subscriber(odom_topic, Odometry, self.handle_odom, queue_size=1)
         self.cvar_sub = rospy.Subscriber(cvar_topic, Float32, self.handle_cvar, queue_size=1)
         self.speedmap_lcb_sub = rospy.Subscriber(speedmap_lcb_topic, Float32, self.handle_lcb, queue_size=1)
@@ -81,6 +84,9 @@ class CvarCostmapperNode:
         else:
             self.cost_map_pub = rospy.Publisher(cost_map_topic, OccupancyGrid, queue_size=1)
             self.speed_map_pub = rospy.Publisher(speed_map_topic, OccupancyGrid, queue_size=1)
+
+    def handle_dino_map(self, msg):
+        self.dino_map_msg = msg
 
     def handle_odom(self, msg):
         self.current_height = msg.pose.pose.position.z
@@ -118,6 +124,13 @@ class CvarCostmapperNode:
         return cvar_map
 
     def handle_grid_map(self, msg):
+        if self.dino_map_msg is None:
+            rospy.logwarn_throttle(1.0, 'waiting for dino map...')
+            return
+
+        msg.layers.extend(self.dino_map_msg.layers)
+        msg.data.extend(self.dino_map_msg.data)
+
         t1 = rospy.Time.now().to_sec()
         nx = int(msg.info.length_x / msg.info.resolution)
         ny = int(msg.info.length_y / msg.info.resolution)
@@ -125,6 +138,7 @@ class CvarCostmapperNode:
         gridmap = self.grid_map_cvt.ros_to_numpy(msg)
 
         rospy.loginfo_throttle(1.0, "output shape: {}".format(gridmap['data'].shape))
+        rospy.loginfo_throttle(1.0, "dino dt: {:.4f}s".format(msg.info.header.stamp.to_sec() - self.dino_map_msg.info.header.stamp.to_sec()))
 
         ## create geometric features ##
         geometric_map_feats = torch.from_numpy(gridmap['data']).float().to(self.device)
@@ -161,8 +175,8 @@ class CvarCostmapperNode:
 
 #        vmin_val = torch.quantile(cvar_costmap, self.vmin)
 #        vmax_val = torch.quantile(cvar_costmap, self.vmax)
-        vmin_val = -2.
-        vmax_val = 5.
+        vmin_val = 0.3
+        vmax_val = 1.0
 
         #convert to occgrid scaling. Also apply the obstacle threshold
 #        mask = (cvar_costmap >= self.obstacle_threshold).cpu().numpy()
@@ -254,6 +268,7 @@ if __name__ == '__main__':
 
     model_fp = rospy.get_param('~model_fp')
     grid_map_topic = rospy.get_param('~gridmap_topic')
+    dino_map_topic = rospy.get_param('~dino_map_topic')
     cost_map_topic = rospy.get_param('~costmap_topic')
     speed_map_topic = rospy.get_param('~speedmap_topic')
 
@@ -271,6 +286,6 @@ if __name__ == '__main__':
     mppi_irl = torch.load(model_fp, map_location=device)
     mppi_irl.network.eval()
 
-    costmapper = CvarCostmapperNode(grid_map_topic, cost_map_topic, speed_map_topic, odom_topic, cvar_topic, speedmap_lcb_topic, mppi_irl.expert_dataset, mppi_irl.network, obstacle_threshold, vmin, vmax, publish_gridmap, device)
+    costmapper = CvarCostmapperNode(grid_map_topic, dino_map_topic, cost_map_topic, speed_map_topic, odom_topic, cvar_topic, speedmap_lcb_topic, mppi_irl.expert_dataset, mppi_irl.network, obstacle_threshold, vmin, vmax, publish_gridmap, device)
 
     rospy.spin()

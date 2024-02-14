@@ -12,9 +12,6 @@ import matplotlib.pyplot as plt
 
 from scipy.spatial.transform import Rotation
 
-from pointpillars_inference.kalman_filter import update_kf, shift_kf
-from network_common.pointpillars.pointpillars_utils import bin_points, decorate_points
-
 from maxent_irl_costmaps.geometry_utils import TrajectoryInterpolator
 
 """
@@ -31,6 +28,24 @@ Steps:
             v. non kf pp feats
             vi. img
 """
+def transform_pcl(pcl, odom):
+    """
+    transform a pointcloud into odom frame (assuming pcl in a local frame at odom)
+    """
+    htm = pose_to_htm(odom)
+    pcl_pos = np.copy(pcl[:, :3])
+    pcl_pos = np.concatenate([pcl_pos, np.ones([pcl_pos.shape[0], 1])], axis=-1).reshape(-1, 4, 1)
+    pcl_t_pos = (htm @ pcl_pos).reshape(-1, 4)[:, :3]
+    pcl_out = np.concatenate([pcl_t_pos, pcl[:, 3:]], axis=-1)
+    return pcl_out
+
+def pose_to_htm(pose):
+    R = Rotation.from_quat(pose[3:7]).as_matrix()
+    T = np.eye(4)
+    T[:3, :3] = R
+    T[:3, -1] = pose[:3]
+    return T
+
 def run_preproc(config):
     ## start with file management ##
     trajdirs = os.listdir(config['src_dir'])
@@ -44,15 +59,12 @@ def run_preproc(config):
     os.makedirs(train_dir, exist_ok=True)
     os.makedirs(test_dir, exist_ok=True)
 
-    pointpillars = torch.load(config['pointpillars'], map_location='cuda')
-    pointpillars.eval()
-
     for td in trajdirs:
         src_fp = os.path.join(config['src_dir'], td)
         dst_fp = train_dir if 'train' in td else test_dir
-        run_preproc_traj(src_fp, dst_fp, config, pointpillars)
+        run_preproc_traj(src_fp, dst_fp, config)
 
-def run_preproc_traj(traj_fp, dst_fp, config, pointpillars):
+def run_preproc_traj(traj_fp, dst_fp, config):
     print('{} -> {}'.format(traj_fp, dst_fp))
     res_fp = os.path.join(dst_fp, os.path.basename(traj_fp))
     os.makedirs(res_fp, exist_ok=True)
@@ -84,33 +96,12 @@ def run_preproc_traj(traj_fp, dst_fp, config, pointpillars):
     valid_cnt = 0
     valid_ts = []
 
-    kf = {
-            'geometry': None,
-            'semantics': None,
-            'rgb': None,
-            'unc': None,
-            'pose': None,
-            'cnt': None,
-            'resolution': None
-        }
-
     for i in tqdm.tqdm(range(len(gridmap_ts))):
         gt = gridmap_ts[i]
         target_times = gt + np.arange(config['H']) * config['dt']
 
         if not all([validate_sample_times(target_times, src) for src in [odom_ts, steer_angle_ts, img_ts, pcl_ts]]):
             print('skipping sample {}...'.format(i))
-            ## reset the kalman filter if pose jump
-            kf = {
-                    'geometry': None,
-                    'semantics': None,
-                    'rgb': None,
-                    'unc': None,
-                    'pose': None,
-                    'cnt': None,
-                    'resolution': None
-                }
-            continue
         else:
             sub_traj = odom_interp(target_times)
             sub_steer = steer_angle_interp(target_times)
@@ -130,7 +121,6 @@ def run_preproc_traj(traj_fp, dst_fp, config, pointpillars):
 
             #temp hack
             gridmap_data[~np.isfinite(gridmap_data)] = 0.
-            gridmap_data = np.transpose(gridmap_data, (0,2,1))
             gridmap_metadata = yaml.safe_load(open(os.path.join(traj_fp, config['local_gridmap'], '{:06d}_metadata.yaml'.format(i)), 'r'))
 
             gridmap_metadata['length_x'] = gridmap_metadata['width']
@@ -138,152 +128,45 @@ def run_preproc_traj(traj_fp, dst_fp, config, pointpillars):
             gridmap_feature_keys = gridmap_metadata['feature_keys']
             gridmap_metadata = {k:torch.tensor(v).float() for k,v in gridmap_metadata.items() if k != 'feature_keys'}
 
+            dino_map_data = np.load(os.path.join(traj_fp, config['local_dino_map'], '{:06d}_data.npy'.format(i)))
+            dino_map_metadata = yaml.safe_load(open(os.path.join(traj_fp, config['local_dino_map'], '{:06d}_metadata.yaml'.format(i)), 'r'))
+            dino_map_feature_keys = dino_map_metadata['feature_keys']
 
-            # run pointpillars network
-            pcl_in = np.copy(pcl_tf)
-            pcl_in[:, 2] -= sub_traj[0, 2] #need zs to be local (x, y handled by metadata)
-            pointpillars_out = run_network(pointpillars, pcl_in, gridmap_metadata)
+            dino_map_data = np.transpose(dino_map_data, (0,2,1))
 
-            geometry = pointpillars_out['features'].loc[0].cpu().numpy()
-
-            geom_unc = pointpillars_out['features'].scale[0].cpu().numpy()
-            rgb_unc = pointpillars_out['rgb'].scale[0].cpu().numpy()
-            rgb_pred = pointpillars_out['rgb'].loc[0].cpu().numpy()
-
-            cnt = np.ones([1, geom_unc.shape[1], geom_unc.shape[2]])
-
-            semantic_probs = pointpillars_out['semantics'][0].softmax(dim=0).cpu().numpy()
-
-            kf_update = {
-                'geometry': geometry,
-                'geometry_unc': geom_unc,
-                'semantics': semantic_probs,
-                'rgb': rgb_pred,
-                'rgb_unc': rgb_unc,
-                'cnt': cnt,
-                'pose': sub_traj[0, :2],
-                'resolution': gridmap_metadata['resolution'].item()
-            }
-
-            kf = update_kf(kf, kf_update, decay=config['kf_decay'])
-
-            geometry_kf = kf['geometry']
-            semantics_kf = kf['semantics']
-            rgb_kf = 1. / (1 + np.exp(-kf['rgb']))
-
-            geometry_unc = kf['geometry_unc'].sum(axis=0, keepdims=True)
-            semantics_unc = (kf['semantics'] * -np.log(kf['semantics'])).sum(axis=0, keepdims=True)
-            rgb_unc = kf['rgb_unc'].sum(axis=0, keepdims=True)
-
-            learned_gridmap_data = np.concatenate([
-                geometry_kf,
-                geometry_unc,
-                semantics_kf,
-                semantics_unc,
-                rgb_kf,
-                rgb_unc
+            out_gridmap_data = np.concatenate([
+                gridmap_data,
+                dino_map_data,
             ], axis=0)
 
-            learned_gridmap_metadata = copy.deepcopy(gridmap_metadata)
-            learned_gridmap_feature_keys = [
-                'step',
-                'local_slope',
-                'local_rough',
-                'robot_slope',
-                'robot_rough',
-                'geom_unc',
-                'p_void',
-                'p_sky',
-                'p_dirt',
-                'p_grass',
-                'p_gravel',
-                'p_road',
-                'p_floor',
-                'p_water',
-                'p_bush',
-                'p_tree',
-                'p_wall',
-                'p_rock',
-                'p_object',
-                'p_actor',
-                'p_vehicle',
-                'p_pole',
-                'semantic_entropy',
-                'r',
-                'g',
-                'b',
-                'rgb_unc'
-            ]
+            #HACK
+            _gd = torch.tensor(out_gridmap_data).unsqueeze(0)
+            _gd = torch.nn.functional.avg_pool2d(_gd, kernel_size=2, stride=2)
+            out_gridmap_data = _gd.numpy()[0]
+            gridmap_metadata['resolution'] *= 2
 
             res = {
                 'traj': torch.tensor(sub_traj).float(),
                 'steer': torch.tensor(sub_steer).float(),
                 'pointcloud': torch.tensor(pcl_tf).float(),
                 'image': torch.tensor(img).float().permute(2, 0, 1)[[2, 1, 0]] / 255.,
-                'gridmap_data': torch.tensor(gridmap_data).float().permute(0, 2, 1),
+                'gridmap_data': torch.tensor(out_gridmap_data).float(),
                 'gridmap_metadata': gridmap_metadata,
-                'gridmap_feature_keys': gridmap_feature_keys,
-                'learned_gridmap_data': torch.tensor(learned_gridmap_data).float().permute(0, 2, 1),
-                'learned_gridmap_metadata': learned_gridmap_metadata,
-                'learned_gridmap_feature_keys': learned_gridmap_feature_keys
+                'gridmap_feature_keys': gridmap_feature_keys + dino_map_feature_keys,
             }
 
             if valid_cnt % config['save_every'] == 0:
+#                fig, axs = plt.subplots(1,2)
+#                axs[0].imshow(out_gridmap_data[1])
+#                axs[1].imshow(out_gridmap_data[12])
+#                plt.show()
+                
                 torch.save(res, os.path.join(res_fp, '{:06d}.pt'.format(valid_cnt//config['save_every'])))
-
-            # note that this viz may be off but the maxent viz is ok
-#            if valid_cnt % 400 == 0:
-#                viz_sample(sub_traj, sub_steer, img, pcl_tf, gridmap_data, gridmap_metadata, learned_gridmap_data, learned_gridmap_metadata)
 
             valid_cnt += 1
             valid_ts.append(gt)
 
     print('{}/{} samples valid'.format(valid_cnt, gridmap_ts.shape[0]))
-
-    ## debug plot ##
-#    fig, axs = plt.subplots(2, 2)
-#    axs = axs.flatten()
-#    for ax in axs:
-#        ax.plot(valid_ts, valid_ts, c='r', marker='x', label='samples')
-#    for ax, data in zip(axs, [odom_ts, steer_angle_ts, img_ts, pcl_ts]):
-#        ax.plot(odom_ts, odom_ts, c='g', marker='.', label='odom')
-#    for ax, label in zip(axs, ['odom', 'steer', 'img', 'pcl']):
-#        ax.set_title(label)
-#    plt.show()
-
-def run_network(net, pcl, metadata):
-    acc, cnt, mask = bin_points(pcl, metadata, max_pts=64, device=net.device)
-    acc = torch.tensor(acc, device=net.device).float()
-    cnt = torch.tensor(cnt, device=net.device).float()
-    mask = torch.tensor(mask, device=net.device).float()
-
-    acc = decorate_points(acc, cnt, mask, metadata)
-
-    res = acc.unsqueeze(0)
-
-    ## run the network ##
-    with torch.no_grad():
-        res = net.forward(res)
-
-    return res
-
-def transform_pcl(pcl, odom):
-    """
-    transform a pointcloud into odom frame (assuming pcl in a local frame at odom)
-    """
-    htm = pose_to_htm(odom)
-    pcl_pos = np.copy(pcl[:, :3])
-    pcl_pos = np.concatenate([pcl_pos, np.ones([pcl_pos.shape[0], 1])], axis=-1).reshape(-1, 4, 1)
-    pcl_t_pos = (htm @ pcl_pos).reshape(-1, 4)[:, :3]
-    pcl_out = np.concatenate([pcl_t_pos, pcl[:, 3:]], axis=-1)
-    return pcl_out
-
-def pose_to_htm(pose):
-    R = Rotation.from_quat(pose[3:7]).as_matrix()
-    T = np.eye(4)
-    T[:3, :3] = R
-    T[:3, -1] = pose[:3]
-    return T
 
 def validate_sample_times(target_times, src_times, tol=0.5):
     """

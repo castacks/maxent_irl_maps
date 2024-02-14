@@ -10,8 +10,9 @@ import scipy.interpolate
 from maxent_irl_costmaps.dataset.maxent_irl_dataset import MaxEntIRLDataset
 from maxent_irl_costmaps.os_utils import maybe_mkdir
 from maxent_irl_costmaps.metrics.metrics import *
+from maxent_irl_costmaps.metrics.speedmap_metrics import *
 
-from maxent_irl_costmaps.dataset.preprocess_pointpillars_dataset import PreprocessPointpillarsDataset
+from maxent_irl_costmaps.dataset.dino_map_dataset import DinoMapDataset
 
 from maxent_irl_costmaps.networks.baseline_lethal_height import LethalHeightCostmap
 
@@ -30,7 +31,11 @@ if __name__ == '__main__':
     model = torch.load(args.model_fp, map_location='cpu')
     model.network.eval()
 
-    dataset = PreprocessPointpillarsDataset(preprocess_fp=args.preprocess_fp, gridmap_type=model.expert_dataset.gridmap_type, feature_mean=model.expert_dataset.feature_mean, feature_std=model.expert_dataset.feature_std)
+    dataset = DinoMapDataset(
+        fp=args.preprocess_fp,
+        dino_n=model.expert_dataset.dino_n,
+        positional_n=model.expert_dataset.positional_n,
+    ).to(args.device)
     model.expert_dataset = dataset
 
 #    if args.baseline:
@@ -53,8 +58,12 @@ if __name__ == '__main__':
 #        plt.show()
 
     if args.use_planner:
+        res_speed = get_speedmap_metrics(model, frame_skip=1, viz=args.viz, save_fp=args.save_fp)
         res = get_metrics_planner(model, metrics, frame_skip=1, viz=args.viz, save_fp=args.save_fp)
+        for k,v in res_speed.items():
+            res[k] = v
     else:
+        res_speed = get_speedmap_metrics(model, frame_skip=1, viz=args.viz, save_fp=args.save_fp)
         res = get_metrics(model, metrics, frame_skip=1, viz=args.viz, save_fp=args.save_fp)
 
     torch.save(res, os.path.join(args.save_fp, 'metrics.pt'))

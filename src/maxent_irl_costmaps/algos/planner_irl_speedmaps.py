@@ -7,6 +7,7 @@ import scipy.spatial
 import scipy.interpolate
 
 from torch.utils.data import DataLoader
+from scipy.spatial.transform import Rotation
 
 from maxent_irl_costmaps.dataset.maxent_irl_dataset import MaxEntIRLDataset
 from maxent_irl_costmaps.costmappers.linear_costmapper import LinearCostMapper
@@ -15,6 +16,8 @@ from maxent_irl_costmaps.geometry_utils import apply_footprint
 
 from maxent_irl_costmaps.networks.mlp import MLP
 from maxent_irl_costmaps.networks.resnet import ResnetCostmapCNN
+
+from physics_atv_visual_mapping.pointcloud_colorization.torch_color_pcl_utils import *
 
 class PlannerIRLSpeedmaps:
     """
@@ -235,7 +238,6 @@ class PlannerIRLSpeedmaps:
         torch.nn.utils.clip_grad_norm_(self.network.parameters(), self.grad_clip)
         self.network_opt.step()
 
-
     def visualize(self, idx=-1):
         """
         Create a visualization of MaxEnt IRL inputs/outputs for the idx-th datapoint.
@@ -263,10 +265,14 @@ class PlannerIRLSpeedmaps:
 
             #compute costmap
             #resnet cnn
-            res = self.network.forward(map_features)
-            costmap = res['costmap'][:, 0]
-
-            speedmap = torch.distributions.Normal(loc=res['speedmap'].loc, scale=res['speedmap'].scale)
+            if hasattr(self.network, 'ensemble_forward'):
+                res = self.network.ensemble_forward(map_features)
+                costmap = res['costmap'].mean(dim=1)[:, 0]
+                speedmap = torch.distributions.Normal(loc=res['speedmap'].loc.mean(dim=1), scale=res['speedmap'].scale.mean(dim=1))
+            else:
+                res = self.network.forward(map_features)
+                costmap = res['costmap'][:, 0]
+                speedmap = torch.distributions.Normal(loc=res['speedmap'].loc, scale=res['speedmap'].scale)
 
             #initialize solver
             initial_pos = expert_kbm_traj[0]
@@ -299,33 +305,49 @@ class PlannerIRLSpeedmaps:
             axs = axs.flatten()
             
             fk = None
-            fklist = ['height_high', 'step']
+            fklist = ['height_high', 'step', 'diff']
             for f in fklist:
                 if f in self.expert_dataset.feature_keys:
                     fk = f
                     idx = self.expert_dataset.feature_keys.index(fk)
                     break
-            
-            axs[0].imshow(data['image'].permute(1, 2, 0)[:, :, [2, 1, 0]].cpu())
-            axs[1].imshow(map_features[0][idx].cpu(), origin='lower', cmap='gray', extent=(xmin, xmax, ymin, ymax))
-#            m1 = axs[2].imshow(costmap[tidx].cpu(), origin='lower', cmap='plasma', extent=(xmin, xmax, ymin, ymax), vmin=-5., vmax=5.)
-            m1 = axs[2].imshow(costmap[0].cpu(), origin='lower', cmap='plasma', extent=(xmin, xmax, ymin, ymax))
-            m2 = axs[4].imshow(speedmap.loc[0].cpu(), origin='lower', cmap='bwr', extent=(xmin, xmax, ymin, ymax), vmax=10.)
-            m3 = axs[5].imshow(speedmap.scale[0].cpu(), origin='lower', cmap='bwr', extent=(xmin, xmax, ymin, ymax), vmax=10.)
 
+            img = data['image'].permute(1, 2, 0)[:, :, [2, 1, 0]].cpu()
+            traj_viz = torch.clone(traj)
+            traj_viz[:, 2] = expert_traj[0, 2]
+#            expert_traj_px = self.project_traj_into_fpv(expert_traj.cpu().numpy(), expert_traj[0].cpu().numpy(), img)
+#            traj_px = self.project_traj_into_fpv(traj_viz.cpu().numpy(), expert_traj[0].cpu().numpy(), img)
+
+            axs[0].imshow(img)
+            axs[1].imshow(map_features[0][idx].cpu(), origin='lower', cmap='gray', extent=(xmin, xmax, ymin, ymax))
+#            m1 = axs[2].imshow(costmap.mean(dim=0).cpu(), origin='lower', cmap='plasma', extent=(xmin, xmax, ymin, ymax), vmin=0., vmax=2.)
+            m1 = axs[2].imshow(costmap[0].cpu(), origin='lower', cmap='jet', extent=(xmin, xmax, ymin, ymax))
+            m2 = axs[3].imshow(speedmap.loc[0].cpu() - speedmap.scale[0].cpu(), origin='lower', cmap='jet', extent=(xmin, xmax, ymin, ymax), vmin=0., vmax=5.)
+            m3 = axs[4].imshow(speedmap.loc[0].cpu(), origin='lower', cmap='jet', extent=(xmin, xmax, ymin, ymax), vmin=0., vmax=5.)
+            m4 = axs[5].imshow(speedmap.scale[0].cpu(), origin='lower', cmap='bwr', extent=(xmin, xmax, ymin, ymax), vmin=0., vmax=10.)
+
+#            axs[0].plot(expert_traj_px[:, 0], expert_traj_px[:, 1], c='y')
             axs[1].plot(expert_traj[:, 0].cpu(), expert_traj[:, 1].cpu(), c='y', label='expert')
             axs[2].plot(expert_traj[:, 0].cpu(), expert_traj[:, 1].cpu(), c='y')
+            axs[3].plot(expert_traj[:, 0].cpu(), expert_traj[:, 1].cpu(), c='y')
             axs[4].plot(expert_traj[:, 0].cpu(), expert_traj[:, 1].cpu(), c='y')
             axs[5].plot(expert_traj[:, 0].cpu(), expert_traj[:, 1].cpu(), c='y')
 
+#            axs[0].plot(traj_px[:, 0], traj_px[:, 1], c='g')
             axs[1].plot(traj[:, 0].cpu(), traj[:, 1].cpu(), c='g', label='learner')
             axs[2].plot(traj[:, 0].cpu(), traj[:, 1].cpu(), c='g')
+            axs[3].plot(traj[:, 0].cpu(), traj[:, 1].cpu(), c='g')
             axs[4].plot(traj[:, 0].cpu(), traj[:, 1].cpu(), c='g')
             axs[5].plot(traj[:, 0].cpu(), traj[:, 1].cpu(), c='g')
+
+            for ax in axs[1:]:
+                ax.set_xlim(xmin, xmax)
+                ax.set_ylim(ymin, ymax)
 
             axs[0].set_title('FPV')
             axs[1].set_title('gridmap {}'.format(fk))
             axs[2].set_title('irl cost (clipped)')
+            axs[3].set_title('speedmap lcb (z=-1)')
             axs[4].set_title('speedmap mean')
             axs[5].set_title('speedmap std')
 
@@ -336,9 +358,45 @@ class PlannerIRLSpeedmaps:
             axs[1].legend()
 
             plt.colorbar(m1, ax=axs[2])
-            plt.colorbar(m2, ax=axs[4])
-            plt.colorbar(m3, ax=axs[5])
+            plt.colorbar(m2, ax=axs[3])
+            plt.colorbar(m3, ax=axs[4])
+            plt.colorbar(m4, ax=axs[5])
         return fig, axs
+
+    def project_traj_into_fpv(self, traj, init_pose, image):
+        """
+        be fancy and project paths into image frame
+        Args:
+            traj: the traj to project
+            init_pose: the pose [p; q] to transform pose into local frame
+        """
+        K = np.array(self.expert_dataset.config['intrinsics']['K']).reshape(3, 3)
+        I = get_intrinsics(K)
+        E = np.eye(4)
+        E[:3,:3] = Rotation.from_quat(np.array(self.expert_dataset.config['extrinsics']['q'])).as_matrix()
+        E[:3, -1] = np.array(self.expert_dataset.config['extrinsics']['p'])
+        E = get_extrinsics(E)
+        P = obtain_projection_matrix(I, E)
+
+        init_pose_htm = np.eye(4)
+        init_pose_htm[:3, -1] = init_pose[:3]
+        init_pose_htm[:3, :3] = Rotation.from_quat(init_pose[3:7]).as_matrix()
+        traj_pts = np.concatenate([
+            traj[:, :3],
+            np.ones([traj.shape[0], 1])
+        ], axis=-1)
+        local_traj_pts = np.linalg.inv(init_pose_htm).reshape(1, 4, 4) @ traj_pts.reshape(-1, 4, 1)
+        local_traj_pts = local_traj_pts[:, :3, 0]
+
+        pixel_coords = get_pixel_from_3D_source(local_traj_pts, P)
+        traj_pts_in_frame, pixels_in_frame, ind_in_frame = get_points_and_pixels_in_frame(
+            local_traj_pts,
+            pixel_coords,
+            image.shape[0],
+            image.shape[1]
+        )
+
+        return pixels_in_frame
 
     def quat_to_yaw(self, q):
         #quats are x,y,z,w

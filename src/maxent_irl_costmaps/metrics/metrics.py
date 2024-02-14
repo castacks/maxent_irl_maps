@@ -40,6 +40,9 @@ def get_metrics_planner(experiment, metric_fns = {}, frame_skip=1, viz=True, sav
             expert_traj = data['traj']
 
             #compute costmap
+            #for metrics (namely mhd), clip etraj to map bounds
+            emask = (expert_traj[:, 0] > xmin) & (expert_traj[:, 0] < xmax) & (expert_traj[:, 1] > ymin) & (expert_traj[:, 1] < ymax)
+            expert_traj_clip = expert_traj[emask]
 
             #ensemble
             if hasattr(experiment.network, 'ensemble_forward'):
@@ -61,7 +64,7 @@ def get_metrics_planner(experiment, metric_fns = {}, frame_skip=1, viz=True, sav
             ], dim=-1)
 
             initial_pos = expert_kbm_traj[0]
-            goal_pos = expert_kbm_traj[-1]
+            goal_pos = experiment.clip_to_map_bounds(expert_kbm_traj, metadata)
 
             # setup start state
             angles = torch.linspace(0., 2*np.pi, experiment.planner.primitives['angnum']+1, device=experiment.planner.device)
@@ -99,32 +102,12 @@ def get_metrics_planner(experiment, metric_fns = {}, frame_skip=1, viz=True, sav
 #            expert_state_visitations = get_state_visitations(expert_traj.unsqueeze(0), metadata)
 
             for k, fn in metric_fns.items():
-                metrics_res[k].append(fn(costmap, expert_traj, traj, expert_state_visitations, learner_state_visitations).cpu().item())
+                metrics_res[k].append(fn(costmap, expert_traj_clip, traj, expert_state_visitations, learner_state_visitations).cpu().item())
 
-            xmin = metadata['origin'][0].cpu()
-            ymin = metadata['origin'][1].cpu()
-            xmax = xmin + metadata['width'].cpu()
-            ymax = ymin + metadata['height'].cpu()
+            fig, axs = experiment.visualize(i)
 
-            fig, axs = plt.subplots(2, 2, figsize=(18, 18))
-            axs = axs.flatten()
-
-            axs[0].imshow(data['image'].permute(1, 2, 0)[:, :, [2, 1, 0]].cpu())
-            axs[0].set_title('FPV')
-
-            m1 = axs[1].imshow(costmap[0].cpu(), origin='lower', cmap='plasma', extent=(xmin, xmax, ymin, ymax))
-            axs[1].plot(expert_traj[:, 0].cpu(), expert_traj[:, 1].cpu(), c='y', label='expert')
-            axs[1].plot(traj[:, 0].cpu(), traj[:, 1].cpu(), c='g', label='learner')
-            axs[1].set_title('costmap')
-            axs[1].legend()
-
-            axs[2].imshow(learner_state_visitations.cpu(), origin='lower', extent=(xmin, xmax, ymin, ymax))
-            axs[2].set_title('learner SV')
-
-            axs[3].imshow(expert_state_visitations.cpu(), origin='lower', extent=(xmin, xmax, ymin, ymax))
-            axs[3].set_title('expert SV')
-
-            plt.colorbar(m1, ax=axs[1])
+            for ax in axs[1:]:
+                ax.plot(expert_traj_clip[:, 0].cpu(), expert_traj_clip[:, 1].cpu(), c='r')
 
             title = ''
             for k,v in metrics_res.items():
@@ -132,9 +115,6 @@ def get_metrics_planner(experiment, metric_fns = {}, frame_skip=1, viz=True, sav
             plt.suptitle(title)
 
             if viz:
-#                plt.show(block=False)
-#                plt.pause(1e-2)
-
                 plt.savefig(os.path.join(save_fp, 'figs', '{:06d}.png'.format(i)))
                 plt.close()
 
@@ -170,6 +150,10 @@ def get_metrics(experiment, metric_fns = {}, frame_skip=1, viz=True, save_fp="")
             xmax = xmin + metadata['width'].cpu()
             ymax = ymin + metadata['height'].cpu()
             expert_traj = data['traj']
+
+            #for metrics (namely mhd), clip etraj to map bounds
+            emask = (expert_traj[:, 0] > xmin) & (expert_traj[:, 0] < xmax) & (expert_traj[:, 1] > ymin) & (expert_traj[:, 1] < ymax)
+            expert_traj = expert_traj[emask]
 
             #compute costmap
 

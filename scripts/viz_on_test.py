@@ -2,24 +2,21 @@ import torch
 import matplotlib.pyplot as plt
 import argparse
 
-from maxent_irl_costmaps.dataset.preprocess_pointpillars_dataset import PreprocessPointpillarsDataset
-from maxent_irl_costmaps.dataset.dino_map_dataset import DinoMapDataset
+from maxent_irl_costmaps.dataset.maxent_irl_dataset import MaxEntIRLDataset
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--model_fp', type=str, required=True, help='model to load')
-    parser.add_argument('--preprocess_fp', type=str, required=True, help='path to preproc data')
+    parser.add_argument('--test_fp', type=str, required=True, help='path to preproc data')
     parser.add_argument('--n', type=int, required=False, default=10, help='number of viz to run')
     parser.add_argument('--device', type=str, required=False, default='cpu', help='the device to run on')
     args = parser.parse_args()
 
     res = torch.load(args.model_fp).to(args.device)
-#    dataset = PreprocessPointpillarsDataset(preprocess_fp=args.preprocess_fp, gridmap_type=res.expert_dataset.gridmap_type, feature_mean=res.expert_dataset.feature_mean, feature_std=res.expert_dataset.feature_std).to(args.device)
 
-    dataset = DinoMapDataset(
-        fp=args.preprocess_fp,
-        dino_n=res.expert_dataset.dino_n,
-        positional_n=res.expert_dataset.positional_n,
+    dataset = MaxEntIRLDataset(
+        root_fp = args.test_fp,
+        feature_keys = res.expert_dataset.feature_keys
     ).to(args.device)
     res.expert_dataset = dataset
 

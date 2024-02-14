@@ -6,12 +6,12 @@ primitives:
     maxdist: 5.
 
 state_lattice:
-    length_x: 100.
-    length_y: 100.
-    origin: [-50., -50.]
+    length_x: 120.
+    length_y: 120.
+    origin: [-60., -60.]
 
 costmap:
-    length_x: 100.
-    length_y: 100.
+    length_x: 120.
+    length_y: 120.
     resolution: 0.5
-    origin: [-50., -50.]
+    origin: [-60., -60.]

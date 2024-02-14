@@ -1,10 +1,12 @@
-import torch
-from torch.utils.data import Dataset
-import numpy as np
-import yaml
 import os
 import cv2
+import yaml
+import tqdm
+import torch
+import numpy as np
 import matplotlib.pyplot as plt
+
+from torch.utils.data import Dataset
 
 from maxent_irl_costmaps.os_utils import walk_bags
 
@@ -35,18 +37,21 @@ class DinoMapDataset(Dataset):
         self.geom_n = np.load(os.path.join(self.fp, self.dfps[0], 'geometric_map_data.npy')).shape[0]
         geom_fks = yaml.safe_load(open(os.path.join(self.fp, self.dfps[0], 'map_metadata.yaml')))['feature_keys']
 
-        self.feature_keys = geom_fks + ['dino_{}'.format(i) for i in range(self.dino_n)] + ['pe_{}'.format(i) for i in range(2*self.positional_n)]
-
         if self.should_preprocess():
             print('recomputing feature mean/std...')
+            self.feature_keys = geom_fks + ['dino_{}'.format(i) for i in range(self.dino_n)] + ['pe_{}'.format(i) for i in range(2*self.positional_n)]
             self.preprocess()
 
         self.normalizations = torch.load(os.path.join(self.fp, 'normalizations.pt'), map_location=self.device)
 
-        if self.dino_n == -1:
-            self.dino_n = self.normalizations['dino_mean'].shape[0] if dino_n == -1 else dino_n
+        self.dino_n = dino_n
 
         self.nfeats = self.normalizations['geom_mean'].shape[0] + self.dino_n + self.positional_embedding.shape[0]
+
+        self.feature_keys = geom_fks + ['dino_{}'.format(i) for i in range(self.dino_n)] + ['pe_{}'.format(i) for i in range(2*self.positional_n)]
+
+        #import the camera info so we can project paths into the image frame
+        self.config = yaml.safe_load(open(os.path.join(self.fp, 'config.yaml'), 'r'))
 
     def __getitem__(self, idx):
         return self.get_normalized_dpt(idx)
@@ -65,7 +70,7 @@ class DinoMapDataset(Dataset):
                 subfps = os.listdir(os.path.join(_fp, 'data'))
                 for sfp in subfps:
                     fps.append(os.path.join(_fp, 'data', sfp))
-        return fps
+        return sorted(fps)
 
     def should_preprocess(self):
         """
@@ -83,8 +88,13 @@ class DinoMapDataset(Dataset):
         #just going to do a rough estimate bc im lazy
         for i in tqdm.tqdm(range(min(len(self), 500))):
             dpt = self.get_unnormalized_dpt(i)
-            gfeats = dpt['geometric_map'].view(dpt['geometric_map'].shape[0], -1)
-            dfeats = dpt['dino_map'].view(dpt['dino_map'].shape[0], -1)
+
+            gmap = dpt['map_features'][:self.geom_n]
+            dmap = dpt['map_features'][self.geom_n:self.geom_n+self.dino_n]
+
+            gfeats = gmap.reshape(gmap.shape[0], -1)
+            dfeats = dmap.reshape(dmap.shape[0], -1)
+
             geom_feats.append(gfeats)
             dino_feats.append(dfeats)
 
@@ -144,8 +154,8 @@ class DinoMapDataset(Dataset):
 
         #eww TODO cleanup this and metadata later
         traj = torch.tensor(np.load(os.path.join(fp, 'traj.npy')), device=self.device, dtype=torch.float32)
-        fake_vels = torch.zeros(traj.shape[0], 6, device=self.device, dtype=torch.float32)
-        traj = torch.cat([traj, fake_vels], dim=-1)
+#        fake_vels = torch.zeros(traj.shape[0], 6, device=self.device, dtype=torch.float32)
+#        traj = torch.cat([traj, fake_vels], dim=-1)
 
         metadata = yaml.safe_load(open(os.path.join(fp, 'map_metadata.yaml'), 'r'))
         metadata['origin'] = torch.tensor(metadata['origin'], device=self.device)
@@ -161,7 +171,7 @@ class DinoMapDataset(Dataset):
         # need to reorganize keys/values
         map_features = torch.cat([
             geom_map_data,
-            dino_map_data,
+            dino_map_data[:self.dino_n],
             positional_embedding
         ], dim=0)
 
