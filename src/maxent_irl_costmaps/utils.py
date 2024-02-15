@@ -9,15 +9,15 @@ def quat_to_yaw(quat):
 
     return torch.atan2(2 * (quat[:, 3]*quat[:, 2] + quat[:, 0]*quat[:, 1]), 1 - 2 * (quat[:, 1]**2 + quat[:, 2]**2))    
 
-def get_speedmap(trajs, map_metadata, weights=None):
+def get_speedmap(trajs, speeds, map_metadata, weights=None):
     """
     Given a set of trajectories, produce a map where each cell contains the speed the traj in that cell
     Args:
         trajs: the trajs to compute speeds over
+        speeds: the speeds corresponding to pos
         map_metadata: The map params to get speeds over
         weights: optional weighting on each trajectory
     """
-    assert trajs.shape[-1] == 13, 'This method only works with the 13d [p, q, v, w] state formulation'
     if weights is None:
         weights = torch.ones(trajs.shape[0], device=trajs.device) / trajs.shape[0]
 
@@ -37,7 +37,6 @@ def get_speedmap(trajs, map_metadata, weights=None):
     valid_mask = (xidxs >= 0) & (xidxs < ny) & (yidxs >= 0) & (yidxs < nx)
 
     #I'm pretty sure all I have to do is replace the ones from svs w/ the actual speeds
-    speeds = torch.linalg.norm(trajs[...,7:10], axis=-1)
     binweights = torch.ones(trajs.shape[:-1], device=trajs.device) * weights.view(-1, 1) * valid_mask.float()
     speed_binweights = speeds * binweights
 

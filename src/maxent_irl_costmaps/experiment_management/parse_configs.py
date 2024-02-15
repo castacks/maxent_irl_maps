@@ -18,8 +18,7 @@ from maxent_irl_costmaps.algos.planner_irl_speedmaps import PlannerIRLSpeedmaps
 
 from maxent_irl_costmaps.geometry_utils import make_footprint
 
-from maxent_irl_costmaps.networks.resnet import ResnetCostmapCNN, ResnetCostmapSpeedmapCNN, ResnetCostmapSpeedmapCNNEnsemble, ResnetCostmapSpeedmapCNNEnsemble2, LinearCostmapSpeedmapEnsemble2
-from maxent_irl_costmaps.networks.unet import UNet
+from maxent_irl_costmaps.networks.resnet import ResnetCostmapSpeedmapCNNEnsemble2, LinearCostmapSpeedmapEnsemble2, ResnetCostmapCategoricalSpeedmapCNNEnsemble2
 
 from maxent_irl_costmaps.dataset.maxent_irl_dataset import MaxEntIRLDataset
 from maxent_irl_costmaps.dataset.preprocess_pointpillars_dataset import PreprocessPointpillarsDataset
@@ -75,25 +74,7 @@ def setup_experiment(fp):
 
     #setup network
     network_params = experiment_dict['network']
-    if network_params['type'] == 'ResnetCostmapCNN':
-        res['network'] = ResnetCostmapCNN(
-            in_channels = len(res['dataset'].feature_keys),
-            **network_params['params']
-        ).to(device)
-
-    elif network_params['type'] == 'ResnetCostmapSpeedmapCNN':
-        res['network'] = ResnetCostmapSpeedmapCNN(
-            in_channels = len(res['dataset'].feature_keys),
-            **network_params['params']
-        ).to(device)
-
-    elif network_params['type'] == 'ResnetCostmapSpeedmapCNNEnsemble':
-        res['network'] = ResnetCostmapSpeedmapCNNEnsemble(
-            in_channels = len(res['dataset'].feature_keys),
-            **network_params['params']
-        ).to(device)
-
-    elif network_params['type'] == 'ResnetCostmapSpeedmapCNNEnsemble2':
+    if network_params['type'] == 'ResnetCostmapSpeedmapCNNEnsemble2':
         res['network'] = ResnetCostmapSpeedmapCNNEnsemble2(
             in_channels = len(res['dataset'].feature_keys),
             **network_params['params']
@@ -105,15 +86,12 @@ def setup_experiment(fp):
             **network_params['params']
         ).to(device)
 
-    elif network_params['type'] == 'UNet':
-        channels = len(res['dataset'].feature_keys)
-        nx = int(res['dataset'].metadata['width'] / res['dataset'].metadata['resolution'])
-        ny = int(res['dataset'].metadata['height'] / res['dataset'].metadata['resolution'])
-        res['network'] = UNet(
-            insize = [channels, nx, ny],
-            outsize = [1, nx, ny],
+    elif network_params['type'] == 'ResnetCostmapCategoricalSpeedmapCNNEnsemble2':
+        res['network'] = ResnetCostmapCategoricalSpeedmapCNNEnsemble2(
+            in_channels = len(res['dataset'].feature_keys),
             **network_params['params']
         )
+
     else:
         print('Unsupported network type {}'.format(network_params['type']))
         exit(1)
@@ -163,6 +141,7 @@ def setup_experiment(fp):
             expert_dataset = res['dataset'],
             mppi = res['trajopt'],
             footprint = res['footprint'],
+            categorical_speedmaps = hasattr(res['network'], 'speed_bins'),
             **algo_params['params']
         ).to(device)
 
@@ -173,6 +152,7 @@ def setup_experiment(fp):
             expert_dataset = res['dataset'],
             planner = res['planner'],
             footprint = res['footprint'],
+            categorical_speedmaps = hasattr(res['network'], 'speed_bins'),
             **algo_params['params']
         ).to(device)
 

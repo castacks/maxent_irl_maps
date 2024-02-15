@@ -14,9 +14,6 @@ from maxent_irl_costmaps.costmappers.linear_costmapper import LinearCostMapper
 from maxent_irl_costmaps.utils import get_state_visitations, get_speedmap
 from maxent_irl_costmaps.geometry_utils import apply_footprint
 
-from maxent_irl_costmaps.networks.mlp import MLP
-from maxent_irl_costmaps.networks.resnet import ResnetCostmapCNN
-
 from physics_atv_visual_mapping.pointcloud_colorization.torch_color_pcl_utils import *
 
 class PlannerIRLSpeedmaps:
@@ -40,7 +37,7 @@ class PlannerIRLSpeedmaps:
             d. Get empirical feature counts from the MPPI solver (maybe try the weighted trick)
         e. Match feature expectations
     """
-    def __init__(self, network, opt, expert_dataset, planner, footprint, batch_size=64, speed_coeff=1.0, reg_coeff=1e-2, grad_clip=1., device='cpu'):
+    def __init__(self, network, opt, expert_dataset, planner, footprint, batch_size=64, speed_coeff=1.0, reg_coeff=1e-2, grad_clip=1., categorical_speedmaps=False, device='cpu'):
         """
         Args:
             network: the network to use for predicting costmaps
@@ -53,6 +50,7 @@ class PlannerIRLSpeedmaps:
         self.footprint = footprint
         self.planner = planner
         self.length_weight = 0.05
+        self.categorical_speedmaps = categorical_speedmaps
 
         self.network = network
 
@@ -214,14 +212,36 @@ class PlannerIRLSpeedmaps:
                 'width': batch['metadata']['width'].mean().item(),
                 'origin': batch['metadata']['origin'][bi]
             }
-            esm = get_speedmap(expert_traj[bi].unsqueeze(0), map_params_b).view(speedmaps.loc[bi].shape)
+            #no footprint
+            epos = expert_traj[bi][:, :2].unsqueeze(0)
+            espeeds = torch.linalg.norm(expert_traj[bi][:, 7:10], dim=-1).unsqueeze(0)
+            esm = get_speedmap(epos, espeeds, map_params_b).view(costmaps[bi].shape)
+
+            #footprint
+#            epos = apply_footprint(expert_kbm_traj[bi].unsqueeze(0), self.footprint).view(1, -1, 2)
+#            espeeds = torch.linalg.norm(expert_traj[bi][:, 7:10], dim=-1).unsqueeze(0)
+#            espeeds = espeeds.unsqueeze(2).tile(1, 1, len(self.footprint)).view(1, -1)
+#            esm = get_speedmap(epos, espeeds, map_params_b).view(costmaps[bi].shape)
+
             expert_speedmaps.append(esm)
 
         expert_speedmaps = torch.stack(expert_speedmaps, dim=0)
 
-        mask = (expert_speedmaps > 1e-2) #only need the cells that the expert drove in
-        ll = -speedmaps.log_prob(expert_speedmaps)[mask]
-        speed_loss = ll.mean() * self.speed_coeff
+        if self.categorical_speedmaps:
+            #bin expert speeds
+            _sbins = self.network.speed_bins[:-1].to(self.device).view(1, -1, 1, 1)
+            sdiffs = expert_speedmaps.unsqueeze(1) - _sbins
+            sdiffs[sdiffs < 0] = 1e10
+            expert_speed_idxs = sdiffs.argmin(dim=1)
+
+            mask = (expert_speedmaps > 1e-2) #only want the cells that the expert drove in
+            ce = torch.nn.functional.cross_entropy(speedmaps, expert_speed_idxs, reduction='none')[mask]
+            speed_loss = ce.mean() * self.speed_coeff
+
+        else:
+            mask = (expert_speedmaps > 1e-2) #only need the cells that the expert drove in
+            ll = -speedmaps.log_prob(expert_speedmaps)[mask]
+            speed_loss = ll.mean() * self.speed_coeff
 
 #        print('IRL GRAD:   {:.4f}'.format(torch.linalg.norm(grads).detach().cpu().item()))
 #        print('SPEED LOSS: {:.4f}'.format(speed_loss.detach().item()))
@@ -268,11 +288,28 @@ class PlannerIRLSpeedmaps:
             if hasattr(self.network, 'ensemble_forward'):
                 res = self.network.ensemble_forward(map_features)
                 costmap = res['costmap'].mean(dim=1)[:, 0]
-                speedmap = torch.distributions.Normal(loc=res['speedmap'].loc.mean(dim=1), scale=res['speedmap'].scale.mean(dim=1))
+
+                if self.categorical_speedmaps:
+                    _speeds = self.network.speed_bins[1:].to(self.device).view(1, -1, 1, 1)
+                    speedmap_dist = res['speedmap'][0].softmax(dim=1)
+                    speedmap_val = (_speeds * speedmap_dist).sum(dim=1).mean(dim=0)
+                    speedmap_unc = (-speedmap_dist * speedmap_dist.log()).sum(dim=1).mean(dim=0)
+                else:
+                    speedmap_val = res['speedmap'].loc[0].mean(dim=0)
+                    speedmap_unc = res['speedmap'].scale[0].mean(dim=0)
+
             else:
+                print('non ensemble currently broken')
+                exit(1)
                 res = self.network.forward(map_features)
                 costmap = res['costmap'][:, 0]
-                speedmap = torch.distributions.Normal(loc=res['speedmap'].loc, scale=res['speedmap'].scale)
+
+
+                if self.categorical_speedmaps:
+                    speedmap_val = None
+                    speedmap_unc = None
+                else:
+                    import pdb;pdb.set_trace()
 
             #initialize solver
             initial_pos = expert_kbm_traj[0]
@@ -322,9 +359,8 @@ class PlannerIRLSpeedmaps:
             axs[1].imshow(map_features[0][idx].cpu(), origin='lower', cmap='gray', extent=(xmin, xmax, ymin, ymax))
 #            m1 = axs[2].imshow(costmap.mean(dim=0).cpu(), origin='lower', cmap='plasma', extent=(xmin, xmax, ymin, ymax), vmin=0., vmax=2.)
             m1 = axs[2].imshow(costmap[0].cpu(), origin='lower', cmap='jet', extent=(xmin, xmax, ymin, ymax))
-            m2 = axs[3].imshow(speedmap.loc[0].cpu() - speedmap.scale[0].cpu(), origin='lower', cmap='jet', extent=(xmin, xmax, ymin, ymax), vmin=0., vmax=5.)
-            m3 = axs[4].imshow(speedmap.loc[0].cpu(), origin='lower', cmap='jet', extent=(xmin, xmax, ymin, ymax), vmin=0., vmax=5.)
-            m4 = axs[5].imshow(speedmap.scale[0].cpu(), origin='lower', cmap='bwr', extent=(xmin, xmax, ymin, ymax), vmin=0., vmax=10.)
+            m3 = axs[4].imshow(speedmap_val.cpu(), origin='lower', cmap='jet', extent=(xmin, xmax, ymin, ymax), vmin=0., vmax=10.)
+            m4 = axs[5].imshow(speedmap_unc.cpu(), origin='lower', cmap='viridis', extent=(xmin, xmax, ymin, ymax))
 
 #            axs[0].plot(expert_traj_px[:, 0], expert_traj_px[:, 1], c='y')
             axs[1].plot(expert_traj[:, 0].cpu(), expert_traj[:, 1].cpu(), c='y', label='expert')
@@ -349,7 +385,7 @@ class PlannerIRLSpeedmaps:
             axs[2].set_title('irl cost (clipped)')
             axs[3].set_title('speedmap lcb (z=-1)')
             axs[4].set_title('speedmap mean')
-            axs[5].set_title('speedmap std')
+            axs[5].set_title('speedmap unc')
 
             for i in [1, 2, 4, 5]:
                 axs[i].set_xlabel('X(m)')
@@ -358,7 +394,6 @@ class PlannerIRLSpeedmaps:
             axs[1].legend()
 
             plt.colorbar(m1, ax=axs[2])
-            plt.colorbar(m2, ax=axs[3])
             plt.colorbar(m3, ax=axs[4])
             plt.colorbar(m4, ax=axs[5])
         return fig, axs

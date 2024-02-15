@@ -13,9 +13,6 @@ from maxent_irl_costmaps.costmappers.linear_costmapper import LinearCostMapper
 from maxent_irl_costmaps.utils import get_state_visitations, get_speedmap
 from maxent_irl_costmaps.geometry_utils import apply_footprint
 
-from maxent_irl_costmaps.networks.mlp import MLP
-from maxent_irl_costmaps.networks.resnet import ResnetCostmapCNN
-
 class MPPIIRLSpeedmaps:
     """
     This is the same as MPPI IRL, but in addition to the IRL, also learn a speed map via MLE to expert speed

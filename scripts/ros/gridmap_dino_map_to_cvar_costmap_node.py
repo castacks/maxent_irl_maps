@@ -1,8 +1,9 @@
 #! /usr/bin/python3
 
+import os
 import rospy
-import numpy as np
 import torch
+import numpy as np
 
 from std_msgs.msg import Float32MultiArray, MultiArrayDimension, Float32
 from nav_msgs.msg import OccupancyGrid, Odometry
@@ -10,12 +11,14 @@ from grid_map_msgs.msg import GridMap
 
 from rosbag_to_dataset.dtypes.gridmap import GridMapConvert
 
+from maxent_irl_costmaps.experiment_management.parse_configs import setup_experiment
+
 class CvarCostmapperNode:
     """
     Node that listens to gridmaps from perception and uses IRL nets to make them into costmaps
     In addition to the baseline costmappers, take in a CVaR value from -1.0 to 1.0 and use an ensemble of costmaps
     """
-    def __init__(self, grid_map_topic, dino_map_topic, cost_map_topic, speed_map_topic, odom_topic, cvar_topic, speedmap_lcb_topic, dataset, network, obstacle_threshold, vmin, vmax, publish_gridmap, device):
+    def __init__(self, grid_map_topic, dino_map_topic, cost_map_topic, speed_map_topic, odom_topic, cvar_topic, speedmap_lcb_topic, dataset, network, obstacle_threshold, categorical_speedmaps, vmin, vmax, publish_gridmap, device):
         """
         Args:
             grid_map_topic: the topic to get map features from
@@ -27,6 +30,7 @@ class CvarCostmapperNode:
             speedmap_lcb_topic: The topic to listen to speedmap lcb from
             dataset: The dataset that the network was trained on. (Need to get feature mean/var)
             obstacle_threshold: value above which cells are treated as infinite-cost obstacles
+            categorical_speedmaps: whether speedmaps are given as a categorical
             vmin: For viz, this quantile of the costmap is set as 0 cost
             vmax: For viz, this quantile of the costmaps is set as 1 cost
             publish_gridmap: If true, publish costmap as a GridMap, else OccupancyGrid
@@ -38,6 +42,7 @@ class CvarCostmapperNode:
 #        self.map_metadata = dataset.metadata
         self.network = network.to(device)
         self.obstacle_threshold = obstacle_threshold
+        self.categorical_speedmaps = categorical_speedmaps
 
         self.vmin = vmin
         self.vmax = vmax
@@ -164,14 +169,19 @@ class CvarCostmapperNode:
         with torch.no_grad():
             res = self.network.ensemble_forward(map_feats_norm.view(1, *map_feats_norm.shape))
             costmaps = res['costmap'][0, :, 0]
-            speedmap_means = res['speedmap'].loc[0, :] + self.speedmap_lcb * res['speedmap'].scale[0, :]
+
+            if self.categorical_speedmaps:
+                _speeds = self.network.speed_bins[1:].to(self.device).view(1, -1, 1, 1)
+                speedmap_dist = res['speedmap'][0].softmax(dim=1)
+                speedmap = (_speeds * speedmap_dist).sum(dim=1).mean(dim=0)
+            else:
+                speedmap = (res['speedmap'].loc[0, :] + self.speedmap_lcb * res['speedmap'].scale[0, :]).mean(dim=0)
 
         cvar_costmap = self.compute_map_cvar(costmaps, self.cvar)
-        cvar_speedmap = self.compute_map_cvar(speedmap_means, 0.)
 
         #experiment w/ normalizing
         rospy.loginfo_throttle(1.0, "cost min = {:.4f}, max = {:.4f}".format(cvar_costmap.min(), cvar_costmap.max()))
-        rospy.loginfo_throttle(1.0, "speed min = {:.4f}, max = {:.4f}".format(cvar_speedmap.min(), cvar_speedmap.max()))
+        rospy.loginfo_throttle(1.0, "speed min = {:.4f}, max = {:.4f}".format(speedmap.min(), speedmap.max()))
 
 #        vmin_val = torch.quantile(cvar_costmap, self.vmin)
 #        vmax_val = torch.quantile(cvar_costmap, self.vmax)
@@ -202,7 +212,7 @@ class CvarCostmapperNode:
         costmap_msg = self.costmap_to_gridmap(costmap_occgrid, msg) if self.publish_gridmap else self.costmap_to_occgrid(costmap_occgrid.astype(np.int32), msg)
         self.cost_map_pub.publish(costmap_msg)
 
-        speedmap_msg = self.costmap_to_gridmap(cvar_speedmap.cpu().numpy(), msg, costmap_layer='speedmap')
+        speedmap_msg = self.costmap_to_gridmap(speedmap.cpu().numpy(), msg, costmap_layer='speedmap')
         self.speed_map_pub.publish(speedmap_msg)
 
         t2 = rospy.Time.now().to_sec()
@@ -283,9 +293,13 @@ if __name__ == '__main__':
     publish_gridmap = rospy.get_param('~publish_gridmap')
 
     device = rospy.get_param('~device', 'cuda')
-    mppi_irl = torch.load(model_fp, map_location=device)
+
+    param_fp = os.path.join(os.path.split(model_fp)[0], '_params.yaml')
+    mppi_irl = setup_experiment(param_fp)['algo']
+
+    mppi_irl.network.load_state_dict(torch.load(model_fp))
     mppi_irl.network.eval()
 
-    costmapper = CvarCostmapperNode(grid_map_topic, dino_map_topic, cost_map_topic, speed_map_topic, odom_topic, cvar_topic, speedmap_lcb_topic, mppi_irl.expert_dataset, mppi_irl.network, obstacle_threshold, vmin, vmax, publish_gridmap, device)
+    costmapper = CvarCostmapperNode(grid_map_topic, dino_map_topic, cost_map_topic, speed_map_topic, odom_topic, cvar_topic, speedmap_lcb_topic, mppi_irl.expert_dataset, mppi_irl.network, obstacle_threshold, mppi_irl.categorical_speedmaps, vmin, vmax, publish_gridmap, device)
 
     rospy.spin()

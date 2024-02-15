@@ -2,8 +2,8 @@
 
 <launch>
     <!-- File management -->
-	<arg name="model_fp" default="../models/yamaha/geom_resnet.pt"/>
-    <arg name="obstacle_threshold" default="10.0"/>
+	<arg name="model_fp" default="../models/yamaha/categorical_speed_only_geom/itr_3.pt"/>
+    <arg name="obstacle_threshold" default="1.0"/>
     <arg name="publish_gridmap" default="true"/>
     <arg name="device" default="cuda"/>
 

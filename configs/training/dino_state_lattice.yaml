@@ -1,6 +1,6 @@
 experiment:
     save_to: /home/physics_atv/workspace/experiments/yamaha_irl_dino
-    name: geometry_only
+    name: debug_only_geom
     device: cuda
     epochs: 3
     steps_per_epoch: -1
@@ -56,7 +56,7 @@ network:
 
     type: ResnetCostmapSpeedmapCNNEnsemble2
     params:
-        ensemble_dim: 4
+        ensemble_dim: 2
         hidden_channels: [64, ]
         hidden_activation: tanh
         activation_type: addmin #planner needs nonnegative costs

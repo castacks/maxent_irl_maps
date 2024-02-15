@@ -1,8 +1,10 @@
+import os
 import torch
-import matplotlib.pyplot as plt
 import argparse
+import matplotlib.pyplot as plt
 
 from maxent_irl_costmaps.dataset.maxent_irl_dataset import MaxEntIRLDataset
+from maxent_irl_costmaps.experiment_management.parse_configs import setup_experiment
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -12,7 +14,11 @@ if __name__ == '__main__':
     parser.add_argument('--device', type=str, required=False, default='cpu', help='the device to run on')
     args = parser.parse_args()
 
-    res = torch.load(args.model_fp).to(args.device)
+    param_fp = os.path.join(os.path.split(args.model_fp)[0], '_params.yaml')
+    res = setup_experiment(param_fp)['algo']
+
+    res.network.load_state_dict(torch.load(args.model_fp))
+    res.network.eval()
 
     dataset = MaxEntIRLDataset(
         root_fp = args.test_fp,
