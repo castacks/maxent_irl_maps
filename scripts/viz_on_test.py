@@ -15,7 +15,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     param_fp = os.path.join(os.path.split(args.model_fp)[0], '_params.yaml')
-    res = setup_experiment(param_fp)['algo']
+    res = setup_experiment(param_fp)['algo'].to(args.device)
 
     res.network.load_state_dict(torch.load(args.model_fp))
     res.network.eval()

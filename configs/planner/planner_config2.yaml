@@ -1,8 +1,8 @@
 primitives:
     L: 5.0
     linear_resolution: 1.0
-    angular_discretization: 32
-    angular_weight: 100.
+    angular_discretization: 16
+    angular_weight: 1.
     maxdist: 5.
 
 state_lattice:
