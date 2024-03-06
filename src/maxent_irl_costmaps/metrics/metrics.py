@@ -69,45 +69,36 @@ def get_metrics_planner(experiment, metric_fns = {}, frame_skip=1, viz=True, sav
             # setup start state
             angles = torch.linspace(0., 2*np.pi, experiment.planner.primitives['angnum']+1, device=experiment.planner.device)
 
-            sgx = (initial_pos[0] - metadata['origin'][0] / experiment.planner.primitives['lindisc']).round().clip(0, experiment.planner.states.shape[0]-1)
-            sgy = (initial_pos[1] - metadata['origin'][1] / experiment.planner.primitives['lindisc']).round().clip(0, experiment.planner.states.shape[1]-1)
+            sgx = ((initial_pos[0] - metadata['origin'][0]) / experiment.planner.primitives['lindisc']).round().clip(0, experiment.planner.states.shape[0]-1)
+            sgy = ((initial_pos[1] - metadata['origin'][1]) / experiment.planner.primitives['lindisc']).round().clip(0, experiment.planner.states.shape[1]-1)
             sga = (initial_pos[2] - angles).abs().argmin(dim=-1) % experiment.planner.primitives['angnum']
             start_state = torch.stack([sgx, sgy, sga], dim=-1).long()
 
             # setup goal state
-            ggx = (goal_pos[0] - metadata['origin'][0] / experiment.planner.primitives['lindisc']).round().clip(0, experiment.planner.states.shape[0]-1)
-            ggy = (goal_pos[1] - metadata['origin'][1] / experiment.planner.primitives['lindisc']).round().clip(0, experiment.planner.states.shape[1]-1)
+            ggx = ((goal_pos[0] - metadata['origin'][0]) / experiment.planner.primitives['lindisc']).round().clip(0, experiment.planner.states.shape[0]-1)
+            ggy = ((goal_pos[1] - metadata['origin'][1]) / experiment.planner.primitives['lindisc']).round().clip(0, experiment.planner.states.shape[1]-1)
             gga = (goal_pos[2] - angles).abs().argmin(dim=-1) % experiment.planner.primitives['angnum']
 
             goal_state = torch.stack([ggx, ggy, gga], dim=-1).long()
 
-            trajs = []
-            for bi in range(start_state.shape[0]):
-                experiment.planner.load_costmap(costmap[0].T, length_weight=0.1)
-                solution = experiment.planner.solve(goal_states = goal_state.unsqueeze(0), max_itrs=1000)
-                traj = experiment.planner.extract_solution_parallel(solution, start_state.unsqueeze(0))[0].float()
-                traj[:, 0] += initial_pos[0]
-                traj[:, 1] += initial_pos[1]
-                trajs.append(traj)
+            experiment.planner.load_costmap(costmap[0].T, length_weight=0.1)
+            solution = experiment.planner.solve(goal_states = goal_state.unsqueeze(0), max_itrs=1000)
+            traj = experiment.planner.extract_solution_parallel(solution, start_state.unsqueeze(0))[0].float()
+            traj[:, 0] += initial_pos[0]
+            traj[:, 1] += initial_pos[1]
 
-            trajs = torch.stack(trajs, dim=0) 
-
-            footprint_learner_traj = apply_footprint(trajs.unsqueeze(0), experiment.footprint).view(1, -1, 2)
-            footprint_expert_traj = apply_footprint(expert_kbm_traj.unsqueeze(0), experiment.footprint).view(1, -1, 2)
-
-            learner_state_visitations = get_state_visitations(footprint_learner_traj, metadata)
-            expert_state_visitations = get_state_visitations(footprint_expert_traj, metadata)
-
-#            learner_state_visitations = get_state_visitations(trajs, metadata, weights)
-#            expert_state_visitations = get_state_visitations(expert_traj.unsqueeze(0), metadata)
+            learner_state_visitations = get_state_visitations(traj.unsqueeze(0), metadata)
+            expert_state_visitations = get_state_visitations(expert_kbm_traj.unsqueeze(0), metadata)
 
             for k, fn in metric_fns.items():
                 metrics_res[k].append(fn(costmap, expert_traj_clip, traj, expert_state_visitations, learner_state_visitations).cpu().item())
 
             fig, axs = experiment.visualize(i)
 
-            for ax in axs[1:]:
-                ax.plot(expert_traj_clip[:, 0].cpu(), expert_traj_clip[:, 1].cpu(), c='r')
+            #debug
+#            for ax in axs[1:]:
+#                ax.plot(expert_traj_clip[:, 0].cpu(), expert_traj_clip[:, 1].cpu(), c='r')
+#                ax.plot(traj[:, 0].cpu(), traj[:, 1].cpu(), c='m')
 
             title = ''
             for k,v in metrics_res.items():
@@ -116,7 +107,8 @@ def get_metrics_planner(experiment, metric_fns = {}, frame_skip=1, viz=True, sav
 
             if viz:
                 plt.savefig(os.path.join(save_fp, 'figs', '{:06d}.png'.format(i)))
-                plt.close()
+
+            plt.close()
 
             #idk why I have to do this
             if i == (len(experiment.expert_dataset)-1):

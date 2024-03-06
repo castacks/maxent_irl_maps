@@ -1,5 +1,5 @@
 src_dir: /home/physics_atv/workspace/datasets/irl_postproc
-dst_dir: /home/physics_atv/workspace/datasets/irl_postpostproc
+dst_dir: /home/physics_atv/workspace/datasets/irl_postpostproc3
 save_every: 20 #add every n-th frame
 
 H: 100

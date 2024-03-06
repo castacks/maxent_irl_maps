@@ -12,9 +12,7 @@ from maxent_irl_costmaps.os_utils import maybe_mkdir
 from maxent_irl_costmaps.metrics.metrics import *
 from maxent_irl_costmaps.metrics.speedmap_metrics import *
 
-from maxent_irl_costmaps.dataset.dino_map_dataset import DinoMapDataset
-
-from maxent_irl_costmaps.networks.baseline_lethal_height import LethalHeightCostmap
+from maxent_irl_costmaps.experiment_management.parse_configs import setup_experiment
 
 if __name__ == '__main__':
     torch.set_printoptions(sci_mode=False)
@@ -22,24 +20,23 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--save_fp', type=str, required=True, help='path to save figs to')
     parser.add_argument('--model_fp', type=str, required=True, help='Costmap weights file')
-    parser.add_argument('--preprocess_fp', type=str, required=True, help='dir to save preprocessed data to')
+    parser.add_argument('--test_fp', type=str, required=True, help='dir to save preprocessed data to')
     parser.add_argument('--viz', action='store_true', required=False, help='set this flag to visualize output')
     parser.add_argument('--use_planner', action='store_true', required=False, help='set this if optimizer is planner')
     parser.add_argument('--device', type=str, required=False, default='cpu', help='device to run script on')
     args = parser.parse_args()
 
-    model = torch.load(args.model_fp, map_location='cpu')
+    param_fp = os.path.join(os.path.split(args.model_fp)[0], '_params.yaml')
+    model = setup_experiment(param_fp)['algo'].to(args.device)
+
+    model.network.load_state_dict(torch.load(args.model_fp))
     model.network.eval()
 
-    dataset = DinoMapDataset(
-        fp=args.preprocess_fp,
-        dino_n=model.expert_dataset.dino_n,
-        positional_n=model.expert_dataset.positional_n,
+    dataset = MaxEntIRLDataset(
+        root_fp = args.test_fp,
+        feature_keys = model.expert_dataset.feature_keys
     ).to(args.device)
     model.expert_dataset = dataset
-
-#    if args.baseline:
-#        model.network = LethalHeightCostmap(dataset).to(args.device)
 
     model = model.to(args.device)
 

@@ -165,8 +165,11 @@ class PlannerIRLSpeedmaps:
             traj[:, 0] += initial_pos[bi, 0]
             traj[:, 1] += initial_pos[bi, 1]
 
-            footprint_learner_traj = apply_footprint(traj.unsqueeze(0), self.footprint).view(1, -1, 2)
-            footprint_expert_traj = apply_footprint(expert_kbm_traj[bi].unsqueeze(0), self.footprint).view(1, -1, 2)
+#            footprint_learner_traj = apply_footprint(traj.unsqueeze(0), self.footprint).view(1, -1, 2)
+#            footprint_expert_traj = apply_footprint(expert_kbm_traj[bi].unsqueeze(0), self.footprint).view(1, -1, 2)
+
+            footprint_learner_traj = traj.unsqueeze(0)
+            footprint_expert_traj = expert_kbm_traj[bi].unsqueeze(0)
 
             lsv = get_state_visitations(footprint_learner_traj, map_params_b)
             esv = get_state_visitations(footprint_expert_traj, map_params_b)
@@ -236,7 +239,15 @@ class PlannerIRLSpeedmaps:
 
             mask = (expert_speedmaps > 1e-2) #only want the cells that the expert drove in
             ce = torch.nn.functional.cross_entropy(speedmaps, expert_speed_idxs, reduction='none')[mask]
-            speed_loss = ce.mean() * self.speed_coeff
+
+#            speed_loss = ce.mean() * self.speed_coeff
+
+
+            #try regularizing speeds to zero
+            neg_labels = torch.zeros_like(expert_speed_idxs)
+            ce_neg = torch.nn.functional.cross_entropy(speedmaps, neg_labels, reduction='none')[~mask]
+
+            speed_loss = ce.mean() * self.speed_coeff + 0.1 * ce_neg.mean()
 
         else:
             mask = (expert_speedmaps > 1e-2) #only need the cells that the expert drove in

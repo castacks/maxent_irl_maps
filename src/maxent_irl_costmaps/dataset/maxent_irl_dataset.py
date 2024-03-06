@@ -94,7 +94,7 @@ class MaxEntIRLDataset(Dataset):
         map_data_clip[fmask] = 10.
 
         if fmask.sum() > 0:
-            print('found NaN in dataset!')
+            print('found NaN in dataset! (fp={})'.format(os.path.join(self.root_fp, self.dpt_fps[idx])))
 
         return {
             'traj': dpt['traj'],
