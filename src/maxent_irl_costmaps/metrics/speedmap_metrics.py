@@ -41,8 +41,9 @@ def get_speedmap_metrics(experiment, frame_skip=1, viz=True, save_fp=""):
                 res = experiment.network.ensemble_forward(map_features[[0]])
 
                 _speeds = experiment.network.speed_bins[1:].to(experiment.device).view(-1, 1, 1)
-                speedmap_dist = res['speedmap'][0].mean(dim=0).softmax(dim=1)
-                speedmap_val = (_speeds * speedmap_dist).mean(dim=0)
+
+                speedmap_dist = res['speedmap'][0].mean(dim=0).softmax(dim=0)
+                speedmap_val = (_speeds * speedmap_dist).sum(dim=0)
 
             else:
                 res = experiment.network.forward(map_features)
