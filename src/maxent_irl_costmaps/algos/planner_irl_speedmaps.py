@@ -341,7 +341,7 @@ class PlannerIRLSpeedmaps:
 
             goal_state = torch.stack([ggx, ggy, gga], dim=-1).long()
 
-            plt.show()
+#            plt.show()
 
             self.planner.load_costmap(costmap[0].T, length_weight=self.length_weight)
             solution = self.planner.solve(goal_states = goal_state.unsqueeze(0), max_itrs=1000)

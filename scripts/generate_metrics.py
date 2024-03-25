@@ -40,7 +40,9 @@ if __name__ == '__main__':
 
     model = model.to(args.device)
 
-    maybe_mkdir(os.path.join(args.save_fp, 'figs'), force=False)
+#    maybe_mkdir(os.path.join(args.save_fp, 'figs'), force=False)
+    maybe_mkdir(os.path.join(args.save_fp, 'figs'), force=True)
+
     metrics = {
         'expert_cost':expert_cost,
         'learner_cost':learner_cost,
