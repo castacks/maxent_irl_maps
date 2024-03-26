@@ -46,7 +46,7 @@ class CvarCostmapperNode:
         self.vmin = vmin
         self.vmax = vmax
         self.cvar = 0.
-        self.speedmap_lcb = -0.5
+        self.speedmap_lcb = 0.5
 
         self.publish_gridmap = publish_gridmap
 
@@ -98,10 +98,10 @@ class CvarCostmapperNode:
             rospy.logerr("CVaR expected to be (-1, 1) exclusive, got {}".format(msg.data))
 
     def handle_lcb(self, msg):
-        if msg.data <= 0.:
+        if msg.data > 0. and msg.data < 1.:
             self.speedmap_lcb = msg.data
         else:
-            rospy.logerr("LCB expected to be nonpositive, got {}".format(msg.data))
+            rospy.logerr("Speed quantile expected to be (0, 1), got {}".format(msg.data))
 
     def create_ego_features(self, keys, nx, ny):
         res = []
@@ -157,9 +157,9 @@ class CvarCostmapperNode:
             costmaps = res['costmap'][0, :, 0]
 
             if self.categorical_speedmaps:
-                _speeds = self.network.speed_bins[1:].to(self.device).view(1, -1, 1, 1)
-                speedmap_dist = res['speedmap'][0].softmax(dim=1)
-                speedmap = (_speeds * speedmap_dist).sum(dim=1).mean(dim=0)
+                speedmap_probs = res['speedmap'][0].mean(dim=0).softmax(dim=0)
+                speedmap_cdf = torch.cumsum(speedmap_probs, dim=0)
+                speedmap = self.compute_speedmap_quantile(speedmap_cdf, self.network.speed_bins.to(self.device), self.speedmap_lcb)
             else:
                 speedmap = (res['speedmap'].loc[0, :] + self.speedmap_lcb * res['speedmap'].scale[0, :]).mean(dim=0)
 
@@ -258,6 +258,42 @@ class CvarCostmapperNode:
         costmap_msg.info.origin.position.z = self.current_height
         costmap_msg.data = costmap.flatten()
         return costmap_msg
+
+    def compute_speedmap_quantile(self, speedmap_cdf, speed_bins, q):
+        """
+        Given a speedmap (parameterized as cdf + bins) and a quantile,
+            compute the speed corresponding to that quantile
+
+        Args:
+            speedmap_cdf: BxWxH Tensor of speedmap cdf
+            speed_bins: B+1 Tensor of bin edges
+            q: float containing the quantile 
+        """
+        B = len(speed_bins)
+        #need to stack zeros to front
+        _cdf = torch.cat([
+            torch.zeros_like(speedmap_cdf[[0]]),
+            speedmap_cdf
+        ], dim=0)
+
+        _cdf = _cdf.view(B, -1)
+
+        _cdiffs = q - _cdf
+        _mask = _cdiffs <= 0
+
+        _qidx = (_cdiffs + 1e10*_mask).argmin(dim=0)
+
+        _cdf_low = _cdf.T[torch.arange(len(_qidx)), _qidx]
+        _cdf_high = _cdf.T[torch.arange(len(_qidx)), _qidx+1]
+
+        _k = (q - _cdf_low) / (_cdf_high - _cdf_low)
+
+        _speedmap_low = speed_bins[_qidx]
+        _speedmap_high = speed_bins[_qidx+1]
+
+        _speedmap = (1-_k) * _speedmap_low + _k * _speedmap_high
+
+        return _speedmap.reshape(*speedmap_cdf.shape[1:])
 
 if __name__ == '__main__':
     rospy.init_node('costmapper_node')

@@ -7,6 +7,42 @@ import matplotlib.pyplot as plt
 from maxent_irl_costmaps.dataset.maxent_irl_dataset import MaxEntIRLDataset
 from maxent_irl_costmaps.experiment_management.parse_configs import setup_experiment
 
+def compute_speedmap_quantile(speedmap_cdf, speed_bins, q):
+    """
+    Given a speedmap (parameterized as cdf + bins) and a quantile,
+        compute the speed corresponding to that quantile
+
+    Args:
+        speedmap_cdf: BxWxH Tensor of speedmap cdf
+        speed_bins: B+1 Tensor of bin edges
+        q: float containing the quantile 
+    """
+    B = len(speed_bins)
+    #need to stack zeros to front
+    _cdf = torch.cat([
+        torch.zeros_like(speedmap_cdf[[0]]),
+        speedmap_cdf
+    ], dim=0)
+
+    _cdf = _cdf.view(B, -1)
+
+    _cdiffs = q - _cdf
+    _mask = _cdiffs <= 0
+
+    _qidx = (_cdiffs + 1e10*_mask).argmin(dim=0)
+
+    _cdf_low = _cdf.T[torch.arange(len(_qidx)), _qidx]
+    _cdf_high = _cdf.T[torch.arange(len(_qidx)), _qidx+1]
+
+    _k = (q - _cdf_low) / (_cdf_high - _cdf_low)
+
+    _speedmap_low = speed_bins[_qidx]
+    _speedmap_high = speed_bins[_qidx+1]
+
+    _speedmap = (1-_k) * _speedmap_low + _k * _speedmap_high
+
+    return _speedmap.reshape(*speedmap_cdf.shape[1:])
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--model_fp', type=str, required=True, help='model to load')
@@ -31,8 +67,9 @@ if __name__ == '__main__':
         idx = np.random.randint(len(dataset))
         dpt = dataset[idx]
 
-        speedmap_probs = res.network.forward(dpt['map_features'].unsqueeze(0))['speedmap'][0].softmax(dim=0)
-        speedmap_cdf = torch.cumsum(speedmap_probs, dim=0)
+        with torch.no_grad():
+            speedmap_probs = res.network.forward(dpt['map_features'].unsqueeze(0))['speedmap'][0].softmax(dim=0)
+            speedmap_cdf = torch.cumsum(speedmap_probs, dim=0)
 
         fig, axs = plt.subplots(2, 5, figsize=(25, 10))
         axs = axs.flatten()
@@ -40,14 +77,9 @@ if __name__ == '__main__':
 
         quantiles = torch.linspace(0.1, 0.9, 9)
         for q, ax in zip(quantiles, axs[1:]):
-            qdiff = q - speedmap_cdf
-            qdiff[qdiff < 0] = 1e10
-            qidx = qdiff.argmin(dim=0)
+            speedmap = compute_speedmap_quantile(speedmap_cdf, res.network.speed_bins.to(args.device), q)
 
-            speedmap_low = res.network.speed_bins[qidx]
-            speedmap_high = res.network.speed_bins[qidx+1]
-
-            ax.imshow(speedmap_high.cpu().T, origin='lower', vmin=res.network.speed_bins[0], vmax=res.network.speed_bins[-1], cmap='jet')
+            ax.imshow(speedmap.cpu().T, origin='lower', vmin=res.network.speed_bins[0], vmax=res.network.speed_bins[-1], cmap='jet')
             ax.set_title('q = {:.2f}'.format(q.item()))
 
         plt.show()
