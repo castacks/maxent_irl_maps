@@ -353,7 +353,7 @@ class PlannerIRLSpeedmaps:
             axs = axs.flatten()
             
             fk = None
-            fklist = ['height_high', 'step', 'diff']
+            fklist = ['height_high', 'step', 'diff', 'dino_0']
             for f in fklist:
                 if f in self.expert_dataset.feature_keys:
                     fk = f
