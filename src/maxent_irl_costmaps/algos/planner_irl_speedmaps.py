@@ -369,7 +369,9 @@ class PlannerIRLSpeedmaps:
             axs[0].imshow(img)
             axs[1].imshow(map_features[0][idx].cpu(), origin='lower', cmap='gray', extent=(xmin, xmax, ymin, ymax))
 #            m1 = axs[2].imshow(costmap.mean(dim=0).cpu(), origin='lower', cmap='plasma', extent=(xmin, xmax, ymin, ymax), vmin=0., vmax=2.)
-            m1 = axs[2].imshow(costmap[0].cpu(), origin='lower', cmap='jet', extent=(xmin, xmax, ymin, ymax))
+#            m1 = axs[2].imshow(costmap[0].cpu(), origin='lower', cmap='jet', extent=(xmin, xmax, ymin, ymax))
+            m1 = axs[2].imshow(costmap[0].log().cpu(), origin='lower', cmap='jet', extent=(xmin, xmax, ymin, ymax))
+
             m3 = axs[4].imshow(speedmap_val.cpu(), origin='lower', cmap='jet', extent=(xmin, xmax, ymin, ymax), vmin=0., vmax=10.)
             m4 = axs[5].imshow(speedmap_unc.cpu(), origin='lower', cmap='viridis', extent=(xmin, xmax, ymin, ymax))
 
@@ -393,7 +395,8 @@ class PlannerIRLSpeedmaps:
 
             axs[0].set_title('FPV')
             axs[1].set_title('gridmap {}'.format(fk))
-            axs[2].set_title('irl cost (clipped)')
+#            axs[2].set_title('irl cost (clipped)')
+            axs[2].set_title('irl log cost')
             axs[3].set_title('speedmap lcb (z=-1)')
             axs[4].set_title('speedmap mean')
             axs[5].set_title('speedmap unc')

@@ -1,7 +1,5 @@
-# src_dir: /home/physics_atv/workspace/datasets/irl_postproc
-# dst_dir: /home/physics_atv/workspace/datasets/irl_postpostproc
-src_dir: /home/physics_atv/ssd/big_irl_dataset
-dst_dir: /home/physics_atv/ssd/big_irl_dataset_postproc
+src_dir: /home/physics_atv/workspace/datasets/irl_postproc_eval
+dst_dir: /home/physics_atv/workspace/datasets/irl_postpostproc_multimap_eval
 save_every: 20 #add every n-th frame
 
 H: 100

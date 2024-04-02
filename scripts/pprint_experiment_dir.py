@@ -5,6 +5,7 @@ import argparse
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--root_dir', type=str, required=True, help='dir of experiments to compare')
+    parser.add_argument('--metrics_dir', type=str, required=False, default='metrics', help='name of metrics dir')
     args = parser.parse_args()
 
     efps = os.listdir(args.root_dir)
@@ -17,7 +18,7 @@ if __name__ == '__main__':
 
     for efp in efps:
         group = efp[20:]
-        metrics = torch.load(os.path.join(args.root_dir, efp, 'metrics', 'metrics.pt'))
+        metrics = torch.load(os.path.join(args.root_dir, efp, args.metrics_dir, 'metrics.pt'))
 
         for k,v in metrics.items():
             if k not in res[group].keys():
