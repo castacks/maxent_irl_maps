@@ -159,17 +159,27 @@ class PlannerIRLSpeedmaps:
                 'origin': batch['metadata']['origin'][bi]
             }
 
-            self.planner.load_costmap(costmaps[bi].T, length_weight=self.length_weight)
+            self.planner.load_costmap(costmaps[bi].T.detach(), length_weight=self.length_weight)
             solution = self.planner.solve(goal_states = goal_state[bi].unsqueeze(0), max_itrs=1000)
-            traj = self.planner.extract_solution_parallel(solution, start_state[bi].unsqueeze(0))[0].float()
+            traj = self.planner.extract_solution_parallel(solution, start_state[bi].unsqueeze(0))
+
+            if traj is None:
+                learner_state_visitations.append(torch.zeros_like(costmaps[bi]))
+                expert_state_visitations.append(torch.zeros_like(costmaps[bi]))
+                continue
+
+            traj = traj[0].float()
             traj[:, 0] += initial_pos[bi, 0]
             traj[:, 1] += initial_pos[bi, 1]
 
-#            footprint_learner_traj = apply_footprint(traj.unsqueeze(0), self.footprint).view(1, -1, 2)
-#            footprint_expert_traj = apply_footprint(expert_kbm_traj[bi].unsqueeze(0), self.footprint).view(1, -1, 2)
+            footprint_learner_traj = apply_footprint(traj.unsqueeze(0), self.footprint).view(1, -1, 2)
+            footprint_expert_traj = apply_footprint(expert_kbm_traj[bi].unsqueeze(0), self.footprint).view(1, -1, 2)
 
-            footprint_learner_traj = traj.unsqueeze(0)
-            footprint_expert_traj = expert_kbm_traj[bi].unsqueeze(0)
+#            footprint_learner_traj = traj.unsqueeze(0)
+#            footprint_expert_traj = expert_kbm_traj[bi].unsqueeze(0)
+
+            #TODO: soft bellman backups for planner svs
+#            import pdb;pdb.set_trace()
 
             lsv = get_state_visitations(footprint_learner_traj, map_params_b)
             esv = get_state_visitations(footprint_expert_traj, map_params_b)
@@ -216,15 +226,15 @@ class PlannerIRLSpeedmaps:
                 'origin': batch['metadata']['origin'][bi]
             }
             #no footprint
-            epos = expert_traj[bi][:, :2].unsqueeze(0)
-            espeeds = torch.linalg.norm(expert_traj[bi][:, 7:10], dim=-1).unsqueeze(0)
-            esm = get_speedmap(epos, espeeds, map_params_b).view(costmaps[bi].shape)
+#            epos = expert_traj[bi][:, :2].unsqueeze(0)
+#            espeeds = torch.linalg.norm(expert_traj[bi][:, 7:10], dim=-1).unsqueeze(0)
+#            esm = get_speedmap(epos, espeeds, map_params_b).view(costmaps[bi].shape)
 
             #footprint
-#            epos = apply_footprint(expert_kbm_traj[bi].unsqueeze(0), self.footprint).view(1, -1, 2)
-#            espeeds = torch.linalg.norm(expert_traj[bi][:, 7:10], dim=-1).unsqueeze(0)
-#            espeeds = espeeds.unsqueeze(2).tile(1, 1, len(self.footprint)).view(1, -1)
-#            esm = get_speedmap(epos, espeeds, map_params_b).view(costmaps[bi].shape)
+            epos = apply_footprint(expert_kbm_traj[bi].unsqueeze(0), self.footprint).view(1, -1, 2)
+            espeeds = torch.linalg.norm(expert_traj[bi][:, 7:10], dim=-1).unsqueeze(0)
+            espeeds = espeeds.unsqueeze(2).tile(1, 1, len(self.footprint)).view(1, -1)
+            esm = get_speedmap(epos, espeeds, map_params_b).view(costmaps[bi].shape)
 
             expert_speedmaps.append(esm)
 
@@ -345,7 +355,12 @@ class PlannerIRLSpeedmaps:
 
             self.planner.load_costmap(costmap[0].T, length_weight=self.length_weight)
             solution = self.planner.solve(goal_states = goal_state.unsqueeze(0), max_itrs=1000)
-            traj = self.planner.extract_solution_parallel(solution, start_state.unsqueeze(0))[0]
+            traj = self.planner.extract_solution_parallel(solution, start_state.unsqueeze(0))
+
+            if traj is None:
+                return
+            traj = traj[0]
+
             traj[:, 0] += initial_pos[0]
             traj[:, 1] += initial_pos[1]
 

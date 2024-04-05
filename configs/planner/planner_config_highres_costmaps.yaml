@@ -19,5 +19,5 @@ state_lattice:
 costmap:
     length_x: 120.
     length_y: 120.
-    resolution: 0.5
+    resolution: 0.25
     origin: [-60., -60.]

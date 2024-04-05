@@ -65,7 +65,7 @@ class MaxEntIRLDataset(Dataset):
 
             sidxs = torch.randperm(len(mfeats))[:1000]
 
-            fbuf = torch.cat([fbuf, mfeats], axis=0)
+            fbuf = torch.cat([fbuf, mfeats[sidxs]], axis=0)
 
         feature_mean = fbuf.mean(dim=0)
         feature_std = fbuf.std(dim=0)

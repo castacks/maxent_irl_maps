@@ -18,7 +18,7 @@ from maxent_irl_costmaps.algos.planner_irl_speedmaps import PlannerIRLSpeedmaps
 
 from maxent_irl_costmaps.geometry_utils import make_footprint
 
-from maxent_irl_costmaps.networks.resnet import ResnetCostmapSpeedmapCNNEnsemble2, LinearCostmapSpeedmapEnsemble2, ResnetCostmapCategoricalSpeedmapCNNEnsemble2
+from maxent_irl_costmaps.networks.resnet import ResnetCostmapSpeedmapCNNEnsemble2, LinearCostmapSpeedmapEnsemble2, ResnetCostmapCategoricalSpeedmapCNNEnsemble2, ResnetCostmapCategoricalSpeedmapCNNEnsemble3
 
 from maxent_irl_costmaps.dataset.maxent_irl_dataset import MaxEntIRLDataset
 from maxent_irl_costmaps.dataset.preprocess_pointpillars_dataset import PreprocessPointpillarsDataset
@@ -88,6 +88,12 @@ def setup_experiment(fp):
 
     elif network_params['type'] == 'ResnetCostmapCategoricalSpeedmapCNNEnsemble2':
         res['network'] = ResnetCostmapCategoricalSpeedmapCNNEnsemble2(
+            in_channels = len(res['dataset'].feature_keys),
+            **network_params['params']
+        )
+
+    elif network_params['type'] == 'ResnetCostmapCategoricalSpeedmapCNNEnsemble3':
+        res['network'] = ResnetCostmapCategoricalSpeedmapCNNEnsemble3(
             in_channels = len(res['dataset'].feature_keys),
             **network_params['params']
         )
