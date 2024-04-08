@@ -1,0 +1,72 @@
+algo:
+  params:
+    batch_size: 4
+    grad_clip: 1.0
+    reg_coeff: 1.0e-08
+    speed_coeff: 1.0
+  type: PlannerIRLSpeedmaps
+dataset:
+  params:
+    device: cuda
+    feature_keys:
+    - dino_0
+    - dino_1
+    - dino_2
+    - dino_3
+    - dino_4
+    - dino_5
+    - dino_6
+    - dino_7
+    - dino_8
+    - dino_9
+    - dino_10
+    - dino_11
+    - dino_12
+    - dino_13
+    - dino_14
+    - dino_15
+    - terrain
+    - terrain_slope
+    - diff
+    - SVD1
+    - SVD2
+    - SVD3
+    - roughness
+    - unknown
+    root_fp: /home/physics_atv/workspace/datasets/irl_postpostproc_multimap_highres/train
+  type: MaxEntIRLDataset
+experiment:
+  device: cuda
+  epochs: 3
+  name: debug_highres
+  save_every: 1
+  save_to: /home/physics_atv/workspace/experiments/yamaha_irl_dino/
+  steps_per_epoch: -1
+footprint:
+  params:
+    length: 4.0
+    length_offset: -1.0
+    nl: 15
+    nw: 15
+    width: 2.0
+    width_offset: 0.0
+metrics: null
+netopt:
+  params: {}
+  type: Adam
+network:
+  params:
+    activation_scale: 1.0
+    activation_type: exponential
+    dropout: 0.0
+    ensemble_dim: 16
+    hidden_activation: tanh
+    hidden_channels:
+    - 128
+    - 128
+    max_speed: 15.0
+    speed_nbins: 15
+  type: ResnetCostmapCategoricalSpeedmapCNNEnsemble2
+solver:
+  planner_fp: /home/physics_atv/physics_atv_ws/src/perception/maxent_irl_maps/configs/planner/planner_config_highres_costmaps.yaml
+  type: planner

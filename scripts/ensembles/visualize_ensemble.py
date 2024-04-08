@@ -49,7 +49,7 @@ def visualize_ensemble(model, idx):
 
         #plot image, mean costmap, std costmap, and a few samples
         t1 = time.time()
-        res = model.network.ensemble_forward(map_features.view(1, *map_features.shape), ei=3)
+        res = model.network.ensemble_forward(map_features.view(1, *map_features.shape), ne=-1)
         costmaps = res['costmap'][0, :, 0]
         t2 = time.time()
 

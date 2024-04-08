@@ -1,6 +1,6 @@
 experiment:
     save_to: /home/physics_atv/workspace/experiments/yamaha_irl_dino/visual_ablations_50cm
-    name: visual_ablations_dino_pca
+    name: visual_ablations_vlad
     device: cuda
     epochs: 5
     steps_per_epoch: -1
@@ -29,23 +29,16 @@ dataset:
         root_fp: /home/physics_atv/workspace/datasets/irl_postpostproc_multimap/train
         device: cuda
         feature_keys:
-            # DINO
-            - dino_0
-            - dino_1
-            - dino_2
-            - dino_3
-            - dino_4
-            - dino_5
-            - dino_6
-            - dino_7
-            - dino_8
-            - dino_9
-            - dino_10
-            - dino_11
-            - dino_12
-            - dino_13
-            - dino_14
-            - dino_15
+
+            # vlad
+            - VLAD_0
+            - VLAD_1
+            - VLAD_2
+            - VLAD_3
+            - VLAD_4
+            - VLAD_5
+            - VLAD_6
+            - VLAD_7
 
             # geom
             - terrain

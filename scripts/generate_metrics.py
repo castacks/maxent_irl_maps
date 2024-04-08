@@ -40,6 +40,9 @@ if __name__ == '__main__':
 
     model = model.to(args.device)
 
+    if os.path.exists(os.path.join(args.save_fp, 'metrics.pt')):
+        exit(0)
+
 #    maybe_mkdir(os.path.join(args.save_fp, 'figs'), force=False)
     maybe_mkdir(os.path.join(args.save_fp, 'figs'), force=True)
 
