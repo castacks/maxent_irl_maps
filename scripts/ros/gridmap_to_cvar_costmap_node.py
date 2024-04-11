@@ -12,6 +12,7 @@ from grid_map_msgs.msg import GridMap
 from rosbag_to_dataset.dtypes.gridmap import GridMapConvert
 
 from maxent_irl_costmaps.experiment_management.parse_configs import setup_experiment
+from maxent_irl_costmaps.networks.baselines import AlterBaseline, SemanticBaseline, AlterSemanticBaseline
 
 class CvarCostmapperNode:
     """
@@ -313,13 +314,26 @@ if __name__ == '__main__':
 
     publish_gridmap = rospy.get_param('~publish_gridmap')
 
+    baseline = rospy.get_param("~baseline", "none")
+
     device = rospy.get_param('~device', 'cuda')
 
     param_fp = os.path.join(os.path.split(model_fp)[0], '_params.yaml')
     mppi_irl = setup_experiment(param_fp)['algo']
 
-    mppi_irl.network.load_state_dict(torch.load(model_fp))
-    mppi_irl.network.eval()
+    #setup network
+    if baseline == "alter":
+        rospy.loginfo("USING ALTER BASELINE")
+        mppi_irl.network = AlterBaseline(mppi_irl.expert_dataset)
+    elif baseline == "semantic":
+        rospy.loginfo("USING ALTER BASELINE")
+        mppi_irl.network = SemanticBaseline(mppi_irl.expert_dataset)
+    elif baseline == "alter_semantic":
+        rospy.loginfo("USING ALTER BASELINE")
+        mppi_irl.network = AlterSemanticBaseline(mppi_irl.expert_dataset)
+    else:
+        mppi_irl.network.load_state_dict(torch.load(model_fp))
+        mppi_irl.network.eval()
 
     costmapper = CvarCostmapperNode(grid_map_topic, cost_map_topic, speed_map_topic, odom_topic, cvar_topic, speedmap_lcb_topic, mppi_irl.expert_dataset, mppi_irl.network, obstacle_threshold, mppi_irl.categorical_speedmaps, vmin, vmax, publish_gridmap, device)
 

@@ -5,6 +5,7 @@
 	<arg name="model_fp" default="../models/yamaha/2024-03-12-15-59-05_highres_planner/itr_10.pt"/>
     <arg name="obstacle_threshold" default="1.0"/>
     <arg name="publish_gridmap" default="true"/>
+    <arg name="baseline" default="none"/>
     <arg name="device" default="cuda"/>
 
 	<node pkg="maxent_irl_maps" type="gridmap_to_cvar_costmap_node.py" name="maxent_irl_node" output="screen"> 
@@ -18,6 +19,7 @@
         <param name="speedmap_lcb_topic" value="/speedmap_lcb"/>
         <param name="obstacle_threshold" value="$(arg obstacle_threshold)"/>
         <param name="publish_gridmap" value="$(arg publish_gridmap)"/>
+        <param name="baseline" value="$(arg baseline)"/>
         <param name="device" value="$(arg device)"/>
 	</node>
 

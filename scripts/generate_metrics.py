@@ -14,6 +14,8 @@ from maxent_irl_costmaps.metrics.speedmap_metrics import *
 
 from maxent_irl_costmaps.experiment_management.parse_configs import setup_experiment
 
+from maxent_irl_costmaps.networks.baselines import AlterBaseline, SemanticBaseline, AlterSemanticBaseline
+
 if __name__ == '__main__':
     torch.set_printoptions(sci_mode=False)
 
@@ -23,6 +25,8 @@ if __name__ == '__main__':
     parser.add_argument('--test_fp', type=str, required=True, help='dir to save preprocessed data to')
     parser.add_argument('--viz', action='store_true', required=False, help='set this flag to visualize output')
     parser.add_argument('--use_planner', action='store_true', required=False, help='set this if optimizer is planner')
+    parser.add_argument('--alter', action='store_true', required=False, help='set this to run Alter baseline')
+    parser.add_argument('--semantics', action='store_true', required=False, help='set this to run semantics baseline')
     parser.add_argument('--device', type=str, required=False, default='cpu', help='device to run script on')
     args = parser.parse_args()
 
@@ -37,6 +41,18 @@ if __name__ == '__main__':
         feature_keys = model.expert_dataset.feature_keys
     ).to(args.device)
     model.expert_dataset = dataset
+
+    if args.alter:
+        print('using alter...')
+        model.network = AlterBaseline(dataset)
+
+    if args.semantics:
+        print('using semantics...')
+        model.network = SemanticBaseline(dataset)
+
+    if args.alter and args.semantics:
+        print('using alter and semantics...')
+        model.network = AlterSemanticBaseline(dataset)
 
     model = model.to(args.device)
 
