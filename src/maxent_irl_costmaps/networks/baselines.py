@@ -63,7 +63,7 @@ class SemanticBaseline:
 
     For now, here's our semantic cost mapping
     0  -> 10 (obstacle)
-    1  -> 10 (obstacle)
+    1  -> 3 (unknown)
     2  -> 7  (high veg)
     3  -> 0  (sky)
     4  -> 0  (trail)
@@ -78,7 +78,7 @@ class SemanticBaseline:
     def __init__(self, dataset, device='cpu'):
         self.cost_mappings = torch.tensor([
             10.,
-            10.,
+            3.,
             7.,
             0.,
             0.,
@@ -136,7 +136,10 @@ class AlterSemanticBaseline:
         res_alter = self.alter.forward(x, return_features)
         res_semantics = self.semantics.forward(x, return_features)
 
-        return {k: res_alter[k] + res_semantics[k] for k in res_alter.keys()}
+        return {
+            'costmap': torch.maximum(res_alter['costmap'], res_semantics['costmap']),
+            'speedmap': res_alter['speedmap']
+        }
 
     def ensemble_forward(self, x, return_features=True):
         res = self.forward(x, return_features)
@@ -162,11 +165,11 @@ if __name__ == '__main__':
     res['algo'].network.eval()
     dataset = res['dataset']
 
-    alter_baseline = AlterBaseline(dataset).to(res['algo'].device)
-    res['algo'].network = alter_baseline
+#    alter_baseline = AlterBaseline(dataset).to(res['algo'].device)
+#    res['algo'].network = alter_baseline
 
-#    semantic_baseline = SemanticBaseline(dataset).to(res['algo'].device)
-#    res['algo'].network = semantic_baseline
+    semantic_baseline = SemanticBaseline(dataset).to(res['algo'].device)
+    res['algo'].network = semantic_baseline
 
 #    alter_semantic_baseline = AlterSemanticBaseline(dataset).to(res['algo'].device)
 #    res['algo'].network = alter_semantic_baseline
