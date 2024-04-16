@@ -34,6 +34,8 @@ class AlterBaseline:
         svd2s = (x[:, self.svd2_idx] * self.svd2_std) + self.svd2_mean
 
         #theres a 2x multiplier in the paper
+        svd2s *= 2
+
         diff_mask = (diffs > self.diff_thresh).float()
 
         costmap = (diff_mask) * 10. + (1.-diff_mask) * (6.-svd2s)
@@ -52,6 +54,7 @@ class AlterBaseline:
 
     def to(self, device):
         self.device = device
+        self.speed_bins = self.speed_bins.to(device)
         return self
 
 class SemanticBaseline:
@@ -116,6 +119,7 @@ class SemanticBaseline:
     def to(self, device):
         self.device = device
         self.cost_mappings = self.cost_mappings.to(device)
+        self.speed_bins = self.speed_bins.to(device)
         return self
 
 class AlterSemanticBaseline:
@@ -158,14 +162,14 @@ if __name__ == '__main__':
     res['algo'].network.eval()
     dataset = res['dataset']
 
-#    alter_baseline = AlterBaseline(dataset)
-#    res['algo'].network = alter_baseline
+    alter_baseline = AlterBaseline(dataset).to(res['algo'].device)
+    res['algo'].network = alter_baseline
 
 #    semantic_baseline = SemanticBaseline(dataset).to(res['algo'].device)
 #    res['algo'].network = semantic_baseline
 
-    alter_semantic_baseline = AlterSemanticBaseline(dataset).to(res['algo'].device)
-    res['algo'].network = alter_semantic_baseline
+#    alter_semantic_baseline = AlterSemanticBaseline(dataset).to(res['algo'].device)
+#    res['algo'].network = alter_semantic_baseline
 
     for _ in range(100):
         idx = np.random.randint(len(dataset))
