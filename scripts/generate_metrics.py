@@ -45,14 +45,17 @@ if __name__ == '__main__':
     if args.alter:
         print('using alter...')
         model.network = AlterBaseline(dataset)
+        model.categorical_speedmaps = False
 
     if args.semantics:
         print('using semantics...')
         model.network = SemanticBaseline(dataset)
+        model.categorical_speedmaps = False
 
     if args.alter and args.semantics:
         print('using alter and semantics...')
         model.network = AlterSemanticBaseline(dataset)
+        model.categorical_speedmaps = False
 
     model = model.to(args.device)
 
