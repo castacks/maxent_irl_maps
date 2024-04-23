@@ -166,7 +166,6 @@ include_directories(
 catkin_install_python(PROGRAMS
   scripts/ros/gridmap_to_costmap_node.py
   scripts/ros/gridmap_to_cvar_costmap_node.py
-  scripts/ros/gridmap_dino_map_to_cvar_costmap_node.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 

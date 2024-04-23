@@ -1,5 +1,18 @@
 import torch
 
+def speedmap_to_prob_speedmap(speedmap, speed_bins):
+    """
+    Hack to make deterministic speedmaps probabilistic. assign to smallest bin
+    """
+    sdiffs = (speedmap - speed_bins.view(-1, 1, 1)).abs()
+    speed_idx = sdiffs.argmin(dim=0).flatten()
+
+    prob_speedmap = torch.zeros(speedmap.shape[1] * speedmap.shape[2], speed_bins.shape[0]-1)
+    prob_speedmap[torch.arange(speed_idx.shape[0]), speed_idx] = 1e10 #logits, not actual
+    prob_speedmap = prob_speedmap.reshape(speedmap.shape[1], speedmap.shape[2], -1).permute(2,0,1)
+
+    return prob_speedmap
+
 class AlterBaseline:
     """
     Implementation of the cost function from ALTER as a geometric baseline. This cfn is
@@ -7,7 +20,7 @@ class AlterBaseline:
     10 if diff > 1.
     6 - SVD2 otherwise
     """
-    def __init__(self, dataset, diff_thresh=0.1, device='cpu'):
+    def __init__(self, dataset, diff_thresh=0.25, device='cpu'):
         """
         Args:
             dataset: need to pass dataset to unnormalize features and find diff and SVD2 idxs
@@ -25,7 +38,7 @@ class AlterBaseline:
         self.svd2_std = dataset.feature_std[self.svd2_idx].item()
 
         self.diff_thresh = diff_thresh
-        self.speed_bins = torch.arange(11)
+        self.speed_bins = torch.arange(16)
 
         self.device = device
 
@@ -33,15 +46,15 @@ class AlterBaseline:
         diffs = (x[:, self.diff_idx] * self.diff_std) + self.diff_mean
         svd2s = (x[:, self.svd2_idx] * self.svd2_std) + self.svd2_mean
 
-        #theres a 2x multiplier in the paper
-        svd2s *= 2
 
         diff_mask = (diffs > self.diff_thresh).float()
 
-        costmap = (diff_mask) * 10. + (1.-diff_mask) * (6.-svd2s)
+        #theres a multiplier in the paper
+        costmap = (diff_mask) * 10. + (1.-diff_mask) * (6.-6.*svd2s)
 
-        #fake a speedmap
-        speedmap = torch.stack([torch.ones_like(costmap)] * 10, dim=1)
+        speedmap = (5.46 - 1.66*svd2s).clip(0., 10.)
+
+#        speedmap = speedmap_to_prob_speedmap(speedmap, self.speed_bins)
 
         return {
             'costmap': costmap.unsqueeze(1).to(self.device),
@@ -79,7 +92,7 @@ class SemanticBaseline:
         self.cost_mappings = torch.tensor([
             10.,
             3.,
-            7.,
+            10.,
             0.,
             0.,
             0.,
@@ -90,12 +103,28 @@ class SemanticBaseline:
             2.,
             10.,
         ])
+
+        self.speed_mappings = torch.tensor([
+            5.,
+            5.63,
+            5.23,
+            4.99,
+            6.27,
+            5.13,
+            4.97,
+            6.72,
+            5.55,
+            3.70,
+            4.42,
+            4.69
+        ])
+
         self.fidxs = []
         for i in range(12):
             assert 'ganav_{}'.format(i) in dataset.feature_keys, "need 'ganav_{}' in dataset keys for baseline".format(i)
             self.fidxs.append(dataset.feature_keys.index('ganav_{}'.format(i)))
 
-        self.speed_bins = torch.arange(11)
+        self.speed_bins = torch.arange(16)
         self.device = device
 
     def forward(self, x, return_features=True):
@@ -105,7 +134,9 @@ class SemanticBaseline:
         costmap = self.cost_mappings[semantic_argmax]
 
         #fake a speedmap
-        speedmap = torch.stack([torch.ones_like(costmap)] * 10, dim=1)
+        speedmap = self.speed_mappings[semantic_argmax]
+
+#        speedmap = speedmap_to_prob_speedmap(speedmap, self.speed_bins)
 
         return {
             'costmap': costmap.unsqueeze(1).to(self.device),
@@ -119,6 +150,7 @@ class SemanticBaseline:
     def to(self, device):
         self.device = device
         self.cost_mappings = self.cost_mappings.to(device)
+        self.speed_mappings = self.speed_mappings.to(device)
         self.speed_bins = self.speed_bins.to(device)
         return self
 
@@ -129,7 +161,7 @@ class AlterSemanticBaseline:
     def __init__(self, dataset, diff_thresh=0.1, device='cpu'):
         self.alter = AlterBaseline(dataset, diff_thresh, device)
         self.semantics = SemanticBaseline(dataset, device)
-        self.speed_bins = torch.arange(11)
+        self.speed_bins = torch.arange(16)
         self.device = device
 
     def forward(self, x, return_features=True):
@@ -138,7 +170,7 @@ class AlterSemanticBaseline:
 
         return {
             'costmap': torch.maximum(res_alter['costmap'], res_semantics['costmap']),
-            'speedmap': res_alter['speedmap']
+            'speedmap': torch.minimum(res_alter['speedmap'], res_semantics['speedmap']),
         }
 
     def ensemble_forward(self, x, return_features=True):
@@ -165,14 +197,16 @@ if __name__ == '__main__':
     res['algo'].network.eval()
     dataset = res['dataset']
 
+    res['algo'].categorical_speedmaps = False
+
 #    alter_baseline = AlterBaseline(dataset).to(res['algo'].device)
 #    res['algo'].network = alter_baseline
 
-    semantic_baseline = SemanticBaseline(dataset).to(res['algo'].device)
-    res['algo'].network = semantic_baseline
+#    semantic_baseline = SemanticBaseline(dataset).to(res['algo'].device)
+#    res['algo'].network = semantic_baseline
 
-#    alter_semantic_baseline = AlterSemanticBaseline(dataset).to(res['algo'].device)
-#    res['algo'].network = alter_semantic_baseline
+    alter_semantic_baseline = AlterSemanticBaseline(dataset).to(res['algo'].device)
+    res['algo'].network = alter_semantic_baseline
 
     for _ in range(100):
         idx = np.random.randint(len(dataset))

@@ -316,8 +316,11 @@ class PlannerIRLSpeedmaps:
                     speedmap_val = (_speeds * speedmap_dist).sum(dim=1).mean(dim=0)
                     speedmap_unc = (-speedmap_dist * speedmap_dist.log()).sum(dim=1).mean(dim=0)
                 else:
-                    speedmap_val = res['speedmap'].loc[0].mean(dim=0)
-                    speedmap_unc = res['speedmap'].scale[0].mean(dim=0)
+#                    speedmap_val = res['speedmap'].loc[0].mean(dim=0)
+#                    speedmap_unc = res['speedmap'].scale[0].mean(dim=0)
+
+                     speedmap_val = res['speedmap'][0].mean(dim=0)
+                     speedmap_unc = torch.zeros_like(speedmap_val)
 
             else:
                 print('non ensemble currently broken')
