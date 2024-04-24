@@ -162,7 +162,8 @@ class CvarCostmapperNode:
                 speedmap_cdf = torch.cumsum(speedmap_probs, dim=0)
                 speedmap = self.compute_speedmap_quantile(speedmap_cdf, self.network.speed_bins.to(self.device), self.speedmap_lcb)
             else:
-                speedmap = (res['speedmap'].loc[0, :] + self.speedmap_lcb * res['speedmap'].scale[0, :]).mean(dim=0)
+#                speedmap = (res['speedmap'].loc[0, :] + self.speedmap_lcb * res['speedmap'].scale[0, :]).mean(dim=0)
+                speedmap = res['speedmap'][0, 0]
 
         cvar_costmap = self.compute_map_cvar(costmaps, self.cvar)
 
@@ -325,12 +326,15 @@ if __name__ == '__main__':
     if baseline == "alter":
         rospy.loginfo("USING ALTER BASELINE")
         mppi_irl.network = AlterBaseline(mppi_irl.expert_dataset)
+        mppi_irl.categorical_speedmaps = False
     elif baseline == "semantic":
-        rospy.loginfo("USING ALTER BASELINE")
+        rospy.loginfo("USING SEMANTIC BASELINE")
         mppi_irl.network = SemanticBaseline(mppi_irl.expert_dataset)
+        mppi_irl.categorical_speedmaps = False
     elif baseline == "alter_semantic":
-        rospy.loginfo("USING ALTER BASELINE")
+        rospy.loginfo("USING ALTER+SEMANTIC BASELINE")
         mppi_irl.network = AlterSemanticBaseline(mppi_irl.expert_dataset)
+        mppi_irl.categorical_speedmaps = False
     else:
         mppi_irl.network.load_state_dict(torch.load(model_fp))
         mppi_irl.network.eval()
