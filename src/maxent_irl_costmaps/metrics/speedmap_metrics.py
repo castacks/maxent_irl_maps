@@ -73,4 +73,6 @@ def get_speedmap_metrics(experiment, frame_skip=1, viz=True, save_fp=""):
                 speedmap_err = (speedmap_val - esm).abs()[mask]
                 metrics_res['speedmap_l1_err'].append(speedmap_err.mean())
 
+    print(torch.tensor(metrics_res['speedmap_l1_err']).mean())
+
     return {k:torch.tensor(v) for k,v in metrics_res.items()}

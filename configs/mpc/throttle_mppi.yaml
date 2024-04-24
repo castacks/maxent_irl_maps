@@ -68,8 +68,9 @@ cost_function:
         - type: FootprintCostmapProjection
           weight: 1.0
           args:
-            length: 6.0
-            width: 4.0
+            costmap_key: costmap
+            length: 4.0
+            width: 2.0
             length_offset: -1.0
             width_offset: 0.0
             nl: 5
@@ -78,6 +79,7 @@ cost_function:
         - type: EuclideanDistanceToGoal
           weight: 5.0
           args:
+            goal_key: goals
 
 update_rule:
     type: MPPI

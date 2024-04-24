@@ -122,7 +122,7 @@ def setup_experiment(fp):
         mpc_config = yaml.safe_load(open(experiment_dict['solver']['mpc_fp'], 'r'))
         #have to make batching params match top-level config
         mpc_config['common']['B'] = experiment_dict['algo']['params']['batch_size']
-        mpc_config['common']['H'] = res['dataset'].horizon
+        mpc_config['common']['H'] = res['dataset'][0]['traj'].shape[0]
         res['trajopt'] = setup_mpc(mpc_config)
 
     elif solver_params['type'] == 'planner':

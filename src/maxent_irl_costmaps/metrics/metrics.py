@@ -173,23 +173,27 @@ def get_metrics(experiment, metric_fns = {}, frame_skip=1, viz=True, save_fp="")
                 'origin': torch.stack([metadata['origin']] * experiment.mppi.B, dim=0)
             }
 
+            #TEMP HACK - Sam TODO: clean up once data is on cluster
+            map_params['length_x'] = map_params['width']
+            map_params['length_y'] = map_params['height']
+
             goals = [expert_traj[[-1], :2]] * experiment.mppi.B
 
             #also get KBM states for expert
             X_expert = {
                 'state': expert_traj,
-                'steer_angle': data['steer'].unsqueeze(-1) if 'steer' in data.keys() else torch.zeros(experiment.mppi.B, experiment.mppi.T, 1, device=initial_states.device)
+                'steer_angle': data['steer'][:expert_traj.shape[0]].unsqueeze(-1) if 'steer' in data.keys() else torch.zeros(experiment.mppi.B, expert_traj.shape[0], 1, device=initial_states.device)
             }
             expert_kbm_traj = experiment.mppi.model.get_observations(X_expert)
 
+            goals = [experiment.clip_to_map_bounds(expert_traj[:, :2], metadata).view(1, 2)] * experiment.mppi.B
+
             experiment.mppi.reset()
             experiment.mppi.cost_fn.data['goals'] = goals
-            experiment.mppi.cost_fn.data['costmap'] = costmap
-            experiment.mppi.cost_fn.data['costmap_metadata'] = map_params
-
-            #TEMP HACK - Sam TODO: clean up once data is on cluster
-            experiment.mppi.cost_fn.data['costmap_metadata']['length_x'] = experiment.mppi.cost_fn.data['costmap_metadata']['width']
-            experiment.mppi.cost_fn.data['costmap_metadata']['length_y'] = experiment.mppi.cost_fn.data['costmap_metadata']['height']
+            experiment.mppi.cost_fn.data['costmap'] = {
+                'data': costmap,
+                'metadata': map_params
+            }
 
             #solve for traj
             for ii in range(experiment.mppi_itrs):
@@ -213,30 +217,12 @@ def get_metrics(experiment, metric_fns = {}, frame_skip=1, viz=True, save_fp="")
             for k, fn in metric_fns.items():
                 metrics_res[k].append(fn(costmap, expert_traj, traj, expert_state_visitations, learner_state_visitations).cpu().item())
 
-            xmin = metadata['origin'][0].cpu()
-            ymin = metadata['origin'][1].cpu()
-            xmax = xmin + metadata['width'].cpu()
-            ymax = ymin + metadata['height'].cpu()
+            fig, axs = experiment.visualize(i)
 
-            fig, axs = plt.subplots(2, 2, figsize=(18, 18))
-            axs = axs.flatten()
-
-            axs[0].imshow(data['image'].permute(1, 2, 0)[:, :, [2, 1, 0]].cpu())
-            axs[0].set_title('FPV')
-
-            m1 = axs[1].imshow(costmap[0].cpu(), origin='lower', cmap='plasma', extent=(xmin, xmax, ymin, ymax))
-            axs[1].plot(expert_traj[:, 0].cpu(), expert_traj[:, 1].cpu(), c='y', label='expert')
-            axs[1].plot(traj[:, 0].cpu(), traj[:, 1].cpu(), c='g', label='learner')
-            axs[1].set_title('costmap')
-            axs[1].legend()
-
-            axs[2].imshow(learner_state_visitations.cpu(), origin='lower', extent=(xmin, xmax, ymin, ymax))
-            axs[2].set_title('learner SV')
-
-            axs[3].imshow(expert_state_visitations.cpu(), origin='lower', extent=(xmin, xmax, ymin, ymax))
-            axs[3].set_title('expert SV')
-
-            plt.colorbar(m1, ax=axs[1])
+            #debug
+#            for ax in axs[1:]:
+#                ax.plot(expert_traj_clip[:, 0].cpu(), expert_traj_clip[:, 1].cpu(), c='r')
+#                ax.plot(traj[:, 0].cpu(), traj[:, 1].cpu(), c='m')
 
             title = ''
             for k,v in metrics_res.items():
@@ -244,11 +230,9 @@ def get_metrics(experiment, metric_fns = {}, frame_skip=1, viz=True, save_fp="")
             plt.suptitle(title)
 
             if viz:
-#                plt.show(block=False)
-#                plt.pause(1e-2)
-
                 plt.savefig(os.path.join(save_fp, 'figs', '{:06d}.png'.format(i)))
-                plt.close()
+
+            plt.close()
 
             #idk why I have to do this
             if i == (len(experiment.expert_dataset)-1):
