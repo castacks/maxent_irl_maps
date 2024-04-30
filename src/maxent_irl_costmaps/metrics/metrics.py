@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 
 from maxent_irl_costmaps.dataset.global_state_visitation_buffer import GlobalStateVisitationBuffer
 from maxent_irl_costmaps.networks.baseline_lethal_height import LethalHeightCostmap
-from maxent_irl_costmaps.utils import get_state_visitations, quat_to_yaw
+from maxent_irl_costmaps.utils import get_state_visitations, quat_to_yaw, compute_speedmap_quantile, world_to_grid
 from maxent_irl_costmaps.geometry_utils import apply_footprint
 
 def get_metrics_planner(experiment, metric_fns = {}, frame_skip=1, viz=True, save_fp=""):
@@ -161,6 +161,18 @@ def get_metrics(experiment, metric_fns = {}, frame_skip=1, viz=True, save_fp="")
                 res = experiment.network.forward(map_features)
                 costmap = res['costmap'][:, 0]
 
+            #compute speedmap
+            q = 0.5 #mean speed
+            if experiment.categorical_speedmaps:
+                speedmap_probs = res['speedmap'][0].mean(dim=0).softmax(dim=0)
+                speedmap_cdf = torch.cumsum(speedmap_probs, dim=0)
+                speedmap = compute_speedmap_quantile(speedmap_cdf, experiment.network.speed_bins.to(experiment.device), q)
+            else:
+#                speedmap = (res['speedmap'].loc[0, :] + self.speedmap_lcb * res['speedmap'].scale[0, :]).mean(dim=0)
+                speedmap = res['speedmap'][0, 0]
+
+            speedmap = torch.stack([speedmap] * experiment.mppi.B, dim=0)
+
             #initialize solver
             initial_state = expert_traj[0]
             x0 = {"state":initial_state, "steer_angle":data["steer"][[0]] if "steer" in data.keys() else torch.zeros(1, device=initial_state.device)}
@@ -195,6 +207,11 @@ def get_metrics(experiment, metric_fns = {}, frame_skip=1, viz=True, save_fp="")
                 'metadata': map_params
             }
 
+            experiment.mppi.cost_fn.data['speedmap'] = {
+                'data': speedmap,
+                'metadata': map_params
+            }
+
             #solve for traj
             for ii in range(experiment.mppi_itrs):
                 experiment.mppi.get_control(x, step=False)
@@ -214,15 +231,49 @@ def get_metrics(experiment, metric_fns = {}, frame_skip=1, viz=True, save_fp="")
 #            learner_state_visitations = get_state_visitations(trajs, metadata, weights)
 #            expert_state_visitations = get_state_visitations(expert_traj.unsqueeze(0), metadata)
 
+            traj_idxs, lmask = world_to_grid(traj, metadata)
+            traj_idxs = traj_idxs[lmask]
+            etraj_idxs, emask = world_to_grid(expert_kbm_traj, metadata)
+            etraj_idxs = etraj_idxs[emask]
+
+            traj_slim = speedmap[0][traj_idxs[:, 1], traj_idxs[:, 0]]
+            etraj_slim = speedmap[0][etraj_idxs[:, 1], etraj_idxs[:, 0]]
+
             for k, fn in metric_fns.items():
-                metrics_res[k].append(fn(costmap, expert_traj, traj, expert_state_visitations, learner_state_visitations).cpu().item())
+                metrics_res[k].append(fn(costmap, expert_kbm_traj, traj, expert_state_visitations, learner_state_visitations).cpu().item())
 
-            fig, axs = experiment.visualize(i)
+            #redo viz as the optimizer changes now
+            fig, axs = plt.subplots(1, 4, figsize=(32, 8))
 
-            #debug
-#            for ax in axs[1:]:
-#                ax.plot(expert_traj_clip[:, 0].cpu(), expert_traj_clip[:, 1].cpu(), c='r')
-#                ax.plot(traj[:, 0].cpu(), traj[:, 1].cpu(), c='m')
+            axs[0].imshow(data['image'].permute(1,2,0).cpu()[...,[2,1,0]])
+            m1 = axs[1].imshow(costmap[0].log().cpu(), origin='lower', extent=(xmin, xmax, ymin, ymax), cmap='jet')
+            m2 = axs[2].imshow(speedmap[0].cpu(), origin='lower', extent=(xmin, xmax, ymin, ymax), cmap='jet', vmin=0., vmax=10.)
+
+            axs[1].plot(traj[:, 0].cpu(), traj[:, 1].cpu(), c='g', label='learner')
+            axs[2].plot(traj[:, 0].cpu(), traj[:, 1].cpu(), c='g', label='learner')
+
+            axs[1].plot(expert_traj[:, 0].cpu(), expert_traj[:, 1].cpu(), c='y', label='expert')
+            axs[2].plot(expert_traj[:, 0].cpu(), expert_traj[:, 1].cpu(), c='y', label='expert')
+
+            axs[3].plot(traj[:, 3].cpu(), c='g', label='learner')
+            axs[3].plot(traj_slim.cpu(), c='g', linestyle='dotted', label='learner speed limit')
+
+            axs[3].plot(expert_kbm_traj[:, 3].cpu(), c='y', label='expert')
+            axs[3].plot(etraj_slim.cpu(), c='y', linestyle='dotted', label='expert speed limit')
+
+            axs[3].set_ylim(-0.1, 10.1)
+
+            axs[0].set_title('fpv')
+            axs[1].set_title('log-costmap')
+            axs[2].set_title('speedmap')
+            axs[3].set_title('speeds')
+
+            axs[1].legend()
+            axs[2].legend()
+            axs[3].legend()
+
+            plt.colorbar(m1, ax=axs[1])
+            plt.colorbar(m2, ax=axs[2])
 
             title = ''
             for k,v in metrics_res.items():
@@ -239,6 +290,30 @@ def get_metrics(experiment, metric_fns = {}, frame_skip=1, viz=True, save_fp="")
                 break
 
     return {k:torch.tensor(v) for k,v in metrics_res.items()}
+
+def speed_error(
+                costmap,
+                expert_traj,
+                learner_traj,
+                expert_state_visitations,
+                learner_state_visitations
+                ):
+    midx = min(expert_traj.shape[0], learner_traj.shape[0])
+    return (expert_traj[:midx, 3] - learner_traj[:midx, 3]).abs().mean()
+
+def speed_modified_hausdorff_distance(
+                costmap,
+                expert_traj,
+                learner_traj,
+                expert_state_visitations,
+                learner_state_visitations
+                ):
+    ap = expert_traj[:, 3]
+    bp = learner_traj[:, 3]
+    dist_mat = (ap.unsqueeze(0) - bp.unsqueeze(1)).abs()
+    mhd1 = dist_mat.min(dim=0)[0].mean()
+    mhd2 = dist_mat.min(dim=1)[0].mean()
+    return max(mhd1, mhd2)
 
 def expert_cost(
                 costmap,
@@ -287,6 +362,20 @@ def modified_hausdorff_distance(
                 ):
     ap = expert_traj[:, :2]
     bp = learner_traj[:, :2]
+    dist_mat = torch.linalg.norm(ap.unsqueeze(0) - bp.unsqueeze(1), dim=-1)
+    mhd1 = dist_mat.min(dim=0)[0].mean()
+    mhd2 = dist_mat.min(dim=1)[0].mean()
+    return max(mhd1, mhd2)
+
+def pos_speed_modified_hausdorff_distance(
+                costmap,
+                expert_traj,
+                learner_traj,
+                expert_state_visitations,
+                learner_state_visitations
+                ):
+    ap = expert_traj[:, [0, 1, 3]]
+    bp = learner_traj[:, [0, 1, 3]]
     dist_mat = torch.linalg.norm(ap.unsqueeze(0) - bp.unsqueeze(1), dim=-1)
     mhd1 = dist_mat.min(dim=0)[0].mean()
     mhd2 = dist_mat.min(dim=1)[0].mean()

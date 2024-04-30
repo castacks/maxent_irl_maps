@@ -87,7 +87,7 @@ class MPPIIRLSpeedmaps:
         """
         Apply the MaxEnt update to the network given a batch
         """
-        assert batch['metadata']['resolution'].std() < 1e-4, "got mutliple resolutions in a batch, which we currently don't support"
+        assert self.batch_size==1 or batch['metadata']['resolution'].std() < 1e-4, "got mutliple resolutions in a batch, which we currently don't support"
 
         grads = []
         speed_loss = []
@@ -238,7 +238,7 @@ class MPPIIRLSpeedmaps:
             _sbins = self.network.speed_bins[:-1].to(self.device).view(1, -1, 1, 1)
             sdiffs = expert_speedmaps.unsqueeze(1) - _sbins
             sdiffs[sdiffs < 0] = 1e10
-            expert_speed_idxs = sdiffs.argmin(dim=1)
+            expert_speed_idxs = sdiffs.argmin(dim=1)+1
 
             mask = (expert_speedmaps > 1e-2) #only want the cells that the expert drove in
             ce = torch.nn.functional.cross_entropy(speedmaps, expert_speed_idxs, reduction='none')[mask]
@@ -250,7 +250,7 @@ class MPPIIRLSpeedmaps:
             neg_labels = torch.zeros_like(expert_speed_idxs)
             ce_neg = torch.nn.functional.cross_entropy(speedmaps, neg_labels, reduction='none')[~mask]
 
-            speed_loss = ce.mean() * self.speed_coeff + 0.1 * ce_neg.mean()
+            speed_loss = ce.mean() * self.speed_coeff + 0.05 * ce_neg.mean()
 
         else:
             mask = (expert_speedmaps > 1e-2) #only need the cells that the expert drove in

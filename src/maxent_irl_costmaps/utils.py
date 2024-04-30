@@ -9,6 +9,42 @@ def quat_to_yaw(quat):
 
     return torch.atan2(2 * (quat[:, 3]*quat[:, 2] + quat[:, 0]*quat[:, 1]), 1 - 2 * (quat[:, 1]**2 + quat[:, 2]**2))    
 
+def compute_speedmap_quantile(speedmap_cdf, speed_bins, q):
+        """
+        Given a speedmap (parameterized as cdf + bins) and a quantile,
+            compute the speed corresponding to that quantile
+
+        Args:
+            speedmap_cdf: BxWxH Tensor of speedmap cdf
+            speed_bins: B+1 Tensor of bin edges
+            q: float containing the quantile 
+        """
+        B = len(speed_bins)
+        #need to stack zeros to front
+        _cdf = torch.cat([
+            torch.zeros_like(speedmap_cdf[[0]]),
+            speedmap_cdf
+        ], dim=0)
+
+        _cdf = _cdf.view(B, -1)
+
+        _cdiffs = q - _cdf
+        _mask = _cdiffs <= 0
+
+        _qidx = (_cdiffs + 1e10*_mask).argmin(dim=0)
+
+        _cdf_low = _cdf.T[torch.arange(len(_qidx)), _qidx]
+        _cdf_high = _cdf.T[torch.arange(len(_qidx)), _qidx+1]
+
+        _k = (q - _cdf_low) / (_cdf_high - _cdf_low)
+
+        _speedmap_low = speed_bins[_qidx]
+        _speedmap_high = speed_bins[_qidx+1]
+
+        _speedmap = (1-_k) * _speedmap_low + _k * _speedmap_high
+
+        return _speedmap.reshape(*speedmap_cdf.shape[1:])
+
 def get_speedmap(trajs, speeds, map_metadata, weights=None):
     """
     Given a set of trajectories, produce a map where each cell contains the speed the traj in that cell
@@ -26,8 +62,8 @@ def get_speedmap(trajs, speeds, map_metadata, weights=None):
     res = map_metadata['resolution']
     ox = map_metadata['origin'][0].item()
     oy = map_metadata['origin'][1].item()
-    nx = int(map_metadata['width'] / res)
-    ny = int(map_metadata['height'] / res)
+    nx = round(map_metadata['width'] / res)
+    ny = round(map_metadata['height'] / res)
     width = max(nx, ny)
 
     xidxs = ((xs - ox) / res).long()
@@ -70,6 +106,24 @@ def get_speedmap(trajs, speeds, map_metadata, weights=None):
 
     return speed_counts
 
+def world_to_grid(trajs, map_metadata):
+    xs = trajs[...,0]
+    ys = trajs[...,1]
+    res = map_metadata['resolution']
+    ox = map_metadata['origin'][0].item()
+    oy = map_metadata['origin'][1].item()
+    nx = round(map_metadata['width'] / res)
+    ny = round(map_metadata['height'] / res)
+    width = max(nx, ny)
+
+    xidxs = ((xs - ox) / res).long()
+    yidxs = ((ys - oy) / res).long()
+
+    # 1 iff. valid
+    coords = torch.stack([xidxs, yidxs], dim=-1)
+    valid_mask = (xidxs >= 0) & (xidxs < ny) & (yidxs >= 0) & (yidxs < nx)
+    return coords, valid_mask
+
 def get_state_visitations(trajs, map_metadata, weights = None):
     """
     Given a set of trajectories and map metadata, compute the visitations on the map for each traj.
@@ -86,8 +140,8 @@ def get_state_visitations(trajs, map_metadata, weights = None):
     res = map_metadata['resolution']
     ox = map_metadata['origin'][0].item()
     oy = map_metadata['origin'][1].item()
-    nx = int(map_metadata['width'] / res)
-    ny = int(map_metadata['height'] / res)
+    nx = round(map_metadata['width'] / res)
+    ny = round(map_metadata['height'] / res)
     width = max(nx, ny)
 
     xidxs = ((xs - ox) / res).long()
