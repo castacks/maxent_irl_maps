@@ -1,4 +1,5 @@
 import rosbag
+import yaml
 import numpy as np
 import torch
 import matplotlib.pyplot as plt
@@ -23,6 +24,7 @@ if __name__ == '__main__':
     parser.add_argument('--save_fp', type=str, required=True, help='path to save figs to')
     parser.add_argument('--model_fp', type=str, required=True, help='Costmap weights file')
     parser.add_argument('--test_fp', type=str, required=True, help='dir to save preprocessed data to')
+    parser.add_argument('--mppi_eval_fp', type=str, required=True, help='mppi config to eval on')
     parser.add_argument('--viz', action='store_true', required=False, help='set this flag to visualize output')
     parser.add_argument('--use_planner', action='store_true', required=False, help='set this if optimizer is planner')
     parser.add_argument('--alter', action='store_true', required=False, help='set this to run Alter baseline')
@@ -31,7 +33,13 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     param_fp = os.path.join(os.path.split(args.model_fp)[0], '_params.yaml')
-    model = setup_experiment(param_fp)['algo'].to(args.device)
+
+    #hack in speedmap mppi
+    params = yaml.safe_load(open(param_fp, 'r'))
+    mppi_fp = yaml.safe_load(open(args.mppi_eval_fp, 'r'))
+    params['solver'] = mppi_fp['solver']
+
+    model = setup_experiment(params)['algo'].to(args.device)
 
     model.network.load_state_dict(torch.load(args.model_fp))
     model.network.eval()
@@ -68,10 +76,11 @@ if __name__ == '__main__':
     metrics = {
         'expert_cost':expert_cost,
         'learner_cost':learner_cost,
-#        'traj':position_distance,
         'kl':kl_divergence,
-#        'kl_global':kl_divergence_global,
-        'mhd': modified_hausdorff_distance
+        'mhd': modified_hausdorff_distance,
+        'speed_err': speed_error,
+        'speed_mhd': speed_modified_hausdorff_distance,
+        'total_mhd': pos_speed_modified_hausdorff_distance,
     }
 
 #    for i in range(100):

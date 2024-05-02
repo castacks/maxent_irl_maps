@@ -143,9 +143,9 @@ def get_metrics(experiment, metric_fns = {}, frame_skip=1, viz=True, save_fp="")
             ymax = ymin + metadata['height'].cpu()
             expert_traj = data['traj']
 
-            #for metrics (namely mhd), clip etraj to map bounds
-            emask = (expert_traj[:, 0] > xmin) & (expert_traj[:, 0] < xmax) & (expert_traj[:, 1] > ymin) & (expert_traj[:, 1] < ymax)
-            expert_traj = expert_traj[emask]
+            #dont clip traj for mppi (messes up speed)
+#            emask = (expert_traj[:, 0] > xmin) & (expert_traj[:, 0] < xmax) & (expert_traj[:, 1] > ymin) & (expert_traj[:, 1] < ymax)
+#            expert_traj = expert_traj[emask]
 
             #compute costmap
 
@@ -198,7 +198,9 @@ def get_metrics(experiment, metric_fns = {}, frame_skip=1, viz=True, save_fp="")
             }
             expert_kbm_traj = experiment.mppi.model.get_observations(X_expert)
 
-            goals = [experiment.clip_to_map_bounds(expert_traj[:, :2], metadata).view(1, 2)] * experiment.mppi.B
+#            goals = [experiment.clip_to_map_bounds(expert_traj[:, :2], metadata).view(1, 2)] * experiment.mppi.B
+
+            goals = [expert_traj[-1, :2].view(1, 2)] * experiment.mppi.B
 
             experiment.mppi.reset()
             experiment.mppi.cost_fn.data['goals'] = goals

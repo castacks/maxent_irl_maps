@@ -1,5 +1,5 @@
 experiment:
-    save_to: /home/physics_atv/workspace/experiments/yamaha_irl_dino/visual_ablations_50cm
+    save_to: /home/physics_atv/workspace/experiments/yamaha_irl_dino/visual_ablations_50cm_planner
     name: visual_ablations_all
     device: cuda
     epochs: 5

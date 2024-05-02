@@ -59,11 +59,18 @@ def get_speedmap(trajs, speeds, map_metadata, weights=None):
 
     xs = trajs[...,0]
     ys = trajs[...,1]
-    res = map_metadata['resolution']
     ox = map_metadata['origin'][0].item()
     oy = map_metadata['origin'][1].item()
-    nx = round(map_metadata['width'] / res)
-    ny = round(map_metadata['height'] / res)
+
+    if isinstance(map_metadata['resolution'], torch.Tensor):
+        res = map_metadata['resolution'].item()
+        nx = round(map_metadata['width'].item() / res)
+        ny = round(map_metadata['height'].item() / res)
+    else:
+        res = map_metadata['resolution']
+        nx = round(map_metadata['width'] / res)
+        ny = round(map_metadata['height'] / res)
+
     width = max(nx, ny)
 
     xidxs = ((xs - ox) / res).long()
@@ -109,11 +116,18 @@ def get_speedmap(trajs, speeds, map_metadata, weights=None):
 def world_to_grid(trajs, map_metadata):
     xs = trajs[...,0]
     ys = trajs[...,1]
-    res = map_metadata['resolution']
     ox = map_metadata['origin'][0].item()
     oy = map_metadata['origin'][1].item()
-    nx = round(map_metadata['width'] / res)
-    ny = round(map_metadata['height'] / res)
+
+    if isinstance(map_metadata['resolution'], torch.Tensor):
+        res = map_metadata['resolution'].item()
+        nx = round(map_metadata['width'].item() / res)
+        ny = round(map_metadata['height'].item() / res)
+    else:
+        res = map_metadata['resolution']
+        nx = round(map_metadata['width'] / res)
+        ny = round(map_metadata['height'] / res)
+
     width = max(nx, ny)
 
     xidxs = ((xs - ox) / res).long()
@@ -137,11 +151,18 @@ def get_state_visitations(trajs, map_metadata, weights = None):
 
     xs = trajs[...,0]
     ys = trajs[...,1]
-    res = map_metadata['resolution']
     ox = map_metadata['origin'][0].item()
     oy = map_metadata['origin'][1].item()
-    nx = round(map_metadata['width'] / res)
-    ny = round(map_metadata['height'] / res)
+
+    if isinstance(map_metadata['resolution'], torch.Tensor):
+        res = map_metadata['resolution'].item()
+        nx = round(map_metadata['width'].item() / res)
+        ny = round(map_metadata['height'].item() / res)
+    else:
+        res = map_metadata['resolution']
+        nx = round(map_metadata['width'] / res)
+        ny = round(map_metadata['height'] / res)
+
     width = max(nx, ny)
 
     xidxs = ((xs - ox) / res).long()

@@ -2,7 +2,7 @@
 
 <launch>
     <!-- File management -->
-	<arg name="model_fp" default="../models/yamaha/2024-03-12-15-59-05_highres_planner/itr_10.pt"/>
+	<arg name="model_fp" default="../models/yamaha/2024-04-10-20-17-37_pca_vlad/itr_10.pt"/>
     <arg name="obstacle_threshold" default="1.0"/>
     <arg name="publish_gridmap" default="true"/>
     <arg name="baseline" default="none"/>

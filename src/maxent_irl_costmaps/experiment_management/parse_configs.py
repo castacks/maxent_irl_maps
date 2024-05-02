@@ -40,7 +40,11 @@ def setup_experiment(fp):
     Design decision to use case statements instead of dicts of class types in case I want to
     handle params in specific ways for certain classes
     """
-    experiment_dict = yaml.safe_load(open(fp, 'r'))
+    if isinstance(fp, str):
+        experiment_dict = yaml.safe_load(open(fp, 'r'))
+    else:
+        experiment_dict = fp
+
     experiment_keys = [
         'experiment',
         'dataset',
