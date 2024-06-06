@@ -12,6 +12,17 @@ from maxent_irl_costmaps.networks.baseline_lethal_height import LethalHeightCost
 from maxent_irl_costmaps.utils import get_state_visitations, quat_to_yaw, compute_speedmap_quantile, world_to_grid
 from maxent_irl_costmaps.geometry_utils import apply_footprint
 
+def compute_map_cvar(maps, cvar):
+    if cvar < 0.:
+        map_q = torch.quantile(maps, 1.+cvar, dim=0)
+        mask = (maps <= map_q.view(1, *map_q.shape))
+    else:
+        map_q = torch.quantile(maps, cvar, dim=0)
+        mask = (maps >= map_q.view(1, *map_q.shape))
+
+    cvar_map = (maps * mask).sum(dim=0) / mask.sum(dim=0)
+    return cvar_map
+
 def get_metrics_planner(experiment, metric_fns = {}, frame_skip=1, viz=True, save_fp=""):
     """
     Temp hack for getting metrics for state_lattice_planner
@@ -153,7 +164,10 @@ def get_metrics(experiment, metric_fns = {}, frame_skip=1, viz=True, save_fp="")
             if hasattr(experiment.network, 'ensemble_forward'):
                 #save GPU space in batch (they're copied anyways)
                 res = experiment.network.ensemble_forward(map_features[[0]])
-                costmap = res['costmap'].mean(dim=1)[0]
+
+#                costmap = res['costmap'].mean(dim=1)[0]
+                costmap = compute_map_cvar(res['costmap'][0], 0.9)
+
                 costmap = torch.cat([costmap] * experiment.mppi.B, dim=0)
 
             #no ensemble
@@ -162,7 +176,7 @@ def get_metrics(experiment, metric_fns = {}, frame_skip=1, viz=True, save_fp="")
                 costmap = res['costmap'][:, 0]
 
             #compute speedmap
-            q = 0.5 #mean speed
+            q = 0.9 #mean speed
             if experiment.categorical_speedmaps:
                 speedmap_probs = res['speedmap'][0].mean(dim=0).softmax(dim=0)
                 speedmap_cdf = torch.cumsum(speedmap_probs, dim=0)

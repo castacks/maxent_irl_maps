@@ -3,6 +3,8 @@ import tqdm
 import torch
 import argparse
 
+from sklearn.linear_model import QuantileRegressor
+
 from maxent_irl_costmaps.dataset.maxent_irl_dataset import MaxEntIRLDataset
 from maxent_irl_costmaps.experiment_management.parse_configs import setup_experiment
 from maxent_irl_costmaps.utils import get_state_visitations, get_speedmap
@@ -75,21 +77,19 @@ if __name__ == '__main__':
 
     #alter
     #(simple linreg in closed form)
-    svd2_fmean = res['svd2'].mean()
-    svd2_fdiff = res['svd2'] - svd2_fmean
-    speed_fmean = res['speed'].mean()
-    speed_fdiff = res['speed'] - speed_fmean
-
-    slope = (svd2_fdiff * speed_fdiff).sum() / (svd2_fdiff * svd2_fdiff).sum()
-    intercept = speed_fmean - (slope*svd2_fmean)
+#    qreg = QuantileRegressor(quantile=0.95, alpha=0, solver="highs")
+    qreg = QuantileRegressor(quantile=0.5, alpha=0, solver="highs")
+    qreg.fit(res['svd2'].unsqueeze(-1).cpu().numpy(), res['speed'].cpu().numpy())
 
     print('ALTER')
-    print('speed = {:.2f} + {:.2f}*svd2'.format(intercept.item(), slope.item()))
+    print('speed = {:.2f} + {:.2f}*svd2'.format(qreg.intercept_.item(), qreg.coef_.item()))
 
     #semantics
     semantic_speeds = []
     for i in range(12):
-        semantic_speeds.append(res['speed'][res['semantic_class'] == i].mean())
+        class_speeds = res['speed'][res['semantic_class'] == i]
+#        semantic_speeds.append(torch.quantile(class_speeds, 0.95))
+        semantic_speeds.append(torch.quantile(class_speeds, 0.5))
 
     print('SEMANTICS')
     for i in range(12):

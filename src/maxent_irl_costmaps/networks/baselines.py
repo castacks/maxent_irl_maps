@@ -52,7 +52,11 @@ class AlterBaseline:
         #theres a multiplier in the paper
         costmap = (diff_mask) * 10. + (1.-diff_mask) * (6.-6.*svd2s)
 
-        speedmap = (5.46 - 1.66*svd2s).clip(0., 10.)
+        #95q
+#        speedmap = (9.18 - 1.00*svd2s).clip(0., 10.)
+
+        #50q
+        speedmap = (5.22 - 0.49*svd2s).clip(0., 10.)
 
 #        speedmap = speedmap_to_prob_speedmap(speedmap, self.speed_bins)
 
@@ -98,25 +102,45 @@ class SemanticBaseline:
             0.,
             10.,
             3.,
-            10.,
+            3.,
+#           10., #unknown maps to 8 sometimes
             5.,
             2.,
             10.,
         ])
 
+        #95q
+        """
         self.speed_mappings = torch.tensor([
-            5.,
-            5.63,
-            5.23,
-            4.99,
-            6.27,
-            5.13,
-            4.97,
-            6.72,
-            5.55,
-            3.70,
-            4.42,
-            4.69
+            7.34,
+            8.88,
+            8.47,
+            7.55,
+            9.47,
+            7.90,
+            7.77,
+            10.58,
+            9.19,
+            6.28,
+            7.46,
+            7.85
+        ])
+        """
+
+        #50q
+        self.speed_mappings = torch.tensor([
+            5.40,
+            5.45,
+            5.04,
+            4.98,
+            6.13,
+            4.91,
+            4.63,
+            6.41,
+            5.22,
+            3.50,
+            4.35,
+            3.42
         ])
 
         self.fidxs = []
@@ -154,6 +178,51 @@ class SemanticBaseline:
         self.speed_bins = self.speed_bins.to(device)
         return self
 
+class TerrainnetBaseline:
+    """
+    Incorporate (1+diff) * semantics & slope per baseline
+    """
+    def __init__(self, dataset, diff_weight=4., slope_weight=10., device='cpu'):
+        self.semantics = SemanticBaseline(dataset, device)
+
+        self.diff_idx = dataset.feature_keys.index('diff')
+        self.slope_idx = dataset.feature_keys.index('terrain_slope')
+
+        self.diff_mean = dataset.feature_mean[self.diff_idx].item()
+        self.diff_std = dataset.feature_std[self.diff_idx].item()
+
+        self.slope_mean = dataset.feature_mean[self.slope_idx].item()
+        self.slope_std = dataset.feature_std[self.slope_idx].item()
+
+        self.diff_weight = diff_weight
+        self.slope_weight = slope_weight
+
+        self.device = device
+
+    def forward(self, x, return_features=True):
+        res_semantics = self.semantics.forward(x, return_features)
+
+        diffs = (x[:, self.diff_idx] * self.diff_std) + self.diff_mean
+        slopes = (x[:, self.slope_idx] * self.slope_std) + self.slope_mean
+
+        semantic_costs = res_semantics['costmap'][:, 0]
+
+        costmap_out = (1 + self.diff_weight * diffs) * semantic_costs + self.slope_weight * slopes
+
+        return {
+            'costmap': costmap_out.unsqueeze(1),
+            'speedmap': res_semantics['speedmap'],
+        }
+
+    def ensemble_forward(self, x, return_features=True):
+        res = self.forward(x, return_features)
+        return {k:v.unsqueeze(0) for k,v in res.items()}
+
+    def to(self, device):
+        self.device = device
+        self.semantics = self.semantics.to(device)
+        return self
+
 class AlterSemanticBaseline:
     """
     combine alter and semantics into one baseline
@@ -189,7 +258,7 @@ if __name__ == '__main__':
     import matplotlib.pyplot as plt
     from maxent_irl_costmaps.experiment_management.parse_configs import setup_experiment
 
-    root_fp = '/home/physics_atv/workspace/experiments/yamaha_irl_dino/visual_ablations_50cm/2024-04-05-19-45-38_visual_ablations_semantics/itr_5.pt'
+    root_fp = '/home/physics_atv/workspace/experiments/yamaha_irl_dino/visual_ablations_50cm_mppi/2024-04-26-15-10-36_visual_ablations_semantics/itr_5.pt'
 
     param_fp = os.path.join(os.path.split(root_fp)[0], '_params.yaml')
     res = setup_experiment(param_fp)
@@ -202,13 +271,13 @@ if __name__ == '__main__':
 #    alter_baseline = AlterBaseline(dataset).to(res['algo'].device)
 #    res['algo'].network = alter_baseline
 
-#    semantic_baseline = SemanticBaseline(dataset).to(res['algo'].device)
-#    res['algo'].network = semantic_baseline
+    semantic_baseline = SemanticBaseline(dataset).to(res['algo'].device)
+    res['algo'].network = semantic_baseline
 
-    alter_semantic_baseline = AlterSemanticBaseline(dataset).to(res['algo'].device)
-    res['algo'].network = alter_semantic_baseline
+#    alter_semantic_baseline = AlterSemanticBaseline(dataset).to(res['algo'].device)
+#    res['algo'].network = alter_semantic_baseline
 
-    for _ in range(100):
+    for i in range(100):
         idx = np.random.randint(len(dataset))
-        fig, axs = res['algo'].visualize(idx=idx)
+        fig, axs = res['algo'].visualize(idx=i)
         plt.show()

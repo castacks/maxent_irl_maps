@@ -15,7 +15,7 @@ from maxent_irl_costmaps.metrics.speedmap_metrics import *
 
 from maxent_irl_costmaps.experiment_management.parse_configs import setup_experiment
 
-from maxent_irl_costmaps.networks.baselines import AlterBaseline, SemanticBaseline, AlterSemanticBaseline
+from maxent_irl_costmaps.networks.baselines import AlterBaseline, SemanticBaseline, AlterSemanticBaseline, TerrainnetBaseline
 
 if __name__ == '__main__':
     torch.set_printoptions(sci_mode=False)
@@ -29,6 +29,7 @@ if __name__ == '__main__':
     parser.add_argument('--use_planner', action='store_true', required=False, help='set this if optimizer is planner')
     parser.add_argument('--alter', action='store_true', required=False, help='set this to run Alter baseline')
     parser.add_argument('--semantics', action='store_true', required=False, help='set this to run semantics baseline')
+    parser.add_argument('--terrainnet', action='store_true', required=False, help='set this to run terrainnet')
     parser.add_argument('--device', type=str, required=False, default='cpu', help='device to run script on')
     args = parser.parse_args()
 
@@ -65,10 +66,15 @@ if __name__ == '__main__':
         model.network = AlterSemanticBaseline(dataset)
         model.categorical_speedmaps = False
 
+    if args.terrainnet:
+        print('using terrainnet...')
+        model.network = TerrainnetBaseline(dataset)
+        model.categorical_speedmaps = False
+
     model = model.to(args.device)
 
-    if os.path.exists(os.path.join(args.save_fp, 'metrics.pt')):
-        exit(0)
+#    if os.path.exists(os.path.join(args.save_fp, 'metrics.pt')):
+#        exit(0)
 
 #    maybe_mkdir(os.path.join(args.save_fp, 'figs'), force=False)
     maybe_mkdir(os.path.join(args.save_fp, 'figs'), force=True)
