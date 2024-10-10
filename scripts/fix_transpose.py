@@ -5,30 +5,32 @@ import matplotlib.pyplot as plt
 
 from maxent_irl_costmaps.os_utils import walk_bags
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('--root_dir', type=str, required=True, help='path to dataset dir to fix')
+    parser.add_argument(
+        "--root_dir", type=str, required=True, help="path to dataset dir to fix"
+    )
     args = parser.parse_args()
 
-    fps = walk_bags(args.root_dir, extension='.pt')
+    fps = walk_bags(args.root_dir, extension=".pt")
 
     for fp in tqdm.tqdm(fps):
         res = torch.load(fp)
 
-        gdata = res['gridmap_data']
+        gdata = res["gridmap_data"]
         gdata2 = []
 
-        fks = res['gridmap_feature_keys']
+        fks = res["gridmap_feature_keys"]
 
         for fi, fk in enumerate(fks):
-            if 'VLAD' in fk or 'ganav' in fk:
+            if "VLAD" in fk or "ganav" in fk:
                 gdata2.append(gdata[fi].T)
             else:
                 gdata2.append(gdata[fi])
 
         gdata2 = torch.stack(gdata2, dim=0)
 
-        res['gridmap_data'] = gdata2
+        res["gridmap_data"] = gdata2
         torch.save(res, fp)
 
 #        #debug

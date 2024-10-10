@@ -5,9 +5,9 @@ Look at the linear weights of a model
 import torch
 import argparse
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('--model_fp', type=str, required=True, help='path to the model')
+    parser.add_argument("--model_fp", type=str, required=True, help="path to the model")
     args = parser.parse_args()
 
     model = torch.load(args.model_fp)
@@ -25,4 +25,8 @@ if __name__ == '__main__':
     for i in zidxs:
         fk = fks[i]
         ws = weights[:, i]
-        print('{:<20}:\t{:.2f} += {:.2f} (z+{:.2f})'.format(fk, ws.mean(), ws.std(), wzs[i]))
+        print(
+            "{:<20}:\t{:.2f} += {:.2f} (z+{:.2f})".format(
+                fk, ws.mean(), ws.std(), wzs[i]
+            )
+        )

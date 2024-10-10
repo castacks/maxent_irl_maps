@@ -9,17 +9,17 @@ import requests
 from PIL import Image
 
 
-TILE_SIZE = 256                                      # Basic Mercator Google Maps tile is 256 x 256
-MAX_SIN_LAT = 1. - 1e-5                              # Bound for sinus of latitude
-MAX_SIZE = 640                                       # Max size of the map in pixels
-SCALE = 2                                            # 1 or 2 (free plan), see Google Static Maps API docs
-DEFAULT_ZOOM = 10                                    # Default zoom level, in case it cannot be determined automatically
-MAPTYPE = 'roadmap'                                  # Default map type
-BASE_URL = 'https://maps.googleapis.com/maps/api/staticmap?'
+TILE_SIZE = 256  # Basic Mercator Google Maps tile is 256 x 256
+MAX_SIN_LAT = 1.0 - 1e-5  # Bound for sinus of latitude
+MAX_SIZE = 640  # Max size of the map in pixels
+SCALE = 2  # 1 or 2 (free plan), see Google Static Maps API docs
+DEFAULT_ZOOM = 10  # Default zoom level, in case it cannot be determined automatically
+MAPTYPE = "roadmap"  # Default map type
+BASE_URL = "https://maps.googleapis.com/maps/api/staticmap?"
 HTTP_SUCCESS_STATUS = 200
 HTTP_FORBIDDEN_STATUS = 403
 
-cache = {}                                           # Caching queries to limit API calls / speed them up
+cache = {}  # Caching queries to limit API calls / speed them up
 
 
 class GoogleStaticMapsAPI:
@@ -28,6 +28,7 @@ class GoogleStaticMapsAPI:
     Associated transformation between geographic coordinate system / pixel location
     See https://developers.google.com/maps/documentation/static-maps/intro for more info.
     """
+
     @classmethod
     def register_api_key(cls, api_key):
         """Register a Google Static Maps API key to enable queries to Google.
@@ -39,8 +40,15 @@ class GoogleStaticMapsAPI:
 
     @classmethod
     def map(
-            cls, center=None, zoom=None, size=(MAX_SIZE, MAX_SIZE), scale=SCALE,
-            maptype=MAPTYPE, file_format='png32', markers=None):
+        cls,
+        center=None,
+        zoom=None,
+        size=(MAX_SIZE, MAX_SIZE),
+        scale=SCALE,
+        maptype=MAPTYPE,
+        file_format="png32",
+        markers=None,
+    ):
         """GET query on the Google Static Maps API to retrieve a static image.
         :param object center: (required if markers not present) defines the center of the map, equidistant from edges.
             This parameter takes a location as either
@@ -85,27 +93,31 @@ class GoogleStaticMapsAPI:
 
         url = BASE_URL
         if center:
-            url += 'center={},{}&'.format(*center) if isinstance(center, tuple) else 'center={}&'.format(center)
+            url += (
+                "center={},{}&".format(*center)
+                if isinstance(center, tuple)
+                else "center={}&".format(center)
+            )
         if zoom:
-            url += 'zoom={}&'.format(zoom)
+            url += "zoom={}&".format(zoom)
 
         markers = markers if markers else []
         for marker in markers:
-            if 'latitude' in marker and 'longitude' in marker:
-                url += 'markers='
-                for key in ['color', 'size', 'label']:
+            if "latitude" in marker and "longitude" in marker:
+                url += "markers="
+                for key in ["color", "size", "label"]:
                     if key in marker:
-                        url += '{}:{}%7C'.format(key, marker[key])
-                url += '{},{}%7C'.format(marker['latitude'], marker['longitude'])
-                url += '&'
+                        url += "{}:{}%7C".format(key, marker[key])
+                url += "{},{}%7C".format(marker["latitude"], marker["longitude"])
+                url += "&"
 
-        url += 'scale={}&'.format(scale)
-        url += 'size={}x{}&'.format(*tuple(min(el, MAX_SIZE) for el in size))
-        url += 'maptype={}&'.format(maptype)
-        url += 'format={}&'.format(file_format)
+        url += "scale={}&".format(scale)
+        url += "size={}x{}&".format(*tuple(min(el, MAX_SIZE) for el in size))
+        url += "maptype={}&".format(maptype)
+        url += "format={}&".format(file_format)
 
-        if hasattr(cls, '_api_key'):
-            url += 'key={}'.format(cls._api_key)
+        if hasattr(cls, "_api_key"):
+            url += "key={}".format(cls._api_key)
 
         if url in cache:
             return cache[url]
@@ -117,13 +129,21 @@ class GoogleStaticMapsAPI:
         print(response.status_code)
         if response.status_code != HTTP_SUCCESS_STATUS:
             if response.status_code == HTTP_FORBIDDEN_STATUS:
-                if not hasattr(cls, '_api_key'):
-                    raise KeyError('No Google Static Maps API key registered - refer to the README.')
+                if not hasattr(cls, "_api_key"):
+                    raise KeyError(
+                        "No Google Static Maps API key registered - refer to the README."
+                    )
                 else:
-                    raise KeyError('Error {} - Forbidden. Is your API key valid?'.format(HTTP_FORBIDDEN_STATUS))
+                    raise KeyError(
+                        "Error {} - Forbidden. Is your API key valid?".format(
+                            HTTP_FORBIDDEN_STATUS
+                        )
+                    )
             else:
-                print('HTTPError: {} - {}.'.format(response.status_code, response.reason))
-        response.raise_for_status()     # This raises an error in case of unexpected status code
+                print(
+                    "HTTPError: {} - {}.".format(response.status_code, response.reason)
+                )
+        response.raise_for_status()  # This raises an error in case of unexpected status code
 
         # Processing the image in case of success
         img = Image.open(StringIO((response.content)))
@@ -146,7 +166,7 @@ class GoogleStaticMapsAPI:
                 TILE_SIZE * (0.5 + longitude / 360),
                 TILE_SIZE * (0.5 - np.log((1 + siny) / (1 - siny)) / (4 * np.pi)),
             ],
-            index=['x_pixel', 'y_pixel'],
+            index=["x_pixel", "y_pixel"],
         )
 
     @classmethod
@@ -163,11 +183,14 @@ class GoogleStaticMapsAPI:
                 TILE_SIZE * (0.5 + longitudes / 360),
                 TILE_SIZE * (0.5 - np.log((1 + siny) / (1 - siny)) / (4 * np.pi)),
             ],
-            axis=1, keys=['x_pixel', 'y_pixel'],
+            axis=1,
+            keys=["x_pixel", "y_pixel"],
         )
 
     @classmethod
-    def to_tile_coordinates(cls, latitudes, longitudes, center_lat, center_long, zoom, size, scale):
+    def to_tile_coordinates(
+        cls, latitudes, longitudes, center_lat, center_long, zoom, size, scale
+    ):
         """Transform a set of lat/long coordinates into pixel position in a tile. These coordinates depend on
             * the zoom level
             * the tile location on the world map
@@ -182,7 +205,9 @@ class GoogleStaticMapsAPI:
         :rtype: pandas.DataFrame
         """
         pixels = cls.to_pixels(latitudes, longitudes)
-        return scale * ((pixels - cls.to_pixel(center_lat, center_long)) * 2 ** zoom + size / 2)
+        return scale * (
+            (pixels - cls.to_pixel(center_lat, center_long)) * 2 ** zoom + size / 2
+        )
 
     @classmethod
     def get_zoom(cls, latitudes, longitudes, size, scale):
@@ -198,7 +223,10 @@ class GoogleStaticMapsAPI:
         min_pixel = cls.to_pixel(latitudes.min(), longitudes.min())
         max_pixel = cls.to_pixel(latitudes.max(), longitudes.max())
         # Longitude spans from -180 to +180, latitudes only from -90 to +90
-        max_amplitude = ((max_pixel - min_pixel).abs() * pd.Series([2., 1.], index=['x_pixel', 'y_pixel'])).max()
+        max_amplitude = (
+            (max_pixel - min_pixel).abs()
+            * pd.Series([2.0, 1.0], index=["x_pixel", "y_pixel"])
+        ).max()
         if max_amplitude == 0 or np.isnan(max_amplitude):
             return DEFAULT_ZOOM
         return int(np.log2(2 * size / max_amplitude))
