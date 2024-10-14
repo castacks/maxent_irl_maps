@@ -13,6 +13,16 @@ def quat_to_yaw(quat):
         1 - 2 * (quat[:, 1] ** 2 + quat[:, 2] ** 2),
     )
 
+def compute_map_cvar(maps, cvar):
+    if cvar < 0.0:
+        map_q = torch.quantile(maps, 1.0 + cvar, dim=0)
+        mask = maps <= map_q.view(1, *map_q.shape)
+    else:
+        map_q = torch.quantile(maps, cvar, dim=0)
+        mask = maps >= map_q.view(1, *map_q.shape)
+
+    cvar_map = (maps * mask).sum(dim=0) / mask.sum(dim=0)
+    return cvar_map
 
 def compute_speedmap_quantile(speedmap_cdf, speed_bins, q):
     """
