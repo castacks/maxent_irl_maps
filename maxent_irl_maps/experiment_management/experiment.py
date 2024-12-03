@@ -47,9 +47,9 @@ class Experiment:
         maybe_mkdir(self.base_fp, True)
 
     def run(self):
-        for i in range(3):
-            self.algo.visualize()
-            plt.show()
+        # for i in range(3):
+        #     self.algo.visualize()
+        #     plt.show()
 
         for e in range(self.epochs):
             self.algo.update(self.steps_per_epoch)
@@ -66,9 +66,9 @@ class Experiment:
                 )
             self.algo = self.algo.to("cuda")
 
-            for i in range(10):
-                self.algo.visualize()
-                plt.show()
+        for i in range(10):
+            self.algo.visualize()
+            plt.show()
 
     def to(self, device):
         self.device = device
