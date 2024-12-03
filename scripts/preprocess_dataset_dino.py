@@ -12,7 +12,7 @@ import matplotlib.pyplot as plt
 
 from scipy.spatial.transform import Rotation
 
-from maxent_irl_costmaps.geometry_utils import TrajectoryInterpolator
+from maxent_irl_maps.geometry_utils import TrajectoryInterpolator
 
 """
 Scripts that read rosbag_to_dataset output and make IRL datasets from it

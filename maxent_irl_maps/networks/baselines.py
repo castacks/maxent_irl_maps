@@ -268,7 +268,7 @@ if __name__ == "__main__":
     import matplotlib.pyplot as plt
     from maxent_irl_maps.experiment_management.parse_configs import setup_experiment
 
-    root_fp = "/home/physics_atv/workspace/experiments/yamaha_irl_dino/visual_ablations_50cm_mppi/2024-04-26-15-10-36_visual_ablations_semantics/itr_5.pt"
+    root_fp = "/home/tartandriver/workspace/experiments/yamaha_irl_dino/visual_ablations_50cm_mppi/2024-04-26-15-10-36_visual_ablations_semantics/itr_5.pt"
 
     param_fp = os.path.join(os.path.split(root_fp)[0], "_params.yaml")
     res = setup_experiment(param_fp)

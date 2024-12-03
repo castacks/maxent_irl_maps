@@ -120,7 +120,7 @@ class MPPIIRLSpeedmaps:
 
         # first generate all the costmaps
         res = self.network.forward(batch["map_features"])
-        costmaps = res["costmap"][:, 0]
+        costmaps = res["costmap"]
         speedmaps = res["speedmap"]
 
         # initialize metadata for cost function
@@ -171,12 +171,12 @@ class MPPIIRLSpeedmaps:
         x = self.mppi.model.get_observations(x0)
 
         # TEMP HACK - Sam TODO: clean up once data is on cluster
-        map_params["length_x"] = map_params["width"]
-        map_params["length_y"] = map_params["height"]
+        map_params["length"] = torch.stack([map_params["length_x"], map_params["length_y"]], dim=-1)
+        map_params["resolution"] = torch.stack([map_params["resolution"], map_params["resolution"]], dim=-1)
 
         self.mppi.reset()
         self.mppi.cost_fn.data["goals"] = goals
-        self.mppi.cost_fn.data["costmap"] = {"data": costmaps, "metadata": map_params}
+        self.mppi.cost_fn.data["costmap"] = {"data": costmaps, "metadata": map_params, "feature_keys":["costmap"]}
 
         for ii in range(self.mppi_itrs):
             with torch.no_grad():
@@ -215,7 +215,7 @@ class MPPIIRLSpeedmaps:
             """
             fig, axs = plt.subplots(1, 2)
             axs[0].plot(trajs[bi][weights[bi].argmax(), :, 0].cpu(), trajs[bi][weights[bi].argmax(), :, 1].cpu(), c='r')
-            axs[0].imshow(lsv.cpu(), origin='lower', extent=(
+            axs[0].imshow(lsv.T.cpu(), origin='lower', extent=(
                 map_params_b['origin'][0].item(),
                 map_params_b['origin'][0].item() + map_params_b['height'],
                 map_params_b['origin'][1].item(),
@@ -224,7 +224,7 @@ class MPPIIRLSpeedmaps:
             axs[0].set_title('learner')
 
             axs[1].plot(expert_traj[bi][:, 0].cpu(), expert_traj[bi][:, 1].cpu(), c='r')
-            axs[1].imshow(esv.cpu(), origin='lower', extent=(
+            axs[1].imshow(esv.T.cpu(), origin='lower', extent=(
                 map_params_b['origin'][0].item(),
                 map_params_b['origin'][0].item() + map_params_b['height'],
                 map_params_b['origin'][1].item(),
@@ -238,11 +238,10 @@ class MPPIIRLSpeedmaps:
         expert_state_visitations = torch.stack(expert_state_visitations, dim=0)
 
         grads = (expert_state_visitations - learner_state_visitations) / trajs.shape[0]
+        grads = grads.unsqueeze(1) #grad shape needs to match costmap shape
 
         if not torch.isfinite(grads).all():
-            import pdb
-
-            pdb.set_trace()
+            import pdb; pdb.set_trace()
 
         # Speedmaps here:
         expert_speedmaps = []
@@ -273,18 +272,16 @@ class MPPIIRLSpeedmaps:
         if self.categorical_speedmaps:
             # bin expert speeds
             _sbins = self.network.speed_bins[:-1].to(self.device).view(1, -1, 1, 1)
-            sdiffs = expert_speedmaps.unsqueeze(1) - _sbins
+            sdiffs = expert_speedmaps - _sbins
             sdiffs[sdiffs < 0] = 1e10
             expert_speed_idxs = sdiffs.argmin(dim=1) + 1
 
             mask = (
-                expert_speedmaps > 1e-2
+                expert_speedmaps[:, 0] > 1e-2
             )  # only want the cells that the expert drove in
             ce = torch.nn.functional.cross_entropy(
                 speedmaps, expert_speed_idxs, reduction="none"
             )[mask]
-
-            #            speed_loss = ce.mean() * self.speed_coeff
 
             # try regularizing speeds to zero
             neg_labels = torch.zeros_like(expert_speed_idxs)
@@ -301,8 +298,8 @@ class MPPIIRLSpeedmaps:
             ll = -speedmaps.log_prob(expert_speedmaps)[mask]
             speed_loss = ll.mean() * self.speed_coeff
 
-        #        print('IRL GRAD:   {:.4f}'.format(torch.linalg.norm(grads).detach().cpu().item()))
-        #        print('SPEED LOSS: {:.4f}'.format(speed_loss.detach().item()))
+        # print('IRL GRAD:   {:.4f}'.format(torch.linalg.norm(grads).detach().cpu().item()))
+        # print('SPEED LOSS: {:.4f}'.format(speed_loss.detach().item()))
 
         # add regularization
         reg = self.reg_coeff * costmaps
@@ -339,7 +336,7 @@ class MPPIIRLSpeedmaps:
             # resnet cnn
             if hasattr(self.network, "ensemble_forward"):
                 res = self.network.ensemble_forward(map_features)
-                costmap = res["costmap"].mean(dim=1)[:, 0]
+                costmap = res["costmap"].mean(dim=1)
 
                 if self.categorical_speedmaps:
                     _speeds = (
@@ -361,15 +358,13 @@ class MPPIIRLSpeedmaps:
                 print("non ensemble currently broken")
                 exit(1)
                 res = self.network.forward(map_features)
-                costmap = res["costmap"][:, 0]
+                costmap = res["costmap"]
 
                 if self.categorical_speedmaps:
                     speedmap_val = None
                     speedmap_unc = None
                 else:
-                    import pdb
-
-                    pdb.set_trace()
+                    import pdb; pdb.set_trace()
 
             # initialize solver
             initial_state = expert_traj[0]
@@ -395,8 +390,8 @@ class MPPIIRLSpeedmaps:
             }
 
             # TEMP HACK - Sam TODO: clean up once data is on cluster
-            map_params["length_x"] = map_params["width"]
-            map_params["length_y"] = map_params["height"]
+            map_params["length"] = torch.stack([map_params["width"], map_params["height"]], dim=-1)
+            map_params["resolution"] = torch.stack([map_params["resolution"], map_params["resolution"]], dim=-1)
 
             goals = [
                 self.clip_to_map_bounds(expert_traj[:, :2], metadata).view(1, 2)
@@ -407,6 +402,7 @@ class MPPIIRLSpeedmaps:
             self.mppi.cost_fn.data["costmap"] = {
                 "data": costmap,
                 "metadata": map_params,
+                "feature_keys": ["costmap"]
             }
 
             # solve for traj
@@ -432,22 +428,20 @@ class MPPIIRLSpeedmaps:
 
             axs[0].imshow(img)
             axs[1].imshow(
-                map_features[0][idx].cpu(),
+                map_features[0][idx].T.cpu(),
                 origin="lower",
                 cmap="gray",
                 extent=(xmin, xmax, ymin, ymax),
             )
-            #            m1 = axs[2].imshow(costmap.mean(dim=0).cpu(), origin='lower', cmap='plasma', extent=(xmin, xmax, ymin, ymax), vmin=0., vmax=2.)
-            #            m1 = axs[2].imshow(costmap[0].cpu(), origin='lower', cmap='jet', extent=(xmin, xmax, ymin, ymax))
             m1 = axs[2].imshow(
-                costmap[0].log().cpu(),
+                costmap[0, 0].log().T.cpu(),
                 origin="lower",
                 cmap="jet",
                 extent=(xmin, xmax, ymin, ymax),
             )
 
             m3 = axs[4].imshow(
-                speedmap_val.cpu(),
+                speedmap_val.T.cpu(),
                 origin="lower",
                 cmap="jet",
                 extent=(xmin, xmax, ymin, ymax),
@@ -455,13 +449,12 @@ class MPPIIRLSpeedmaps:
                 vmax=10.0,
             )
             m4 = axs[5].imshow(
-                speedmap_unc.cpu(),
+                speedmap_unc.T.cpu(),
                 origin="lower",
                 cmap="viridis",
                 extent=(xmin, xmax, ymin, ymax),
             )
 
-            #            axs[0].plot(expert_traj_px[:, 0], expert_traj_px[:, 1], c='y')
             axs[1].plot(
                 expert_traj[:, 0].cpu(), expert_traj[:, 1].cpu(), c="y", label="expert"
             )

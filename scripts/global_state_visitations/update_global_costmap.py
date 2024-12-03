@@ -8,10 +8,10 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
 
-from maxent_irl_costmaps.dataset.maxent_irl_dataset import MaxEntIRLDataset
-from maxent_irl_costmaps.dataset.global_costmap import GlobalCostmap
-from maxent_irl_costmaps.os_utils import walk_bags
-from maxent_irl_costmaps.preprocess import load_traj
+from maxent_irl_maps.dataset.maxent_irl_dataset import MaxEntIRLDataset
+from maxent_irl_maps.dataset.global_costmap import GlobalCostmap
+from maxent_irl_maps.os_utils import walk_bags
+from maxent_irl_maps.preprocess import load_traj
 
 # local scripts
 from plot_global_costmap import plot_gsv, plot_utm_traj

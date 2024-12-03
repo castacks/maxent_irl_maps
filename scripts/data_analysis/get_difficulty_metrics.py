@@ -14,8 +14,8 @@ import matplotlib.pyplot as plt
 import matplotlib
 import argparse
 
-from maxent_irl_costmaps.os_utils import walk_bags
-from maxent_irl_costmaps.preprocess import load_traj
+from maxent_irl_maps.os_utils import walk_bags
+from maxent_irl_maps.preprocess import load_traj
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()

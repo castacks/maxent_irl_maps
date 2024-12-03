@@ -28,7 +28,7 @@ sampling_strategies:
           label: action_library
           args:
             K: 100
-            path: "/home/physics_atv/physics_atv_ws/src/control/torch_mpc/data/action_libraries/yamaha_atv/H100_throttle_steer_unif.pt"
+            path: "/home/tartandriver/tartandriver_ws/src/control/torch_mpc/data/action_libraries/yamaha_atv/H100_throttle_steer_unif.pt"
 
 #        - type: UniformGaussian
 #          label: gaussian_unif

@@ -7,7 +7,7 @@ import os
 import torch
 import matplotlib.pyplot as plt
 
-from maxent_irl_costmaps.os_utils import walk_bags
+from maxent_irl_maps.os_utils import walk_bags
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()

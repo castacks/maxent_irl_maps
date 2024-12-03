@@ -5,9 +5,9 @@ import argparse
 
 from sklearn.linear_model import QuantileRegressor
 
-from maxent_irl_costmaps.dataset.maxent_irl_dataset import MaxEntIRLDataset
-from maxent_irl_costmaps.experiment_management.parse_configs import setup_experiment
-from maxent_irl_costmaps.utils import get_state_visitations, get_speedmap
+from maxent_irl_maps.dataset.maxent_irl_dataset import MaxEntIRLDataset
+from maxent_irl_maps.experiment_management.parse_configs import setup_experiment
+from maxent_irl_maps.utils import get_state_visitations, get_speedmap
 
 """
 Compute a simple speed baseline

@@ -47,13 +47,11 @@ class Experiment:
         maybe_mkdir(self.base_fp, True)
 
     def run(self):
-        #        for i in range(3):
-        #            self.algo.visualize()
-        #            plt.show()
+        for i in range(3):
+            self.algo.visualize()
+            plt.show()
 
         for e in range(self.epochs):
-            # TODO: wrap the learning here
-
             self.algo.update(self.steps_per_epoch)
 
             if e == 0:
@@ -62,16 +60,15 @@ class Experiment:
                     yaml.dump(self.params, fp, default_flow_style=False)
 
             if e % self.save_every == 0:
-                #                torch.save(self.algo.to('cpu'), os.path.join(self.base_fp, "itr_{}.pt".format(e + 1)))
                 torch.save(
                     self.algo.network.state_dict(),
                     os.path.join(self.base_fp, "itr_{}.pt".format(e + 1)),
                 )
             self.algo = self.algo.to("cuda")
 
-    #        for i in range(10):
-    #            self.algo.visualize()
-    #            plt.show()
+            for i in range(10):
+                self.algo.visualize()
+                plt.show()
 
     def to(self, device):
         self.device = device

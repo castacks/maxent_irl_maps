@@ -18,17 +18,7 @@ if __name__ == "__main__":
         res = torch.load(fp)
 
         gdata = res["gridmap_data"]
-        gdata2 = []
-
-        fks = res["gridmap_feature_keys"]
-
-        for fi, fk in enumerate(fks):
-            if "VLAD" in fk or "ganav" in fk:
-                gdata2.append(gdata[fi].T)
-            else:
-                gdata2.append(gdata[fi])
-
-        gdata2 = torch.stack(gdata2, dim=0)
+        gdata2 = gdata.permute(0,2,1)
 
         res["gridmap_data"] = gdata2
         torch.save(res, fp)

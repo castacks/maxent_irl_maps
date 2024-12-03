@@ -1,5 +1,5 @@
 experiment:
-    save_to: /home/physics_atv/workspace/experiments/yamaha_irl_dino
+    save_to: /home/tartandriver/workspace/experiments/yamaha_irl_dino
     name: highres_planner_geom
     device: cuda
     epochs: 10
@@ -26,7 +26,7 @@ algo:
 dataset:
     type: MaxEntIRLDataset
     params:
-        root_fp: /home/physics_atv/workspace/datasets/irl_postpostproc3/train
+        root_fp: /home/tartandriver/workspace/datasets/irl_postpostproc3/train
         device: cuda
         feature_keys:
 #            - dino_0
@@ -72,6 +72,6 @@ netopt:
 
 solver:
     type: planner
-    planner_fp: /home/physics_atv/physics_atv_ws/src/perception/maxent_irl_maps/configs/planner/planner_config2.yaml
+    planner_fp: /home/tartandriver/tartandriver_ws/src/planning/maxent_irl_maps/config/planner/planner_config2.yaml
 
 metrics:

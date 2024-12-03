@@ -16,7 +16,7 @@ from google_static_maps_api import MAPTYPE
 from google_static_maps_api import MAX_SIZE
 from google_static_maps_api import SCALE
 
-from maxent_irl_costmaps.dataset.global_state_visitation_buffer import (
+from maxent_irl_maps.dataset.global_state_visitation_buffer import (
     GlobalStateVisitationBuffer,
 )
 

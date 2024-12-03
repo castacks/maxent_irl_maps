@@ -6,11 +6,11 @@ if __name__ == "__main__":
     parser.add_argument("--exp_dir", type=str, required=True, help="dir of experiments")
     args = parser.parse_args()
 
-    base_cmd = "python3 generate_metrics.py --test_fp ~/workspace/datasets/irl_postpostproc_rr_2/test --mppi_eval_fp ../configs/mpc/mppi_eval_config.yaml --viz --device cuda --save_fp {}/rr_metrics_cvar --model_fp {}/itr_5.pt"
+    base_cmd = "python3 generate_metrics.py --test_fp ~/workspace/datasets/irl_postpostproc_rr_2/test --mppi_eval_fp ../config/mpc/mppi_eval_config.yaml --viz --device cuda --save_fp {}/rr_metrics_cvar --model_fp {}/itr_5.pt"
 
-    base_cmd2 = "python3 generate_metrics.py --test_fp ~/workspace/datasets/irl_postpostproc_multimap/gascola_loop_eval --mppi_eval_fp ../configs/mpc/mppi_eval_config.yaml --viz --device cuda --save_fp {}/gascola_loop_metrics --model_fp {}/itr_5.pt"
+    base_cmd2 = "python3 generate_metrics.py --test_fp ~/workspace/datasets/irl_postpostproc_multimap/gascola_loop_eval --mppi_eval_fp ../config/mpc/mppi_eval_config.yaml --viz --device cuda --save_fp {}/gascola_loop_metrics --model_fp {}/itr_5.pt"
 
-    base_cmd3 = "python3 generate_metrics.py --test_fp ~/workspace/datasets/big_irl_dataset_postproc/test --mppi_eval_fp ../configs/mpc/mppi_eval_config.yaml --viz --device cuda --save_fp {}/metrics_cvar --model_fp {}/itr_5.pt"
+    base_cmd3 = "python3 generate_metrics.py --test_fp ~/workspace/datasets/big_irl_dataset_postproc/test --mppi_eval_fp ../config/mpc/mppi_eval_config.yaml --viz --device cuda --save_fp {}/metrics_cvar --model_fp {}/itr_5.pt"
 
     efps = os.listdir(args.exp_dir)
 

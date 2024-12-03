@@ -15,7 +15,7 @@ Code for running MaxEnt IRL for offroad navigation
 
 All scripts have relatively helpful descriptions of their run args (`python3 <script> -h`)
 
-`scripts/run_experiment.py`: Main driver script. Need to provide a `--setup_fp` arg that points to a config file (a good example is: `configs/training/pointpillars_debug.yaml`).
+`scripts/run_experiment.py`: Main driver script. Need to provide a `--setup_fp` arg that points to a config file (a good example is: `config/training/pointpillars_debug.yaml`).
 
 `scripts/generate_metrics.py`: After running experiment, evaluate/visualize network with this script. 
 
@@ -23,9 +23,9 @@ All scripts have relatively helpful descriptions of their run args (`python3 <sc
 
 `scripts/ros/gridmap_to_cvar_costmap.py`: ROS node that runs the trained CVaR IRL map in ROS.
 
-`src/maxent_irl_costmaps/algos/mppi_irl_speedmaps.py`: Main IRL training code
+`src/maxent_irl_maps/algos/mppi_irl_speedmaps.py`: Main IRL training code
 
-`src/maxent_irl_costmaps/experiment_management/parse_configs.py`: Registry of strings->files to set up IRL experiments. New network definitions should be added here.
+`src/maxent_irl_maps/experiment_management/parse_configs.py`: Registry of strings->files to set up IRL experiments. New network definitions should be added here.
 
 ## Usage
 

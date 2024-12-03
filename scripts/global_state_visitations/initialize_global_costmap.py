@@ -6,7 +6,7 @@ import os
 import argparse
 import torch
 
-from maxent_irl_costmaps.dataset.global_costmap import GlobalCostmap
+from maxent_irl_maps.dataset.global_costmap import GlobalCostmap
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()

@@ -315,7 +315,7 @@ class DinoMapDataset(Dataset):
 if __name__ == "__main__":
     from torch.utils.data import DataLoader
 
-    fp = "/home/physics_atv/workspace/datasets/yamaha_preproc_dino/train"
+    fp = "/home/tartandriver/workspace/datasets/yamaha_preproc_dino/train"
 
     dataset = DinoMapDataset(fp)
 

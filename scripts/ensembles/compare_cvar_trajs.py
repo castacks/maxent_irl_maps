@@ -13,8 +13,8 @@ from torch_mpc.cost_functions.batch_multi_waypoint_costmap import (
     BatchMultiWaypointCostMapCostFunction,
 )
 
-from maxent_irl_costmaps.dataset.maxent_irl_dataset import MaxEntIRLDataset
-from maxent_irl_costmaps.os_utils import maybe_mkdir
+from maxent_irl_maps.dataset.maxent_irl_dataset import MaxEntIRLDataset
+from maxent_irl_maps.os_utils import maybe_mkdir
 
 
 def visualize_cvar(model, idx):

@@ -198,7 +198,7 @@ def setup_experiment(fp):
 
 # TEST
 if __name__ == "__main__":
-    fp = "../../../configs/training/test.yaml"
+    fp = "../../../config/training/test.yaml"
     res = setup_experiment(fp)
 
     print(

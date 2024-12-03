@@ -5,7 +5,7 @@ from scipy.ndimage import gaussian_filter
 
 class LethalHeightCostmap(torch.nn.Module):
     """
-    Identical to the costmapper node in physics_atv_lidar_mapping
+    Identical to the costmapper node in tartandriver_lidar_mapping
     """
 
     def __init__(

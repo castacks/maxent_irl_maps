@@ -1,5 +1,5 @@
 experiment:
-    save_to: /home/physics_atv/workspace/experiments/irl_pointpillars
+    save_to: /home/tartandriver/workspace/experiments/irl_pointpillars
     name: debug_planner_pointpillas
     device: cuda
     epochs: 10
@@ -26,7 +26,7 @@ algo:
 dataset:
     type: PreprocessPointpillarsDataset
     params:
-        preprocess_fp: /home/physics_atv/workspace/datasets/irl_data_postpostproc/train
+        preprocess_fp: /home/tartandriver/workspace/datasets/irl_data_postpostproc/train
 #        gridmap_type: gridmap #for nonlearned
         gridmap_type: learned_gridmap #for learned
 
@@ -53,6 +53,6 @@ netopt:
 
 solver:
     type: planner
-    planner_fp: /home/physics_atv/physics_atv_ws/src/perception/maxent_irl_maps/configs/planner/planner_config.yaml
+    planner_fp: /home/tartandriver/tartandriver_ws/src/planning/maxent_irl_maps/config/planner/planner_config.yaml
 
 metrics:

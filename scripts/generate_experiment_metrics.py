@@ -11,14 +11,14 @@ from torch_mpc.models.steer_setpoint_kbm import SteerSetpointKBM
 from torch_mpc.algos.batch_mppi import BatchMPPI
 from torch_mpc.cost_functions.waypoint_costmap import WaypointCostMapCostFunction
 
-from maxent_irl_costmaps.dataset.maxent_irl_dataset import MaxEntIRLDataset
-from maxent_irl_costmaps.dataset.global_state_visitation_buffer import (
+from maxent_irl_maps.dataset.maxent_irl_dataset import MaxEntIRLDataset
+from maxent_irl_maps.dataset.global_state_visitation_buffer import (
     GlobalStateVisitationBuffer,
 )
-from maxent_irl_costmaps.os_utils import maybe_mkdir
-from maxent_irl_costmaps.metrics.metrics import *
+from maxent_irl_maps.os_utils import maybe_mkdir
+from maxent_irl_maps.metrics.metrics import *
 
-from maxent_irl_costmaps.networks.baseline_lethal_height import LethalHeightCostmap
+from maxent_irl_maps.networks.baseline_lethal_height import LethalHeightCostmap
 
 if __name__ == "__main__":
     torch.set_printoptions(sci_mode=False)

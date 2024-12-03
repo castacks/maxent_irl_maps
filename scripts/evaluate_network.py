@@ -11,8 +11,8 @@ from torch_mpc.models.steer_setpoint_kbm import SteerSetpointKBM
 from torch_mpc.algos.batch_mppi import BatchMPPI
 from torch_mpc.cost_functions.waypoint_costmap import WaypointCostMapCostFunction
 
-from maxent_irl_costmaps.dataset.maxent_irl_dataset import MaxEntIRLDataset
-from maxent_irl_costmaps.os_utils import maybe_mkdir
+from maxent_irl_maps.dataset.maxent_irl_dataset import MaxEntIRLDataset
+from maxent_irl_maps.os_utils import maybe_mkdir
 
 if __name__ == "__main__":
     torch.set_printoptions(sci_mode=False)

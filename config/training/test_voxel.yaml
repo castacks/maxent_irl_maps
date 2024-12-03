@@ -1,5 +1,5 @@
 experiment:
-    save_to: /home/physics_atv/workspace/experiments/debug_voxel
+    save_to: /home/tartandriver/workspace/experiments/debug_voxel
     name: debug_voxel
     device: cuda
     epochs: 5
@@ -26,7 +26,7 @@ algo:
 dataset:
     type: MaxEntIRLDataset
     params:
-        root_fp: /home/physics_atv/workspace/datasets/voxel_grid_test/train
+        root_fp: /home/tartandriver/workspace/datasets/voxel_grid_test/train
         device: cuda
         feature_keys:
             - terrain
@@ -61,6 +61,6 @@ netopt:
 
 solver:
     type: mpc
-    mpc_fp: /home/physics_atv/physics_atv_ws/src/perception/maxent_irl_maps/configs/mpc/throttle_mppi.yaml
+    mpc_fp: /home/tartandriver/tartandriver_ws/src/planning/maxent_irl_maps/config/mpc/throttle_mppi.yaml
 
 metrics:

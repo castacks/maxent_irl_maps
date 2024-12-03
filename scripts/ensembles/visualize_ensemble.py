@@ -5,9 +5,9 @@ import argparse
 import numpy as np
 import matplotlib.pyplot as plt
 
-from maxent_irl_costmaps.dataset.maxent_irl_dataset import MaxEntIRLDataset
-from maxent_irl_costmaps.experiment_management.parse_configs import setup_experiment
-from maxent_irl_costmaps.os_utils import maybe_mkdir
+from maxent_irl_maps.dataset.maxent_irl_dataset import MaxEntIRLDataset
+from maxent_irl_maps.experiment_management.parse_configs import setup_experiment
+from maxent_irl_maps.os_utils import maybe_mkdir
 
 
 def compute_cvar(costmaps, q):

@@ -1,7 +1,7 @@
 import argparse
 import torch
 
-from maxent_irl_costmaps.experiment_management.parse_configs import setup_experiment
+from maxent_irl_maps.experiment_management.parse_configs import setup_experiment
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()

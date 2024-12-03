@@ -3,7 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import argparse
 
-from maxent_irl_costmaps.dataset.preprocess_pointpillars_dataset import (
+from maxent_irl_maps.dataset.preprocess_pointpillars_dataset import (
     PreprocessPointpillarsDataset,
 )
 
