@@ -62,7 +62,12 @@ class CvarCostmapperNode(Node):
 
         self.get_logger().info("loading IRL model {}".format(os.path.join(model_fp)))
 
-        model_param_fp = os.path.join(os.path.split(model_fp)[0], "_params.yaml")
+        model_dir = os.path.split(model_fp)[0]
+        model_param_fp = os.path.join(model_dir, "_params.yaml")
+
+        model_params = yaml.safe_load(open(model_param_fp, 'r'))
+        model_params['dataset']['params']['root_fp'] = os.path.join(model_dir, 'dummy_dataset')
+
         irl = setup_experiment(model_param_fp)["algo"]
         irl.network.load_state_dict(torch.load(model_fp))
         irl.network.eval()

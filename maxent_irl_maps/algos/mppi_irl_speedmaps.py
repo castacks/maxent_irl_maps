@@ -9,10 +9,8 @@ import scipy.interpolate
 from torch.utils.data import DataLoader
 
 from maxent_irl_maps.dataset.maxent_irl_dataset import MaxEntIRLDataset
-from maxent_irl_maps.costmappers.linear_costmapper import LinearCostMapper
-from maxent_irl_maps.utils import get_state_visitations, get_speedmap
+from maxent_irl_maps.utils import get_state_visitations, get_speedmap, compute_map_mean_entropy
 from maxent_irl_maps.geometry_utils import apply_footprint
-
 
 class MPPIIRLSpeedmaps:
     """
@@ -48,7 +46,6 @@ class MPPIIRLSpeedmaps:
         speed_coeff=1.0,
         reg_coeff=1e-2,
         grad_clip=1.0,
-        categorical_speedmaps=True,
         device="cpu",
     ):
         """
@@ -63,7 +60,6 @@ class MPPIIRLSpeedmaps:
         self.footprint = footprint
         self.mppi = mppi
         self.mppi_itrs = mppi_itrs
-        self.categorical_speedmaps = categorical_speedmaps
 
         self.network = network
 
@@ -113,13 +109,8 @@ class MPPIIRLSpeedmaps:
         grads = []
         speed_loss = []
 
-        efc = []
-        lfc = []
-        rfc = []
-        costmap_cache = []
-
         # first generate all the costmaps
-        res = self.network.forward(batch["map_features"])
+        res = self.network.forward(batch["map_features"], return_mean_entropy=True)
         costmaps = res["costmap"]
         speedmaps = res["speedmap"]
 
@@ -269,34 +260,28 @@ class MPPIIRLSpeedmaps:
 
         expert_speedmaps = torch.stack(expert_speedmaps, dim=0)
 
-        if self.categorical_speedmaps:
-            # bin expert speeds
-            _sbins = self.network.speed_bins[:-1].to(self.device).view(1, -1, 1, 1)
-            sdiffs = expert_speedmaps - _sbins
-            sdiffs[sdiffs < 0] = 1e10
-            expert_speed_idxs = sdiffs.argmin(dim=1) + 1
+        speedmap_probs = res["speed_logits"].softmax(axis=1)
 
-            mask = (
-                expert_speedmaps[:, 0] > 1e-2
-            )  # only want the cells that the expert drove in
-            ce = torch.nn.functional.cross_entropy(
-                speedmaps, expert_speed_idxs, reduction="none"
-            )[mask]
+        # bin expert speeds
+        _sbins = self.network.speed_bins[:-1].to(self.device).view(1, -1, 1, 1)
+        sdiffs = expert_speedmaps - _sbins
+        sdiffs[sdiffs < 0] = 1e10
+        expert_speed_idxs = sdiffs.argmin(dim=1) + 1
 
-            # try regularizing speeds to zero
-            neg_labels = torch.zeros_like(expert_speed_idxs)
-            ce_neg = torch.nn.functional.cross_entropy(
-                speedmaps, neg_labels, reduction="none"
-            )[~mask]
+        mask = (
+            expert_speedmaps[:, 0] > 1e-2
+        )  # only want the cells that the expert drove in
+        ce = torch.nn.functional.cross_entropy(
+            speedmap_probs, expert_speed_idxs, reduction="none"
+        )[mask]
 
-            speed_loss = ce.mean() * self.speed_coeff + 0.05 * ce_neg.mean()
+        # try regularizing speeds to zero
+        neg_labels = torch.zeros_like(expert_speed_idxs)
+        ce_neg = torch.nn.functional.cross_entropy(
+            speedmap_probs, neg_labels, reduction="none"
+        )[~mask]
 
-        else:
-            mask = (
-                expert_speedmaps > 1e-2
-            )  # only need the cells that the expert drove in
-            ll = -speedmaps.log_prob(expert_speedmaps)[mask]
-            speed_loss = ll.mean() * self.speed_coeff
+        speed_loss = ce.mean() * self.speed_coeff + 0.05 * ce_neg.mean()
 
         # print('IRL GRAD:   {:.4f}'.format(torch.linalg.norm(grads).detach().cpu().item()))
         # print('SPEED LOSS: {:.4f}'.format(speed_loss.detach().item()))
@@ -332,39 +317,12 @@ class MPPIIRLSpeedmaps:
             ymax = ymin + metadata["height"].cpu()
             expert_traj = data["traj"]
 
-            # compute costmap
-            # resnet cnn
-            if hasattr(self.network, "ensemble_forward"):
-                res = self.network.ensemble_forward(map_features)
-                costmap = res["costmap"].mean(dim=1)
+            res = self.network.forward(map_features, return_mean_entropy=True)
 
-                if self.categorical_speedmaps:
-                    _speeds = (
-                        self.network.speed_bins[1:].to(self.device).view(1, -1, 1, 1)
-                    )
-                    speedmap_dist = res["speedmap"][0].softmax(dim=1)
-                    speedmap_val = (_speeds * speedmap_dist).sum(dim=1).mean(dim=0)
-                    speedmap_unc = (
-                        (-speedmap_dist * speedmap_dist.log()).sum(dim=1).mean(dim=0)
-                    )
-                else:
-                    #                    speedmap_val = res['speedmap'].loc[0].mean(dim=0)
-                    #                    speedmap_unc = res['speedmap'].scale[0].mean(dim=0)
-
-                    speedmap_val = res["speedmap"][0].mean(dim=0)
-                    speedmap_unc = torch.zeros_like(speedmap_val)
-
-            else:
-                print("non ensemble currently broken")
-                exit(1)
-                res = self.network.forward(map_features)
-                costmap = res["costmap"]
-
-                if self.categorical_speedmaps:
-                    speedmap_val = None
-                    speedmap_unc = None
-                else:
-                    import pdb; pdb.set_trace()
+            costmap = res["costmap"]
+            speedmap = res["speedmap"]
+            costmap_unc = res["costmap_entropy"]
+            speedmap_unc = res["speedmap_entropy"]
 
             # initialize solver
             initial_state = expert_traj[0]
@@ -434,22 +392,29 @@ class MPPIIRLSpeedmaps:
                 extent=(xmin, xmax, ymin, ymax),
             )
             m1 = axs[2].imshow(
-                costmap[0, 0].log().T.cpu(),
+                costmap[0, 0].T.cpu(),
                 origin="lower",
                 cmap="jet",
                 extent=(xmin, xmax, ymin, ymax),
             )
 
-            m3 = axs[4].imshow(
-                speedmap_val.T.cpu(),
+            m2 = axs[3].imshow(
+                speedmap[0, 0].T.cpu(),
                 origin="lower",
                 cmap="jet",
                 extent=(xmin, xmax, ymin, ymax),
                 vmin=0.0,
                 vmax=10.0,
             )
+            m3 = axs[4].imshow(
+                costmap_unc[0, 0].T.cpu(),
+                origin="lower",
+                cmap="viridis",
+                extent=(xmin, xmax, ymin, ymax),
+            )
+
             m4 = axs[5].imshow(
-                speedmap_unc.T.cpu(),
+                speedmap_unc[0, 0].T.cpu(),
                 origin="lower",
                 cmap="viridis",
                 extent=(xmin, xmax, ymin, ymax),
@@ -477,9 +442,9 @@ class MPPIIRLSpeedmaps:
             axs[0].set_title("FPV")
             axs[1].set_title("gridmap {}".format(fk))
             #            axs[2].set_title('irl cost (clipped)')
-            axs[2].set_title("irl log cost")
-            axs[3].set_title("speedmap lcb (z=-1)")
-            axs[4].set_title("speedmap mean")
+            axs[2].set_title("irl cost mean")
+            axs[3].set_title("speedmap mean")
+            axs[4].set_title("irl cost unc")
             axs[5].set_title("speedmap unc")
 
             for i in [1, 2, 4, 5]:
@@ -489,6 +454,7 @@ class MPPIIRLSpeedmaps:
             axs[1].legend()
 
             plt.colorbar(m1, ax=axs[2])
+            plt.colorbar(m2, ax=axs[3])
             plt.colorbar(m3, ax=axs[4])
             plt.colorbar(m4, ax=axs[5])
         return fig, axs

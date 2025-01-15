@@ -4,24 +4,23 @@ from torch import nn
 
 from maxent_irl_maps.networks.mlp import MLP
 from maxent_irl_maps.networks.misc import ScaledSigmoid, Exponential, AddMin
+from maxent_irl_maps.utils import compute_map_mean_entropy
 
 """
 A collection of basic CNN blocks to try.
 """
 
-
-class ResnetCostmapCategoricalSpeedmapCNNEnsemble3(nn.Module):
+class ResnetCategorical(nn.Module):
     def __init__(
         self,
         in_channels,
         hidden_channels,
         speed_nbins=20,
         max_speed=10.0,
-        ensemble_dim=100,
+        cost_nbins=20,
+        max_cost=10.0,
         hidden_activation="tanh",
         dropout=0.0,
-        activation_type="sigmoid",
-        activation_scale=1.0,
         device="cpu",
     ):
         """
@@ -29,12 +28,8 @@ class ResnetCostmapCategoricalSpeedmapCNNEnsemble3(nn.Module):
             in_channels: The number of channels in the input image
             out_channels: The number of channels in the output image
             hidden_channels: A list containing the intermediate channels
-
-        Note that in contrast to regular resnet, there is no end MLP nor pooling
-
-        Same as the first ensemble, but now make the first layer the ensemble
         """
-        super(ResnetCostmapCategoricalSpeedmapCNNEnsemble3, self).__init__()
+        super(ResnetCategorical, self).__init__()
         self.channel_sizes = [in_channels] + hidden_channels + [1]
 
         if hidden_activation == "tanh":
@@ -42,11 +37,13 @@ class ResnetCostmapCategoricalSpeedmapCNNEnsemble3(nn.Module):
         elif hidden_activation == "relu":
             hidden_activation = nn.ReLU
 
-        self.ensemble_dim = ensemble_dim
+        self.max_cost = max_cost
+        self.cost_nbins = cost_nbins
+        self.cost_bins = torch.linspace(0.0, self.max_cost, self.cost_nbins + 1, device=device)
 
         self.max_speed = max_speed
         self.speed_nbins = speed_nbins
-        self.speed_bins = torch.linspace(0.0, self.max_speed, self.speed_nbins + 1)
+        self.speed_bins = torch.linspace(0.0, self.max_speed, self.speed_nbins + 1, device=device)
 
         self.cnn = nn.ModuleList()
         for i in range(len(self.channel_sizes) - 2):
@@ -62,135 +59,9 @@ class ResnetCostmapCategoricalSpeedmapCNNEnsemble3(nn.Module):
         # last conv to avoid activation (for cost head)
         self.cost_head = nn.Conv2d(
             in_channels=self.channel_sizes[-2],
-            out_channels=self.ensemble_dim,
+            out_channels=self.cost_nbins,
             kernel_size=1,
-            bias=True,
-        )
-        self.speed_head = nn.Conv2d(
-            in_channels=self.channel_sizes[-2],
-            out_channels=self.speed_nbins * self.ensemble_dim,
-            kernel_size=1,
-            bias=True,
-        )
-
-        self.cnn = torch.nn.Sequential(*self.cnn)
-
-        if activation_type == "sigmoid":
-            self.activation = ScaledSigmoid(scale=activation_scale)
-        elif activation_type == "exponential":
-            self.activation = Exponential(scale=activation_scale)
-        elif activation_type == "addmin":
-            self.activation = AddMin()
-        elif activation_type == "relu":
-            self.activation = torch.nn.ReLU()
-        elif activation_type == "none":
-            self.activation = nn.Identity()
-
-    def forward(self, x, return_features=True):
-        idx = torch.randint(self.ensemble_dim, size=(1,), device=x.device)
-        batch_dims = x.shape[:-3]
-        map_dims = x.shape[-2:]
-        edim = len(batch_dims)
-
-        features = self.cnn.forward(x)
-        costmap = self.activation(self.cost_head(features))
-        speed_logits = self.speed_head(features)
-
-        costmap = costmap.view(*batch_dims, self.ensemble_dim, 1, *map_dims)
-        speed_logits = speed_logits.view(
-            *batch_dims, self.ensemble_dim, self.speed_nbins, *map_dims
-        )
-
-        costmap = torch.index_select(costmap, edim, idx).squeeze(edim)
-        speed_logits = torch.index_select(speed_logits, edim, idx).squeeze(edim)
-
-        # exponentiate the mean value too, as speeds are always positive
-        return {"costmap": costmap, "speedmap": speed_logits, "features": features}
-
-    def ensemble_forward(self, x, return_features=True):
-        batch_dims = x.shape[:-3]
-        map_dims = x.shape[-2:]
-
-        features = self.cnn.forward(x)
-
-        # unsqueeze to make [B x E x C x H x W]
-        costmap = self.activation(self.cost_head(features))
-        speed_logits = self.speed_head(features)
-
-        # reshape
-        costmap = costmap.view(*batch_dims, self.ensemble_dim, 1, *map_dims)
-        speed_logits = speed_logits.view(
-            *batch_dims, self.ensemble_dim, self.speed_nbins, *map_dims
-        )
-
-        return {"costmap": costmap, "speedmap": speed_logits, "features": features}
-
-
-class ResnetCostmapCategoricalSpeedmapCNNEnsemble2(nn.Module):
-    def __init__(
-        self,
-        in_channels,
-        hidden_channels,
-        speed_nbins=20,
-        max_speed=10.0,
-        ensemble_dim=100,
-        hidden_activation="tanh",
-        dropout=0.0,
-        activation_type="sigmoid",
-        activation_scale=1.0,
-        device="cpu",
-    ):
-        """
-        Args:
-            in_channels: The number of channels in the input image
-            out_channels: The number of channels in the output image
-            hidden_channels: A list containing the intermediate channels
-
-        Note that in contrast to regular resnet, there is no end MLP nor pooling
-
-        Same as the first ensemble, but now make the first layer the ensemble
-        """
-        super(ResnetCostmapCategoricalSpeedmapCNNEnsemble2, self).__init__()
-        self.channel_sizes = [in_channels] + hidden_channels + [1]
-
-        if hidden_activation == "tanh":
-            hidden_activation = nn.Tanh
-        elif hidden_activation == "relu":
-            hidden_activation = nn.ReLU
-
-        self.ensemble_dim = ensemble_dim
-
-        self.max_speed = max_speed
-        self.speed_nbins = speed_nbins
-        self.speed_bins = torch.linspace(0.0, self.max_speed, self.speed_nbins + 1)
-
-        self.cnn = nn.ModuleList()
-        for i in range(len(self.channel_sizes) - 2):
-            if i == 0:
-                self.cnn_base = nn.ModuleList(
-                    [
-                        ResnetCostmapBlock(
-                            in_channels=self.channel_sizes[i],
-                            out_channels=self.channel_sizes[i + 1],
-                            activation=hidden_activation,
-                            dropout=dropout,
-                        )
-                        for _ in range(self.ensemble_dim)
-                    ]
-                )
-            else:
-                self.cnn.append(
-                    ResnetCostmapBlock(
-                        in_channels=self.channel_sizes[i],
-                        out_channels=self.channel_sizes[i + 1],
-                        activation=hidden_activation,
-                        dropout=dropout,
-                    )
-                )
-
-        # last conv to avoid activation (for cost head)
-        self.cost_head = nn.Conv2d(
-            in_channels=self.channel_sizes[-2], out_channels=1, kernel_size=1, bias=True
+            bias=True
         )
         self.speed_head = nn.Conv2d(
             in_channels=self.channel_sizes[-2],
@@ -199,192 +70,21 @@ class ResnetCostmapCategoricalSpeedmapCNNEnsemble2(nn.Module):
             bias=True,
         )
 
-        """
-        self.cost_head = nn.Sequential(*[
-            ResnetCostmapBlock(in_channels=self.channel_sizes[-2], out_channels=32, activation=hidden_activation, dropout=dropout),
-            ResnetCostmapBlock(in_channels=32, out_channels=32, activation=hidden_activation, dropout=dropout),
-            nn.Conv2d(in_channels=32, out_channels=1, kernel_size=1, bias=True)
-        ])
-
-        self.speed_head = nn.Sequential(*[
-            ResnetCostmapBlock(in_channels=self.channel_sizes[-2], out_channels=32, activation=hidden_activation, dropout=dropout),
-            ResnetCostmapBlock(in_channels=32, out_channels=32, activation=hidden_activation, dropout=dropout),
-            nn.Conv2d(in_channels=32, out_channels=self.speed_nbins, kernel_size=1, bias=True)
-        ])
-        """
-
         self.cnn = torch.nn.Sequential(*self.cnn)
 
-        if activation_type == "sigmoid":
-            self.activation = ScaledSigmoid(scale=activation_scale)
-        elif activation_type == "exponential":
-            self.activation = Exponential(scale=activation_scale)
-        elif activation_type == "addmin":
-            self.activation = AddMin()
-        elif activation_type == "relu":
-            self.activation = torch.nn.ReLU()
-        elif activation_type == "none":
-            self.activation = nn.Identity()
-
-    def forward(self, x, return_features=True):
-        idx = torch.randint(self.ensemble_dim, size=(1,))
-        base_layer = self.cnn_base[idx]
-
-        features = self.cnn.forward(base_layer.forward(x))
-        costmap = self.activation(self.cost_head(features))
+    def forward(self, x, return_mean_entropy=False):
+        features = self.cnn.forward(x)
+        cost_logits = self.cost_head(features)
         speed_logits = self.speed_head(features)
 
         # exponentiate the mean value too, as speeds are always positive
-        return {"costmap": costmap, "speedmap": speed_logits, "features": features}
+        res = {"cost_logits": cost_logits, "speed_logits": speed_logits}
 
-    def ensemble_forward(self, x, return_features=True, ne=-1):
-        if ne == -1:
-            base_layers = self.cnn_base
-        else:
-            eidxs = torch.randperm(self.ensemble_dim, device=x.device)[:ne]
-            base_layers = [self.cnn_base[i] for i in eidxs]
+        if return_mean_entropy:
+            res["costmap"], res["costmap_entropy"] = compute_map_mean_entropy(cost_logits, self.cost_bins)
+            res["speedmap"], res["speedmap_entropy"] = compute_map_mean_entropy(speed_logits, self.speed_bins)
 
-        features_batch = torch.stack(
-            [layer.forward(x) for layer in base_layers], dim=-4
-        )
-
-        # have to reshape for cnn
-        data_dims = features_batch.shape[-3:]
-        batch_dims = features_batch.shape[:-3]
-        features_batch_flat = features_batch.view(-1, *data_dims)
-
-        features = self.cnn.forward(features_batch_flat)
-
-        # unsqueeze to make [B x E x C x H x W]
-        costmap = self.activation(self.cost_head(features)).view(
-            *batch_dims, 1, *data_dims[1:]
-        )
-        speed_logits = self.speed_head(features).view(
-            *batch_dims, self.speed_nbins, *data_dims[1:]
-        )
-
-        return {"costmap": costmap, "speedmap": speed_logits, "features": features}
-
-
-class ResnetCostmapSpeedmapCNNEnsemble2(nn.Module):
-    def __init__(
-        self,
-        in_channels,
-        hidden_channels,
-        ensemble_dim=100,
-        hidden_activation="tanh",
-        dropout=0.0,
-        activation_type="sigmoid",
-        activation_scale=1.0,
-        device="cpu",
-    ):
-        """
-        Args:
-            in_channels: The number of channels in the input image
-            out_channels: The number of channels in the output image
-            hidden_channels: A list containing the intermediate channels
-
-        Note that in contrast to regular resnet, there is no end MLP nor pooling
-
-        Same as the first ensemble, but now make the first layer the ensemble
-        """
-        super(ResnetCostmapSpeedmapCNNEnsemble2, self).__init__()
-        self.channel_sizes = [in_channels] + hidden_channels + [1]
-
-        if hidden_activation == "tanh":
-            hidden_activation = nn.Tanh
-        elif hidden_activation == "relu":
-            hidden_activation = nn.ReLU
-
-        self.ensemble_dim = ensemble_dim
-
-        self.cnn = nn.ModuleList()
-        for i in range(len(self.channel_sizes) - 2):
-            if i == 0:
-                self.cnn_base = nn.ModuleList(
-                    [
-                        ResnetCostmapBlock(
-                            in_channels=self.channel_sizes[i],
-                            out_channels=self.channel_sizes[i + 1],
-                            activation=hidden_activation,
-                            dropout=dropout,
-                        )
-                        for _ in range(self.ensemble_dim)
-                    ]
-                )
-            else:
-                self.cnn.append(
-                    ResnetCostmapBlock(
-                        in_channels=self.channel_sizes[i],
-                        out_channels=self.channel_sizes[i + 1],
-                        activation=hidden_activation,
-                        dropout=dropout,
-                    )
-                )
-
-        # last conv to avoid activation (for cost head)
-        self.cost_head = nn.Conv2d(
-            in_channels=self.channel_sizes[-2], out_channels=1, kernel_size=1, bias=True
-        )
-        self.speed_head = nn.Conv2d(
-            in_channels=self.channel_sizes[-2], out_channels=2, kernel_size=1, bias=True
-        )
-
-        self.cnn = torch.nn.Sequential(*self.cnn)
-
-        if activation_type == "sigmoid":
-            self.activation = ScaledSigmoid(scale=activation_scale)
-        elif activation_type == "exponential":
-            self.activation = Exponential(scale=activation_scale)
-        elif activation_type == "addmin":
-            self.activation = AddMin()
-        elif activation_type == "relu":
-            self.activation = torch.nn.ReLU()
-        elif activation_type == "none":
-            self.activation = nn.Identity()
-
-    def forward(self, x, return_features=True):
-        idx = torch.randint(self.ensemble_dim, size=(1,))
-        base_layer = self.cnn_base[idx]
-
-        features = self.cnn.forward(base_layer.forward(x))
-        costmap = self.activation(self.cost_head(features))
-        speed_logits = self.speed_head(features)
-
-        # exponentiate the mean value too, as speeds are always positive
-        speed_dist = torch.distributions.Normal(
-            loc=speed_logits[..., 0, :, :].exp(),
-            scale=(speed_logits[..., 1, :, :].exp() + 1e-6),
-        )
-
-        return {"costmap": costmap, "speedmap": speed_dist, "features": features}
-
-    def ensemble_forward(self, x, return_features=True):
-        features_batch = torch.stack(
-            [layer.forward(x) for layer in self.cnn_base], dim=-4
-        )
-
-        # have to reshape for cnn
-        data_dims = features_batch.shape[-3:]
-        batch_dims = features_batch.shape[:-3]
-        features_batch_flat = features_batch.view(-1, *data_dims)
-
-        features = self.cnn.forward(features_batch_flat)
-
-        # unsqueeze to make [B x E x C x H x W]
-        costmap = self.activation(self.cost_head(features)).view(
-            *batch_dims, 1, *data_dims[1:]
-        )
-        speed_logits = self.speed_head(features).view(*batch_dims, 2, *data_dims[1:])
-
-        # exponentiate the mean value too, as speeds are always positive
-        speed_dist = torch.distributions.Normal(
-            loc=speed_logits[..., 0, :, :].exp(),
-            scale=(speed_logits[..., 1, :, :].exp() + 1e-6),
-        )
-
-        return {"costmap": costmap, "speedmap": speed_dist, "features": features}
-
+        return res
 
 class LinearCostmapSpeedmapEnsemble2(nn.Module):
     """

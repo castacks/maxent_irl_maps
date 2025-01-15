@@ -60,16 +60,14 @@ dataset:
             # - roughness
 
 network:
-    type: ResnetCostmapCategoricalSpeedmapCNNEnsemble2
+    type: ResnetCategorical
     params:
-        ensemble_dim: 2
+        cost_nbins: 20
+        max_cost: 10.
         speed_nbins: 15
         max_speed: 15.
         hidden_channels: [64, 64]
         hidden_activation: relu
-#        activation_type: addmin #planner needs nonnegative costs
-        activation_type: exponential #planner needs nonnegative costs
-        activation_scale: 1.0
         dropout: 0.0
 
 netopt:

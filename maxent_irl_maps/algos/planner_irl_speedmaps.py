@@ -10,7 +10,6 @@ from torch.utils.data import DataLoader
 from scipy.spatial.transform import Rotation
 
 from maxent_irl_maps.dataset.maxent_irl_dataset import MaxEntIRLDataset
-from maxent_irl_maps.costmappers.linear_costmapper import LinearCostMapper
 from maxent_irl_maps.utils import get_state_visitations, get_speedmap
 from maxent_irl_maps.geometry_utils import apply_footprint
 

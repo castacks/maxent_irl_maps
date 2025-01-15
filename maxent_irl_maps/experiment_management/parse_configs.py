@@ -19,23 +19,14 @@ from maxent_irl_maps.algos.planner_irl_speedmaps import PlannerIRLSpeedmaps
 
 from maxent_irl_maps.geometry_utils import make_footprint
 
-from maxent_irl_maps.networks.resnet import (
-    ResnetCostmapSpeedmapCNNEnsemble2,
-    LinearCostmapSpeedmapEnsemble2,
-    ResnetCostmapCategoricalSpeedmapCNNEnsemble2,
-    ResnetCostmapCategoricalSpeedmapCNNEnsemble3,
-)
+from maxent_irl_maps.networks.resnet import ResnetCategorical
 
 from maxent_irl_maps.dataset.maxent_irl_dataset import MaxEntIRLDataset
-from maxent_irl_maps.dataset.preprocess_pointpillars_dataset import (
-    PreprocessPointpillarsDataset,
-)
-from maxent_irl_maps.dataset.dino_map_dataset import DinoMapDataset
 
 from maxent_irl_maps.experiment_management.experiment import Experiment
 
 
-def setup_experiment(fp):
+def setup_experiment(fp, skip_mpc=False):
     """
     Expect the following top-level keys in the YAML:
         1. experiment: high-level params such as where to save to, epochs, etc.
@@ -85,37 +76,17 @@ def setup_experiment(fp):
     dataset_params = experiment_dict["dataset"]
     if dataset_params["type"] == "MaxEntIRLDataset":
         res["dataset"] = MaxEntIRLDataset(**dataset_params["params"]).to(device)
-    elif dataset_params["type"] == "PreprocessPointpillarsDataset":
-        res["dataset"] = PreprocessPointpillarsDataset(**dataset_params["params"]).to(
-            device
-        )
-    elif dataset_params["type"] == "DinoMapDataset":
-        res["dataset"] = DinoMapDataset(**dataset_params["params"]).to(device)
     else:
         print("Unsupported dataset type {}".format(dataset_params["type"]))
         exit(1)
 
     # setup network
     network_params = experiment_dict["network"]
-    if network_params["type"] == "ResnetCostmapSpeedmapCNNEnsemble2":
-        res["network"] = ResnetCostmapSpeedmapCNNEnsemble2(
+    network_params["params"]["device"] = device
+    if network_params["type"] == "ResnetCategorical":
+        res["network"] = ResnetCategorical(
             in_channels=len(res["dataset"].feature_keys), **network_params["params"]
         ).to(device)
-
-    elif network_params["type"] == "LinearCostmapSpeedmapEnsemble2":
-        res["network"] = LinearCostmapSpeedmapEnsemble2(
-            in_channels=len(res["dataset"].feature_keys), **network_params["params"]
-        ).to(device)
-
-    elif network_params["type"] == "ResnetCostmapCategoricalSpeedmapCNNEnsemble2":
-        res["network"] = ResnetCostmapCategoricalSpeedmapCNNEnsemble2(
-            in_channels=len(res["dataset"].feature_keys), **network_params["params"]
-        )
-
-    elif network_params["type"] == "ResnetCostmapCategoricalSpeedmapCNNEnsemble3":
-        res["network"] = ResnetCostmapCategoricalSpeedmapCNNEnsemble3(
-            in_channels=len(res["dataset"].feature_keys), **network_params["params"]
-        )
 
     else:
         print("Unsupported network type {}".format(network_params["type"]))
@@ -172,7 +143,6 @@ def setup_experiment(fp):
             expert_dataset=res["dataset"],
             mppi=res["trajopt"],
             footprint=res["footprint"],
-            categorical_speedmaps=hasattr(res["network"], "speed_bins"),
             **algo_params["params"]
         ).to(device)
 
@@ -183,7 +153,6 @@ def setup_experiment(fp):
             expert_dataset=res["dataset"],
             planner=res["planner"],
             footprint=res["footprint"],
-            categorical_speedmaps=hasattr(res["network"], "speed_bins"),
             **algo_params["params"]
         ).to(device)
 

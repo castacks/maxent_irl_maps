@@ -1,5 +1,21 @@
 import torch
 
+def compute_map_mean_entropy(logits, bin_edges):
+    """
+    Compute the mean and entropy of a map represented as a categorical
+
+    Args:
+        logits: a BxLxWxH tensor of map logits
+    """
+    _bin_edges = (bin_edges[1:]+bin_edges[:-1])/2.
+    _bin_edges = _bin_edges.view(1,-1,1,1)
+
+    probs = logits.softmax(dim=1)
+
+    mean = (probs * _bin_edges).sum(dim=1, keepdim=True)
+    entropy = (probs * -probs.log()).sum(dim=1, keepdim=True)
+
+    return mean, entropy
 
 def quat_to_yaw(quat):
     """
