@@ -64,9 +64,9 @@ network:
     params:
         cost_nbins: 20
         max_cost: 10.
-        speed_nbins: 15
+        speed_nbins: 30
         max_speed: 15.
-        hidden_channels: [64, 64]
+        hidden_channels: [128, 128]
         hidden_activation: relu
         dropout: 0.0
 

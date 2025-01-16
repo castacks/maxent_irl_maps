@@ -64,7 +64,7 @@ def compute_speedmap_quantile(speedmap_cdf, speed_bins, q):
     _cdf_low = _cdf.T[torch.arange(len(_qidx)), _qidx]
     _cdf_high = _cdf.T[torch.arange(len(_qidx)), _qidx + 1]
 
-    _k = (q - _cdf_low) / (_cdf_high - _cdf_low)
+    _k = (q - _cdf_low) / ((_cdf_high - _cdf_low)+1e-8)
 
     _speedmap_low = speed_bins[_qidx]
     _speedmap_high = speed_bins[_qidx + 1]

@@ -281,7 +281,7 @@ class MPPIIRLSpeedmaps:
             speedmap_probs, neg_labels, reduction="none"
         )[~mask]
 
-        speed_loss = ce.mean() * self.speed_coeff + 0.05 * ce_neg.mean()
+        speed_loss = ce.mean() * self.speed_coeff + 0.01 * ce_neg.mean()
 
         # print('IRL GRAD:   {:.4f}'.format(torch.linalg.norm(grads).detach().cpu().item()))
         # print('SPEED LOSS: {:.4f}'.format(speed_loss.detach().item()))
