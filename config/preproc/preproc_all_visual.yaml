@@ -1,5 +1,5 @@
-src_dir: /home/tartandriver/workspace/datasets/irl_postproc_eval
-dst_dir: /home/tartandriver/workspace/datasets/irl_postpostproc_multimap_eval
+src_dir: /home/tartandriver/workspace/datasets/2025_irl_kitti
+dst_dir: /home/tartandriver/workspace/datasets/2025_irl_data
 save_every: 20 #add every n-th frame
 
 H: 100
@@ -10,9 +10,6 @@ cmd: cmd
 steer_angle: steer_angle
 odom: odom
 gps_odom: gps_odom
-local_gridmap: local_gridmap
-local_dino_map: local_dino_map
-local_vlad_map: local_vlad_map
-local_semantic_map: local_semantic_map
-pcl: pcl
+local_gridmap: vfm_gridmap
+pcl: super_odometry_pc
 img: image_left_color

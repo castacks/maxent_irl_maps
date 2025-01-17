@@ -77,7 +77,7 @@ def run_preproc_traj(traj_fp, dst_fp, config):
     os.makedirs(res_fp, exist_ok=True)
 
     ## first load all the trajectories / cmds
-    odom = np.load(os.path.join(traj_fp, config["odom"], "odometry.npy"))
+    odom = np.loadtxt(os.path.join(traj_fp, config["odom"], "data.txt"))
     odom_ts = np.loadtxt(os.path.join(traj_fp, config["odom"], "timestamps.txt"))
     odom_dts = odom_ts[1:] - odom_ts[:-1]
     odom_mask = (odom_dts > 1e-4) & (odom_dts < 0.2)
@@ -86,7 +86,7 @@ def run_preproc_traj(traj_fp, dst_fp, config):
     # note that there can still be positive timejumps in this interpolator
     odom_interp = TrajectoryInterpolator(times=odom_ts, traj=odom)
 
-    steer_angle = np.load(os.path.join(traj_fp, config["steer_angle"], "float.npy"))
+    steer_angle = np.loadtxt(os.path.join(traj_fp, config["steer_angle"], "data.txt"))
     steer_angle_ts = np.loadtxt(
         os.path.join(traj_fp, config["steer_angle"], "timestamps.txt")
     )
@@ -130,37 +130,34 @@ def run_preproc_traj(traj_fp, dst_fp, config):
 
             # bgr -> rgb
             img = cv2.imread(
-                os.path.join(traj_fp, config["img"], "{:06d}.png".format(img_idx)),
+                os.path.join(traj_fp, config["img"], "{:08d}.png".format(img_idx)),
                 cv2.IMREAD_UNCHANGED,
             )[:, :, [2, 1, 0]]
 
             pcl = np.load(
-                os.path.join(traj_fp, config["pcl"], "{:06d}.npy".format(pcl_idx))
+                os.path.join(traj_fp, config["pcl"], "{:08d}.npy".format(pcl_idx))
             )
             # move pcl into odom frame (sampling from interp more accurate)
             pcl_tf = transform_pcl(pcl, odom_interp(pcl_t))
 
             gridmap_data = np.load(
                 os.path.join(
-                    traj_fp, config["local_gridmap"], "{:06d}_data.npy".format(i)
+                    traj_fp, config["local_gridmap"], "{:08d}_data.npy".format(i)
                 )
             )
 
-            # temp hack
             gridmap_data[~np.isfinite(gridmap_data)] = 0.0
             gridmap_metadata = yaml.safe_load(
                 open(
                     os.path.join(
                         traj_fp,
                         config["local_gridmap"],
-                        "{:06d}_metadata.yaml".format(i),
+                        "{:08d}_metadata.yaml".format(i),
                     ),
                     "r",
                 )
             )
 
-            gridmap_metadata["length_x"] = gridmap_metadata["width"]
-            gridmap_metadata["length_y"] = gridmap_metadata["height"]
             gridmap_feature_keys = gridmap_metadata["feature_keys"]
             gridmap_metadata = {
                 k: torch.tensor(v).float()
@@ -168,104 +165,32 @@ def run_preproc_traj(traj_fp, dst_fp, config):
                 if k != "feature_keys"
             }
 
-            dino_map_data = np.load(
-                os.path.join(
-                    traj_fp, config["local_dino_map"], "{:06d}_data.npy".format(i)
-                )
-            )
-            dino_map_metadata = yaml.safe_load(
-                open(
-                    os.path.join(
-                        traj_fp,
-                        config["local_dino_map"],
-                        "{:06d}_metadata.yaml".format(i),
-                    ),
-                    "r",
-                )
-            )
-            dino_map_feature_keys = dino_map_metadata["feature_keys"]
-
-            vlad_map_data = np.load(
-                os.path.join(
-                    traj_fp, config["local_vlad_map"], "{:06d}_data.npy".format(i)
-                )
-            )
-            vlad_map_metadata = yaml.safe_load(
-                open(
-                    os.path.join(
-                        traj_fp,
-                        config["local_vlad_map"],
-                        "{:06d}_metadata.yaml".format(i),
-                    ),
-                    "r",
-                )
-            )
-            vlad_map_feature_keys = []
-            for k in range(vlad_map_data.shape[0]):
-                vlad_map_feature_keys.append("VLAD_" + str(k))
-
-            semantic_map_data = np.load(
-                os.path.join(
-                    traj_fp, config["local_semantic_map"], "{:06d}_data.npy".format(i)
-                )
-            )
-            semantic_map_metadata = yaml.safe_load(
-                open(
-                    os.path.join(
-                        traj_fp,
-                        config["local_semantic_map"],
-                        "{:06d}_metadata.yaml".format(i),
-                    ),
-                    "r",
-                )
-            )
-            semantic_map_feature_keys = []
-
-            for k in range(semantic_map_data.shape[0]):
-                semantic_map_feature_keys.append("ganav_" + str(k))
-
-            dino_map_data = np.transpose(dino_map_data, (0, 2, 1))
-            semantic_map_data = np.transpose(semantic_map_data, (0, 2, 1))
-            vlad_map_data = np.transpose(vlad_map_data, (0, 2, 1))
-
-            # out_gridmap_data = np.concatenate([
-            #     gridmap_data,
-            #     dino_map_data,
-            # ], axis=0)
-
-            out_gridmap_data = np.concatenate(
-                [gridmap_data, dino_map_data, vlad_map_data, semantic_map_data], axis=0
-            )
-
-            # HACK
-            _gd = torch.tensor(out_gridmap_data).unsqueeze(0)
-            _gd = torch.nn.functional.avg_pool2d(_gd, kernel_size=2, stride=2)
-            out_gridmap_data = _gd.numpy()[0]
-            gridmap_metadata["resolution"] *= 2
+            #features that are relative to the odom frame should be made ego-centric here
+            curr_height = sub_traj[0, 3]
+            for i, fk in enumerate(gridmap_feature_keys):
+                if fk in [
+                    'min_elevation',
+                    'mean_elevation',
+                    'max_elevation',
+                    'terrain',
+                ]:
+                    gridmap_data[:, :, i] -= curr_height
 
             res = {
                 "traj": torch.tensor(sub_traj).float(),
                 "steer": torch.tensor(sub_steer).float(),
                 "pointcloud": torch.tensor(pcl_tf).float(),
                 "image": torch.tensor(img).float().permute(2, 0, 1)[[2, 1, 0]] / 255.0,
-                "gridmap_data": torch.tensor(out_gridmap_data).float(),
+                "gridmap_data": torch.tensor(gridmap_data).float().permute(2,0,1),
                 "gridmap_metadata": gridmap_metadata,
                 "gridmap_feature_keys": gridmap_feature_keys
-                + dino_map_feature_keys
-                + vlad_map_feature_keys
-                + semantic_map_feature_keys,
             }
 
             if valid_cnt % config["save_every"] == 0:
-                #                fig, axs = plt.subplots(1,2)
-                #                axs[0].imshow(out_gridmap_data[1])
-                #                axs[1].imshow(out_gridmap_data[12])
-                #                plt.show()
-
                 torch.save(
                     res,
                     os.path.join(
-                        res_fp, "{:06d}.pt".format(valid_cnt // config["save_every"])
+                        res_fp, "{:08d}.pt".format(valid_cnt // config["save_every"])
                     ),
                 )
 

@@ -124,9 +124,8 @@ class MPPIIRLSpeedmaps:
         goals = []
         for bi in range(expert_traj.shape[0]):
             map_params_b = {
-                "resolution": batch["metadata"]["resolution"].mean().item(),
-                "height": batch["metadata"]["height"].mean().item(),
-                "width": batch["metadata"]["width"].mean().item(),
+                "resolution": batch["metadata"]["resolution"][bi],
+                "length": batch["metadata"]["length"][bi],
                 "origin": batch["metadata"]["origin"][bi],
             }
             etraj = expert_traj[bi]
@@ -161,10 +160,6 @@ class MPPIIRLSpeedmaps:
         }
         x = self.mppi.model.get_observations(x0)
 
-        # TEMP HACK - Sam TODO: clean up once data is on cluster
-        map_params["length"] = torch.stack([map_params["length_x"], map_params["length_y"]], dim=-1)
-        map_params["resolution"] = torch.stack([map_params["resolution"], map_params["resolution"]], dim=-1)
-
         self.mppi.reset()
         self.mppi.cost_fn.data["goals"] = goals
         self.mppi.cost_fn.data["costmap"] = {"data": costmaps, "metadata": map_params, "feature_keys":["costmap"]}
@@ -183,9 +178,8 @@ class MPPIIRLSpeedmaps:
         expert_state_visitations = []
         for bi in range(trajs.shape[0]):
             map_params_b = {
-                "resolution": batch["metadata"]["resolution"].mean().item(),
-                "height": batch["metadata"]["height"].mean().item(),
-                "width": batch["metadata"]["width"].mean().item(),
+                "resolution": batch["metadata"]["resolution"][bi],
+                "length": batch["metadata"]["length"][bi],
                 "origin": batch["metadata"]["origin"][bi],
             }
 
@@ -208,18 +202,18 @@ class MPPIIRLSpeedmaps:
             axs[0].plot(trajs[bi][weights[bi].argmax(), :, 0].cpu(), trajs[bi][weights[bi].argmax(), :, 1].cpu(), c='r')
             axs[0].imshow(lsv.T.cpu(), origin='lower', extent=(
                 map_params_b['origin'][0].item(),
-                map_params_b['origin'][0].item() + map_params_b['height'],
+                map_params_b['origin'][0].item() + map_params_b['length'][0].item(),
                 map_params_b['origin'][1].item(),
-                map_params_b['origin'][1].item() + map_params_b['width'],
+                map_params_b['origin'][1].item() + map_params_b['length'][1].item(),
             ))
             axs[0].set_title('learner')
 
             axs[1].plot(expert_traj[bi][:, 0].cpu(), expert_traj[bi][:, 1].cpu(), c='r')
             axs[1].imshow(esv.T.cpu(), origin='lower', extent=(
                 map_params_b['origin'][0].item(),
-                map_params_b['origin'][0].item() + map_params_b['height'],
+                map_params_b['origin'][0].item() + map_params_b['length'][0].item(),
                 map_params_b['origin'][1].item(),
-                map_params_b['origin'][1].item() + map_params_b['width'],
+                map_params_b['origin'][1].item() + map_params_b['length'][1].item(),
             ))
             axs[1].set_title('expert')
             plt.show()
@@ -238,9 +232,8 @@ class MPPIIRLSpeedmaps:
         expert_speedmaps = []
         for bi in range(expert_traj.shape[0]):
             map_params_b = {
-                "resolution": batch["metadata"]["resolution"].mean().item(),
-                "height": batch["metadata"]["height"].mean().item(),
-                "width": batch["metadata"]["width"].mean().item(),
+                "resolution": batch["metadata"]["resolution"][bi],
+                "length": batch["metadata"]["length"][bi],
                 "origin": batch["metadata"]["origin"][bi],
             }
             # no footprint
@@ -257,6 +250,20 @@ class MPPIIRLSpeedmaps:
             esm = get_speedmap(epos, espeeds, map_params_b).view(costmaps[bi].shape)
 
             expert_speedmaps.append(esm)
+
+            #debug viz
+            """
+            fig, axs = plt.subplots(1, 2)
+            axs[0].plot(expert_kbm_traj[bi][:, 0].cpu(), expert_kbm_traj[bi][:, 1].cpu(), c='r')
+            axs[0].imshow(esm.T.cpu(), origin='lower', extent=(
+                map_params_b['origin'][0].item(),
+                map_params_b['origin'][0].item() + map_params_b['length'][0].item(),
+                map_params_b['origin'][1].item(),
+                map_params_b['origin'][1].item() + map_params_b['length'][1].item(),
+            ))
+            axs[0].set_title('expert speedmap')
+            plt.show()
+            """
 
         expert_speedmaps = torch.stack(expert_speedmaps, dim=0)
 
@@ -313,8 +320,8 @@ class MPPIIRLSpeedmaps:
             metadata = data["metadata"]
             xmin = metadata["origin"][0].cpu()
             ymin = metadata["origin"][1].cpu()
-            xmax = xmin + metadata["width"].cpu()
-            ymax = ymin + metadata["height"].cpu()
+            xmax = xmin + metadata["length"][0].cpu()
+            ymax = ymin + metadata["length"][1].cpu()
             expert_traj = data["traj"]
 
             res = self.network.forward(map_features, return_mean_entropy=True)
@@ -335,21 +342,10 @@ class MPPIIRLSpeedmaps:
             x = torch.stack([self.mppi.model.get_observations(x0)] * self.mppi.B, dim=0)
 
             map_params = {
-                "resolution": torch.tensor(
-                    [metadata["resolution"]] * self.mppi.B, device=self.mppi.device
-                ),
-                "height": torch.tensor(
-                    [metadata["height"]] * self.mppi.B, device=self.mppi.device
-                ),
-                "width": torch.tensor(
-                    [metadata["width"]] * self.mppi.B, device=self.mppi.device
-                ),
                 "origin": torch.stack([metadata["origin"]] * self.mppi.B, dim=0),
+                "length": torch.stack([metadata["length"]] * self.mppi.B, dim=0),
+                "resolution": torch.stack([metadata["resolution"]] * self.mppi.B, dim=0),
             }
-
-            # TEMP HACK - Sam TODO: clean up once data is on cluster
-            map_params["length"] = torch.stack([map_params["width"], map_params["height"]], dim=-1)
-            map_params["resolution"] = torch.stack([map_params["resolution"], map_params["resolution"]], dim=-1)
 
             goals = [
                 self.clip_to_map_bounds(expert_traj[:, :2], metadata).view(1, 2)
@@ -465,8 +461,8 @@ class MPPIIRLSpeedmaps:
         """
         ox = metadata["origin"][0]
         oy = metadata["origin"][1]
-        lx = metadata["height"]
-        ly = metadata["width"]
+        lx = metadata["length"][0]
+        ly = metadata["length"][1]
         xs = traj[:, 0]
         ys = traj[:, 1]
 
