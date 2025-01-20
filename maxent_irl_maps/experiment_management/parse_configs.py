@@ -111,19 +111,22 @@ def setup_experiment(fp, skip_mpc=False):
     res["footprint"] = make_footprint(**footprint_config["params"])
 
     # setup mpc
-    solver_params = experiment_dict["solver"]
-    if solver_params["type"] == "mpc":
-        mpc_config = yaml.safe_load(open(experiment_dict["solver"]["mpc_fp"], "r"))
-        # have to make batching params match top-level config
-        mpc_config["common"]["B"] = experiment_dict["algo"]["params"]["batch_size"]
-        mpc_config["common"]["H"] = res["dataset"][0]["traj"].shape[0]
-        res["trajopt"] = setup_mpc(mpc_config)
+    if not skip_mpc:
+        solver_params = experiment_dict["solver"]
+        if solver_params["type"] == "mpc":
+            mpc_config = yaml.safe_load(open(experiment_dict["solver"]["mpc_fp"], "r"))
+            # have to make batching params match top-level config
+            mpc_config["common"]["B"] = experiment_dict["algo"]["params"]["batch_size"]
+            mpc_config["common"]["H"] = res["dataset"][0]["traj"].shape[0]
+            res["trajopt"] = setup_mpc(mpc_config)
 
-    elif solver_params["type"] == "planner":
-        planner_config = yaml.safe_load(
-            open(experiment_dict["solver"]["planner_fp"], "r")
-        )
-        res["planner"] = setup_planner(planner_config, device)
+        elif solver_params["type"] == "planner":
+            planner_config = yaml.safe_load(
+                open(experiment_dict["solver"]["planner_fp"], "r")
+            )
+            res["planner"] = setup_planner(planner_config, device)
+    else:
+        res["trajopt"] = res["planner"] = torch.zeros(0)
 
     # setup algo
     algo_params = experiment_dict["algo"]
