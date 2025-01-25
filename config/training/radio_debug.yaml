@@ -1,6 +1,6 @@
 experiment:
-    save_to: /home/tartandriver/workspace/experiments/yamaha_irl_dino/torch_coordinator_debug
-    name: debug
+    save_to: /home/tartandriver/workspace/experiments/yamaha_irl_dino/
+    name: radio_gascola
     device: cuda
     epochs: 5
     steps_per_epoch: -1
@@ -8,8 +8,8 @@ experiment:
 
 footprint:
     params:
-        length: 4.0
-        width: 2.0
+        length: 3.0
+        width: 1.5
         length_offset: -1.0
         width_offset: 0.0
         nl: 15
