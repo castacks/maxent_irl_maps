@@ -1,6 +1,7 @@
 """
 Script for converting experiment yamls into the actual objects to run experiments with
 """
+import os
 import argparse
 import yaml
 import torch
@@ -19,12 +20,31 @@ from maxent_irl_maps.algos.planner_irl_speedmaps import PlannerIRLSpeedmaps
 
 from maxent_irl_maps.geometry_utils import make_footprint
 
-from maxent_irl_maps.networks.resnet import ResnetCategorical
+from maxent_irl_maps.networks.resnet import ResnetCategorical, ResnetExpCostCategoricalSpeed
 
 from maxent_irl_maps.dataset.maxent_irl_dataset import MaxEntIRLDataset
 
 from maxent_irl_maps.experiment_management.experiment import Experiment
 
+def load_net_for_eval(model_fp, device='cuda'):
+    """
+    Set up IRL network for eval
+
+    Args:
+        model_fp: the path to find the model (i.e. aaa/itr_x.pt)
+            assumes that it's still in the parent folder (i.e. we can find _params.yaml and dummy_dataset)
+    """
+    model_base_dir = os.path.split(model_fp)[0]
+    param_fp = os.path.join(model_base_dir, "_params.yaml")
+    dummy_dataset_fp = os.path.join(model_base_dir, 'dummy_dataset')
+    config = yaml.safe_load(open(param_fp, 'r'))
+    config['dataset']['params']['root_fp'] = dummy_dataset_fp
+    res = setup_experiment(config)["algo"].to(device)
+
+    res.network.load_state_dict(torch.load(model_fp, weights_only=True))
+    res.network.eval()
+
+    return res
 
 def setup_experiment(fp, skip_mpc=False):
     """
@@ -85,9 +105,12 @@ def setup_experiment(fp, skip_mpc=False):
     network_params["params"]["device"] = device
     if network_params["type"] == "ResnetCategorical":
         res["network"] = ResnetCategorical(
-            in_channels=len(res["dataset"].feature_keys), **network_params["params"]
+            in_channels=len(res["dataset"].feature_keys), **network_params["params"],
         ).to(device)
-
+    elif network_params["type"] == "ResnetExpCostCategoricalSpeed":
+        res["network"] = ResnetExpCostCategoricalSpeed(
+            in_channels=len(res["dataset"].feature_keys), **network_params["params"],
+        ).to(device)
     else:
         print("Unsupported network type {}".format(network_params["type"]))
         exit(1)

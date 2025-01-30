@@ -10,6 +10,83 @@ from maxent_irl_maps.utils import compute_map_mean_entropy
 A collection of basic CNN blocks to try.
 """
 
+class ResnetExpCostCategoricalSpeed(nn.Module):
+    def __init__(
+        self,
+        in_channels,
+        hidden_channels,
+        speed_nbins=20,
+        max_speed=10.0,
+        cost_nbins=20,
+        max_cost=10.0,
+        hidden_activation="tanh",
+        dropout=0.0,
+        device="cpu",
+    ):
+        """
+        Args:
+            in_channels: The number of channels in the input image
+            out_channels: The number of channels in the output image
+            hidden_channels: A list containing the intermediate channels
+        """
+        super(ResnetExpCostCategoricalSpeed, self).__init__()
+        self.channel_sizes = [in_channels] + hidden_channels + [1]
+
+        if hidden_activation == "tanh":
+            hidden_activation = nn.Tanh
+        elif hidden_activation == "relu":
+            hidden_activation = nn.ReLU
+
+        self.max_speed = max_speed
+        self.speed_nbins = speed_nbins
+        self.speed_bins = torch.linspace(0.0, self.max_speed, self.speed_nbins + 1, device=device)
+
+        self.cnn = nn.ModuleList()
+        for i in range(len(self.channel_sizes) - 2):
+            self.cnn.append(
+                ResnetCostmapBlock(
+                    in_channels=self.channel_sizes[i],
+                    out_channels=self.channel_sizes[i + 1],
+                    activation=hidden_activation,
+                    dropout=dropout,
+                )
+            )
+
+        # last conv to avoid activation (for cost head)
+        self.cost_head = nn.Conv2d(
+            in_channels=self.channel_sizes[-2],
+            out_channels=1,
+            kernel_size=1,
+            bias=True
+        )
+        self.speed_head = nn.Conv2d(
+            in_channels=self.channel_sizes[-2],
+            out_channels=self.speed_nbins,
+            kernel_size=1,
+            bias=True,
+        )
+
+        self.cnn = torch.nn.Sequential(*self.cnn)
+
+    def forward(self, x, return_mean_entropy=False):
+        features = self.cnn.forward(x)
+        log_cost = self.cost_head(features)
+        speed_logits = self.speed_head(features)
+
+        # exponentiate the mean value too, as speeds are always positive
+        res = {"costmap": log_cost.exp(), "speed_logits": speed_logits}
+
+        if return_mean_entropy:
+            res["costmap_entropy"] = torch.zeros_like(log_cost)
+            res["speedmap"], res["speedmap_entropy"] = compute_map_mean_entropy(speed_logits, self.speed_bins)
+
+        return res
+
+    def to(self, device):
+        super().to(device)
+        self.speed_bins = self.speed_bins.to(device)
+        return self
+
 class ResnetCategorical(nn.Module):
     def __init__(
         self,
@@ -85,6 +162,12 @@ class ResnetCategorical(nn.Module):
             res["speedmap"], res["speedmap_entropy"] = compute_map_mean_entropy(speed_logits, self.speed_bins)
 
         return res
+
+    def to(self, device):
+        super().to(device)
+        self.cost_bins = self.cost_bins.to(device)
+        self.speed_bins = self.speed_bins.to(device)
+        return self
 
 class LinearCostmapSpeedmapEnsemble2(nn.Module):
     """

@@ -14,7 +14,7 @@ from grid_map_msgs.msg import GridMap
 
 from ros_torch_converter.conversions.gridmap import GridMapToTorchMap
 
-from maxent_irl_maps.experiment_management.parse_configs import setup_experiment
+from maxent_irl_maps.experiment_management.parse_configs import setup_experiment, load_net_for_eval
 from maxent_irl_maps.networks.baselines import (
     AlterBaseline,
     SemanticBaseline,
@@ -56,22 +56,6 @@ class CvarCostmapperNode(Node):
             )
         )
 
-        models_dir = self.get_parameter("models_dir").get_parameter_value().string_value
-        model_fp = self.get_parameter("model_fp").get_parameter_value().string_value
-        model_fp = os.path.join(models_dir, model_fp)
-
-        self.get_logger().info("loading IRL model {}".format(os.path.join(model_fp)))
-
-        model_dir = os.path.split(model_fp)[0]
-        model_param_fp = os.path.join(model_dir, "_params.yaml")
-
-        model_params = yaml.safe_load(open(model_param_fp, 'r'))
-        model_params['dataset']['params']['root_fp'] = os.path.join(model_dir, 'dummy_dataset')
-
-        irl = setup_experiment(model_param_fp)["algo"]
-        irl.network.load_state_dict(torch.load(model_fp))
-        irl.network.eval()
-
         self.device = self.get_parameter("device").get_parameter_value().string_value
         self.gridmap_topic = (
             self.get_parameter("gridmap_topic").get_parameter_value().string_value
@@ -88,6 +72,13 @@ class CvarCostmapperNode(Node):
         self.speedmap_q_topic = (
             self.get_parameter("speedmap_q_topic").get_parameter_value().string_value
         )
+
+        models_dir = self.get_parameter("models_dir").get_parameter_value().string_value
+        model_fp = self.get_parameter("model_fp").get_parameter_value().string_value
+        model_fp = os.path.join(models_dir, model_fp)
+
+        self.get_logger().info("loading IRL model {}".format(os.path.join(model_fp)))
+        irl = load_net_for_eval(model_fp, device=self.device)
 
         self.feature_keys = irl.expert_dataset.feature_keys
         self.feature_mean = (

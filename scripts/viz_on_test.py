@@ -1,10 +1,11 @@
 import os
+import yaml
 import torch
 import argparse
 import matplotlib.pyplot as plt
 
 from maxent_irl_maps.dataset.maxent_irl_dataset import MaxEntIRLDataset
-from maxent_irl_maps.experiment_management.parse_configs import setup_experiment
+from maxent_irl_maps.experiment_management.parse_configs import setup_experiment, load_net_for_eval
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -20,11 +21,7 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    param_fp = os.path.join(os.path.split(args.model_fp)[0], "_params.yaml")
-    res = setup_experiment(param_fp)["algo"].to(args.device)
-
-    res.network.load_state_dict(torch.load(args.model_fp))
-    res.network.eval()
+    res = load_net_for_eval(args.model_fp, device=args.device)
 
     dataset = MaxEntIRLDataset(
         root_fp=args.test_fp, feature_keys=res.expert_dataset.feature_keys
