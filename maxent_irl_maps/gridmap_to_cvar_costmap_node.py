@@ -157,7 +157,7 @@ class CvarCostmapperNode(Node):
         map_feats = gridmap["data"].float().to(self.device)
         for k in self.feature_keys:
             if k in [
-                min_elevation',
+                    'min_elevation',
                     'mean_elevation',
                     'max_elevation',
                     'terrain',
