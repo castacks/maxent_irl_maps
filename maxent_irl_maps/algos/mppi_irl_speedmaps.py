@@ -289,13 +289,20 @@ class MPPIIRLSpeedmaps:
         )  # only want the cells that the expert drove in
         ce = torch.nn.functional.cross_entropy(
             speedmap_probs, expert_speed_idxs, reduction="none"
-        )[mask]
+        )
 
         # try regularizing speeds to zero
         neg_labels = torch.zeros_like(expert_speed_idxs)
         ce_neg = torch.nn.functional.cross_entropy(
             speedmap_probs, neg_labels, reduction="none"
-        )[~mask]
+        )
+
+        if self.mask_unknown_grads:
+            ce = self.apply_unknown_mask_to_grads(ce, batch["map_features"])
+            ce_neg = self.apply_unknown_mask_to_grads(ce_neg, batch["map_features"])
+
+        ce = ce[mask]
+        ce_neg = ce_neg[~mask]
 
         speed_loss = ce.mean() * self.speed_coeff + 0.01 * ce_neg.mean()
 
@@ -407,7 +414,7 @@ class MPPIIRLSpeedmaps:
                 extent=(xmin, xmax, ymin, ymax),
             )
             m1 = axs[2].imshow(
-                costmap[0, 0].T.cpu(),
+                costmap[0, 0].T.log().cpu(),
                 origin="lower",
                 cmap="jet",
                 extent=(xmin, xmax, ymin, ymax),
@@ -457,7 +464,7 @@ class MPPIIRLSpeedmaps:
             axs[0].set_title("FPV")
             axs[1].set_title("gridmap {}".format(fk))
             #            axs[2].set_title('irl cost (clipped)')
-            axs[2].set_title("irl cost mean")
+            axs[2].set_title("irl log cost")
             axs[3].set_title("speedmap mean")
             axs[4].set_title("irl cost unc")
             axs[5].set_title("speedmap unc")
