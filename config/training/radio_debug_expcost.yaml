@@ -22,6 +22,7 @@ algo:
         reg_coeff: 1.0e-08
         speed_coeff: 1.0 #turn off speedmaps for now
         grad_clip: 1.0
+        mask_unknown_grads: true
 
 dataset:
     type: MaxEntIRLDataset

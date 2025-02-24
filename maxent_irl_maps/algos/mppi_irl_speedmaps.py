@@ -46,6 +46,7 @@ class MPPIIRLSpeedmaps:
         speed_coeff=1.0,
         reg_coeff=1e-2,
         grad_clip=1.0,
+        mask_unknown_grads=False,
         device="cpu",
     ):
         """
@@ -72,6 +73,10 @@ class MPPIIRLSpeedmaps:
         self.reg_coeff = reg_coeff
         self.speed_coeff = speed_coeff
         self.grad_clip = grad_clip
+        self.mask_unknown_grads = mask_unknown_grads
+
+        if self.mask_unknown_grads:
+            assert "num_voxels" in self.expert_dataset.feature_keys, "can't mask unknown grads, no 'num_voxels' key in map feature keys."
 
         self.itr = 0
         self.device = device
@@ -223,6 +228,10 @@ class MPPIIRLSpeedmaps:
         expert_state_visitations = torch.stack(expert_state_visitations, dim=0)
 
         grads = (expert_state_visitations - learner_state_visitations) / trajs.shape[0]
+
+        if self.mask_unknown_grads:
+            grads = self.apply_unknown_mask_to_grads(grads, batch["map_features"])
+
         grads = grads.unsqueeze(1) #grad shape needs to match costmap shape
 
         if not torch.isfinite(grads).all():
@@ -304,6 +313,16 @@ class MPPIIRLSpeedmaps:
 
         torch.nn.utils.clip_grad_norm_(self.network.parameters(), self.grad_clip)
         self.network_opt.step()
+
+    def apply_unknown_mask_to_grads(self, grads, map_data):
+        unk_idx = self.expert_dataset.feature_keys.index("num_voxels")
+        unk_data = map_data[:, unk_idx]
+        vmin = unk_data.view(unk_data.shape[0], -1).min(dim=-1)[0].view(-1, 1, 1)
+        unk_mask = (unk_data == vmin)
+
+        grads[unk_mask] = 0.
+
+        return grads
 
     def visualize(self, idx=-1):
         """
