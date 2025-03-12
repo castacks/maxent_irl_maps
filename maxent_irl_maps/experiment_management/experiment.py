@@ -80,9 +80,9 @@ class Experiment:
                 )
             self.algo = self.algo.to("cuda")
 
-            for i in range(10):
-                self.algo.visualize()
-                plt.show()
+        for i in range(10):
+            self.algo.visualize()
+            plt.show()
 
     def to(self, device):
         self.device = device

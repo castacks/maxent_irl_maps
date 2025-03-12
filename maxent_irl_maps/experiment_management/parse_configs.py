@@ -26,7 +26,7 @@ from maxent_irl_maps.dataset.maxent_irl_dataset import MaxEntIRLDataset
 
 from maxent_irl_maps.experiment_management.experiment import Experiment
 
-def load_net_for_eval(model_fp, device='cuda'):
+def load_net_for_eval(model_fp, skip_mpc=True, device='cuda'):
     """
     Set up IRL network for eval
 
@@ -39,7 +39,7 @@ def load_net_for_eval(model_fp, device='cuda'):
     dummy_dataset_fp = os.path.join(model_base_dir, 'dummy_dataset')
     config = yaml.safe_load(open(param_fp, 'r'))
     config['dataset']['params']['root_fp'] = dummy_dataset_fp
-    res = setup_experiment(config, skip_mpc=True)["algo"].to(device)
+    res = setup_experiment(config, skip_mpc=skip_mpc)["algo"].to(device)
 
     res.network.load_state_dict(torch.load(model_fp, weights_only=True))
     res.network.eval()

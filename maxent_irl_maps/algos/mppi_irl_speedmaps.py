@@ -327,6 +327,20 @@ class MPPIIRLSpeedmaps:
         vmin = unk_data.view(unk_data.shape[0], -1).min(dim=-1)[0].view(-1, 1, 1)
         unk_mask = (unk_data == vmin)
 
+        #TODO implement hacky dilation
+        kernel = torch.ones(9, 9, device=self.device).view(1, 1, 9, 9)
+        kernel /= kernel.sum()
+        _unk_mask = unk_mask.unsqueeze(1).float()
+        _unk_mask = torch.nn.functional.pad(_unk_mask, pad=(4, 4, 4, 4), mode='constant', value=0.)
+        unk_mask_dilate = torch.nn.functional.conv2d(_unk_mask, kernel) > 0.99
+        unk_mask_dilate = unk_mask_dilate.squeeze(1)
+
+        # import matplotlib.pyplot as plt
+        # fig, axs = plt.subplots(1, 2)
+        # axs[0].imshow(unk_mask[0].cpu().numpy())
+        # axs[1].imshow(unk_mask_dilate[0].cpu().numpy())
+        # plt.show()
+
         grads[unk_mask] = 0.
 
         return grads
@@ -414,10 +428,11 @@ class MPPIIRLSpeedmaps:
                 extent=(xmin, xmax, ymin, ymax),
             )
             m1 = axs[2].imshow(
-                costmap[0, 0].T.log().cpu(),
+                costmap[0, 0].T.cpu(),
                 origin="lower",
                 cmap="jet",
                 extent=(xmin, xmax, ymin, ymax),
+                vmax = torch.quantile(costmap[0, 0], 0.95).item()
             )
 
             m2 = axs[3].imshow(
@@ -464,7 +479,7 @@ class MPPIIRLSpeedmaps:
             axs[0].set_title("FPV")
             axs[1].set_title("gridmap {}".format(fk))
             #            axs[2].set_title('irl cost (clipped)')
-            axs[2].set_title("irl log cost")
+            axs[2].set_title("irl cost")
             axs[3].set_title("speedmap mean")
             axs[4].set_title("irl cost unc")
             axs[5].set_title("speedmap unc")
