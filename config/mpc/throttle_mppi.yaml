@@ -11,8 +11,9 @@ model:
     args:
         L: 3.0
         throttle_lim: [0., 1.]
-        steer_lim: [-0.52, 0.52]
-        steer_rate_lim: 0.2
+        #better to make the mpc model more capable
+        steer_lim: [-0.72, 0.72]
+        steer_rate_lim: 0.4
 
 #    type: GravityThrottleKBM
 #    args:
@@ -66,6 +67,7 @@ cost_function:
 
         #full footprint for cost eval
         - type: FootprintCostmapProjection
+          label: costmap_projection
           weight: 1.0
           args:
             costmap_key: costmap
@@ -77,6 +79,7 @@ cost_function:
             nw: 5
 
         - type: SimpleEuclideanDistanceToGoal
+          label: distance_to_goal
           weight: 5.0
           args:
             goal_key: goals

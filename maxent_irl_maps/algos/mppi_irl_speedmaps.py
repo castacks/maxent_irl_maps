@@ -324,12 +324,20 @@ class MPPIIRLSpeedmaps:
             ymax = ymin + metadata["length"][1].cpu()
             expert_traj = data["traj"]
 
-            res = self.network.forward(map_features, return_mean_entropy=True)
+            if hasattr(self.network, "ensemble_forward"):
+                res = self.network.ensemble_forward(map_features, return_mean_entropy=True)
 
-            costmap = res["costmap"]
-            speedmap = res["speedmap"]
-            costmap_unc = res["costmap_entropy"]
-            speedmap_unc = res["speedmap_entropy"]
+                costmap = res["costmap"].mean(dim=1)
+                speedmap = res["speedmap"].mean(dim=1)
+                costmap_unc = res["costmap_entropy"].mean(dim=1)
+                speedmap_unc = res["speedmap_entropy"].mean(dim=1)
+            else:
+                res = self.network.forward(map_features, return_mean_entropy=True)
+
+                costmap = res["costmap"]
+                speedmap = res["speedmap"]
+                costmap_unc = res["costmap_entropy"]
+                speedmap_unc = res["speedmap_entropy"]
 
             # initialize solver
             initial_state = expert_traj[0]

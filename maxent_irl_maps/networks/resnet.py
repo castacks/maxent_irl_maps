@@ -15,11 +15,13 @@ class ResnetExpCostCategoricalSpeed(nn.Module):
         self,
         in_channels,
         hidden_channels,
+        n_ensemble=1,
         speed_nbins=20,
         max_speed=10.0,
         cost_nbins=20,
         max_cost=10.0,
         hidden_activation="tanh",
+        log_costs=True, 
         dropout=0.0,
         device="cpu",
     ):
@@ -28,9 +30,16 @@ class ResnetExpCostCategoricalSpeed(nn.Module):
             in_channels: The number of channels in the input image
             out_channels: The number of channels in the output image
             hidden_channels: A list containing the intermediate channels
+            n_ensemble: Number of nets to use in ensemble
+
+        Note that we'll have two forward functions:
+            forward: "sample" a single cost/speedmap (prob support a reduce arg)
+            ensemble_forward: sample all cost/speedmaps
         """
         super(ResnetExpCostCategoricalSpeed, self).__init__()
         self.channel_sizes = [in_channels] + hidden_channels + [1]
+        self.n_ensemble = n_ensemble
+        self.log_costs = log_costs
 
         if hidden_activation == "tanh":
             hidden_activation = nn.Tanh
@@ -41,8 +50,15 @@ class ResnetExpCostCategoricalSpeed(nn.Module):
         self.speed_nbins = speed_nbins
         self.speed_bins = torch.linspace(0.0, self.max_speed, self.speed_nbins + 1, device=device)
 
+        self.cnn_base = ResnetCostmapBlock(
+            in_channels=self.channel_sizes[0],
+            out_channels=self.channel_sizes[1] * self.n_ensemble,
+            activation=hidden_activation,
+            dropout=dropout,
+        )
+
         self.cnn = nn.ModuleList()
-        for i in range(len(self.channel_sizes) - 2):
+        for i in range(1, len(self.channel_sizes) - 2):
             self.cnn.append(
                 ResnetCostmapBlock(
                     in_channels=self.channel_sizes[i],
@@ -69,16 +85,57 @@ class ResnetExpCostCategoricalSpeed(nn.Module):
         self.cnn = torch.nn.Sequential(*self.cnn)
 
     def forward(self, x, return_mean_entropy=False):
-        features = self.cnn.forward(x)
+        xshape = x.shape
+        eidx = torch.randint(self.n_ensemble, size=(xshape[0],))
+
+        #[B x E x C x W x H]
+        ens_features = self.cnn_base.forward(x).view(xshape[0], self.n_ensemble, -1, *xshape[-2:])
+
+        #[B x C x W x H]
+        ens_features_sample = ens_features[torch.arange(xshape[0]), eidx]
+
+        features = self.cnn.forward(ens_features_sample)
         log_cost = self.cost_head(features)
         speed_logits = self.speed_head(features)
 
         # exponentiate the mean value too, as speeds are always positive
-        res = {"costmap": log_cost.exp(), "speed_logits": speed_logits}
+        res = {"costmap": log_cost.exp() if self.log_costs else log_cost, "speed_logits": speed_logits}
 
         if return_mean_entropy:
             res["costmap_entropy"] = torch.zeros_like(log_cost)
             res["speedmap"], res["speedmap_entropy"] = compute_map_mean_entropy(speed_logits, self.speed_bins)
+
+        return res
+
+    def ensemble_forward(self, x, return_mean_entropy=False):
+        xshape = x.shape
+
+        #[(BE) x C x W x H]
+        ens_features = self.cnn_base.forward(x).view(xshape[0] * self.n_ensemble, -1, *xshape[-2:])
+
+        #[(BE) x C x W x H]
+        features = self.cnn.forward(ens_features)
+
+        #[B x E x 1 x W x H]
+        log_cost = self.cost_head(features).view(xshape[0], self.n_ensemble, 1, *xshape[-2:])
+
+        #[(BE) x S x W x H]
+        speed_logits = self.speed_head(features)
+
+        res = {}
+
+        if return_mean_entropy:
+            res["costmap_entropy"] = torch.zeros_like(log_cost)
+            speedmap, speedmap_entropy = compute_map_mean_entropy(speed_logits, self.speed_bins)
+
+            res["speedmap"] = speedmap.view(xshape[0], self.n_ensemble, 1, *xshape[-2:])
+            res["speedmap_entropy"] = speedmap_entropy.view(xshape[0], self.n_ensemble, 1, *xshape[-2:])
+
+        # exponentiate the mean value too, as speeds are always positive
+        res["costmap"] = log_cost.exp() if self.log_costs else log_cost
+
+        #re-batch speed stuff here
+        res["speed_logits"] = speed_logits.view(xshape[0], self.n_ensemble, self.speed_nbins, *xshape[-2:])
 
         return res
 

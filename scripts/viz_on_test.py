@@ -21,7 +21,7 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    res = load_net_for_eval(args.model_fp, device=args.device)
+    res = load_net_for_eval(args.model_fp, device=args.device, skip_mpc=False)
 
     dataset = MaxEntIRLDataset(
         root_fp=args.test_fp, feature_keys=res.expert_dataset.feature_keys
