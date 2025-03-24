@@ -20,6 +20,7 @@ class ResnetExpCostCategoricalSpeed(nn.Module):
         cost_nbins=20,
         max_cost=10.0,
         hidden_activation="tanh",
+        hidden_kernel_size=3,
         dropout=0.0,
         device="cpu",
     ):
@@ -31,6 +32,7 @@ class ResnetExpCostCategoricalSpeed(nn.Module):
         """
         super(ResnetExpCostCategoricalSpeed, self).__init__()
         self.channel_sizes = [in_channels] + hidden_channels + [1]
+        self.hidden_kernel_size = hidden_kernel_size
 
         if hidden_activation == "tanh":
             hidden_activation = nn.Tanh
@@ -49,6 +51,7 @@ class ResnetExpCostCategoricalSpeed(nn.Module):
                     out_channels=self.channel_sizes[i + 1],
                     activation=hidden_activation,
                     dropout=dropout,
+                    kernel_size=self.hidden_kernel_size,
                 )
             )
 
@@ -92,11 +95,12 @@ class ResnetCategorical(nn.Module):
         self,
         in_channels,
         hidden_channels,
-        speed_nbins=20,
-        max_speed=10.0,
-        cost_nbins=20,
+        speed_nbins=30,
+        max_speed=15.0,
+        cost_nbins=30,
         max_cost=10.0,
         hidden_activation="tanh",
+        hidden_kernel_size=3,
         dropout=0.0,
         device="cpu",
     ):
@@ -108,6 +112,7 @@ class ResnetCategorical(nn.Module):
         """
         super(ResnetCategorical, self).__init__()
         self.channel_sizes = [in_channels] + hidden_channels + [1]
+        self.hidden_kernel_size = hidden_kernel_size
 
         if hidden_activation == "tanh":
             hidden_activation = nn.Tanh
@@ -116,7 +121,7 @@ class ResnetCategorical(nn.Module):
 
         self.max_cost = max_cost
         self.cost_nbins = cost_nbins
-        self.cost_bins = torch.linspace(0.0, self.max_cost, self.cost_nbins + 1, device=device)
+        self.cost_bins = torch.linspace(np.log(1e-2), np.log(self.max_cost), self.cost_nbins + 1, device=device)
 
         self.max_speed = max_speed
         self.speed_nbins = speed_nbins
@@ -130,24 +135,68 @@ class ResnetCategorical(nn.Module):
                     out_channels=self.channel_sizes[i + 1],
                     activation=hidden_activation,
                     dropout=dropout,
+                    kernel_size=self.hidden_kernel_size,
                 )
             )
 
-        # last conv to avoid activation (for cost head)
-        self.cost_head = nn.Conv2d(
-            in_channels=self.channel_sizes[-2],
-            out_channels=self.cost_nbins,
-            kernel_size=1,
-            bias=True
-        )
-        self.speed_head = nn.Conv2d(
-            in_channels=self.channel_sizes[-2],
-            out_channels=self.speed_nbins,
-            kernel_size=1,
-            bias=True,
+        self.cost_head = nn.ModuleList()
+        self.speed_head = nn.ModuleList()
+
+        self.cost_head.append(
+            ResnetCostmapBlock(
+                    in_channels=self.channel_sizes[-2],
+                    out_channels=self.channel_sizes[-2],
+                    activation=hidden_activation,
+                    dropout=dropout,
+                    kernel_size=1,
+                )
+            )
+
+        self.cost_head.append(
+            nn.Conv2d(
+                in_channels=self.channel_sizes[-2],
+                out_channels=self.cost_nbins,
+                kernel_size=1,
+                bias=True
+            )
         )
 
+        self.speed_head.append(
+            ResnetCostmapBlock(
+                    in_channels=self.channel_sizes[-2],
+                    out_channels=self.channel_sizes[-2],
+                    activation=hidden_activation,
+                    dropout=dropout,
+                    kernel_size=1,
+                )
+            )
+
+        self.speed_head.append(
+            nn.Conv2d(
+                in_channels=self.channel_sizes[-2],
+                out_channels=self.speed_nbins,
+                kernel_size=1,
+                bias=True
+            )
+        )
+
+        # # last conv to avoid activation (for cost head)
+        # self.cost_head = nn.Conv2d(
+        #     in_channels=self.channel_sizes[-2],
+        #     out_channels=self.cost_nbins,
+        #     kernel_size=1,
+        #     bias=True
+        # )
+        # self.speed_head = nn.Conv2d(
+        #     in_channels=self.channel_sizes[-2],
+        #     out_channels=self.speed_nbins,
+        #     kernel_size=1,
+        #     bias=True,
+        # )
+
         self.cnn = torch.nn.Sequential(*self.cnn)
+        self.cost_head = torch.nn.Sequential(*self.cost_head)
+        self.speed_head = torch.nn.Sequential(*self.speed_head)
 
     def forward(self, x, return_mean_entropy=False):
         features = self.cnn.forward(x)
@@ -160,6 +209,8 @@ class ResnetCategorical(nn.Module):
         if return_mean_entropy:
             res["costmap"], res["costmap_entropy"] = compute_map_mean_entropy(cost_logits, self.cost_bins)
             res["speedmap"], res["speedmap_entropy"] = compute_map_mean_entropy(speed_logits, self.speed_bins)
+
+            res["costmap"] = res["costmap"].exp()
 
         return res
 
@@ -274,13 +325,15 @@ class ResnetCostmapBlock(nn.Module):
     In contrast to the original resnet block, don't use pooling or batch norm.
     """
 
-    def __init__(self, in_channels, out_channels, activation, dropout=0.0):
+    def __init__(self, in_channels, out_channels, activation, kernel_size=3, dropout=0.0):
+        assert kernel_size %2 == 1, "need odd kernel size"
+        pad = kernel_size//2
         super(ResnetCostmapBlock, self).__init__()
         self.conv1 = nn.Conv2d(
-            in_channels=in_channels, out_channels=in_channels, kernel_size=3, padding=1
+            in_channels=in_channels, out_channels=in_channels, kernel_size=kernel_size, padding=pad
         )
         self.conv2 = nn.Conv2d(
-            in_channels=in_channels, out_channels=out_channels, kernel_size=3, padding=1
+            in_channels=in_channels, out_channels=out_channels, kernel_size=kernel_size, padding=pad
         )
         self.activation = activation()
         self.projection = nn.Conv2d(
