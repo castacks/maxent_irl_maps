@@ -1,8 +1,8 @@
-src_dir: /media/striest/extreme_ssd/2025_irl_kitti
+src_dir: /home/tartandriver/workspace/datasets/2025_irl_kitti
 dst_dir: /home/tartandriver/workspace/datasets/2025_irl_data
 save_every: 20 #add every n-th frame
 
-H: 100
+H: 75
 dt: 0.1
 
 #data folders

@@ -1,11 +1,11 @@
 ---
 common:
     B: 1           #number of optimizations to run in parallel
-    H: 100         #number of timesteps to roll out
+    H: 75         #number of timesteps to roll out
     M: 2           #dim of action space
     dt: 0.1        #length of timestep
     device: cuda   #device to run on 
-    compile: true  #whether to compile MPC (runs faster but takes ~1 min on setup)
+    compile: false  #whether to compile MPC (runs faster but takes ~1 min on setup)
 
 model:
     type: SteerSetpointThrottleKBM
@@ -27,7 +27,7 @@ sampling_strategies:
         - type: GaussianWalk
           label: gaussian_walk1
           args:
-            K: 512
+            K: 1024
             initial_distribution:
                 type: gaussian
                 scale: [0.5, 0.0]

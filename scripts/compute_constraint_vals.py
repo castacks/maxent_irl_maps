@@ -86,16 +86,16 @@ if __name__ == "__main__":
 
     expert_costs = torch.cat(expert_costs).cpu().numpy()
 
-    cost_q90 = np.quantile(expert_costs, 0.9)
     cost_q95 = np.quantile(expert_costs, 0.95)
     cost_q99 = np.quantile(expert_costs, 0.99)
+    cost_q995 = np.quantile(expert_costs, 0.995)
 
     plt.title("Expert cost distribution")
     plt.hist(expert_costs, cumulative=True, histtype='step', density=True, bins=100)
 
-    plt.axvline(cost_q90, color='r', linestyle='dotted', label='expert q90 ({:.4f})'.format(cost_q90))
-    plt.axvline(cost_q95, color='r', linestyle='dashed', label='expert q95 ({:.4f})'.format(cost_q95))
-    plt.axvline(cost_q99, color='r', linestyle='solid', label='expert q99 ({:.4f})'.format(cost_q99))
+    plt.axvline(cost_q95, color='r', linestyle='dotted', label='expert q95 ({:.4f})'.format(cost_q95))
+    plt.axvline(cost_q99, color='r', linestyle='dashed', label='expert q99 ({:.4f})'.format(cost_q99))
+    plt.axvline(cost_q995, color='r', linestyle='solid', label='expert q995 ({:.4f})'.format(cost_q995))
 
     plt.legend()
 
@@ -131,15 +131,15 @@ if __name__ == "__main__":
             axs[0, 0].imshow(costmap[0,0].T.cpu(), origin='lower', cmap='jet', extent=(xmin, xmax, ymin, ymax))
             axs[0, 0].plot(expert_traj[:, 0].cpu().numpy(), expert_traj[:, 1].cpu().numpy(), c='y')
 
-            axs[0, 1].set_title('Costmap q90 ({:.4f})'.format(cost_q90))
+            axs[0, 1].set_title('Costmap q95 ({:.4f})'.format(cost_q95))
             axs[0, 1].imshow(costmap[0,0].T.cpu(), origin='lower', cmap='jet', extent=(xmin, xmax, ymin, ymax), vmax=cost_q90)
             axs[0, 1].plot(expert_traj[:, 0].cpu().numpy(), expert_traj[:, 1].cpu().numpy(), c='y')
 
-            axs[1, 0].set_title('Costmap q95 ({:.4f})'.format(cost_q95))
+            axs[1, 0].set_title('Costmap q99 ({:.4f})'.format(cost_q99))
             axs[1, 0].imshow(costmap[0,0].T.cpu(), origin='lower',  cmap='jet', extent=(xmin, xmax, ymin, ymax), vmax=cost_q95)
             axs[1, 0].plot(expert_traj[:, 0].cpu().numpy(), expert_traj[:, 1].cpu().numpy(), c='y')
 
-            axs[1, 1].set_title('Costmap q99 ({:.4f})'.format(cost_q99))
+            axs[1, 1].set_title('Costmap q995 ({:.4f})'.format(cost_q995))
             axs[1, 1].imshow(costmap[0,0].T.cpu(), origin='lower', cmap='jet', extent=(xmin, xmax, ymin, ymax), vmax=cost_q99)
             axs[1, 1].plot(expert_traj[:, 0].cpu().numpy(), expert_traj[:, 1].cpu().numpy(), c='y')
 
