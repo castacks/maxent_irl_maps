@@ -344,6 +344,14 @@ class MPPIIRLSpeedmaps:
             }
             x = torch.stack([self.mppi.model.get_observations(x0)] * self.mppi.B, dim=0)
 
+            X_expert = {
+                "state": expert_traj,
+                "steer_angle": data["steer"].unsqueeze(-1)
+                if "steer" in data.keys()
+                else torch.zeros(self.mppi.B, self.mppi.T, 1, device=initial_states.device),
+            }
+            expert_kbm_traj = self.mppi.model.get_observations(X_expert)
+
             map_params = {
                 "origin": torch.stack([metadata["origin"]] * self.mppi.B, dim=0),
                 "length": torch.stack([metadata["length"]] * self.mppi.B, dim=0),
@@ -369,6 +377,17 @@ class MPPIIRLSpeedmaps:
             tidx = self.mppi.last_cost.argmin()
             traj = self.mppi.last_states[tidx]
 
+            footprint_learner_traj = apply_footprint(traj, self.footprint).view(1, -1, 2)
+            footprint_expert_traj = apply_footprint(
+                expert_kbm_traj.unsqueeze(0), self.footprint
+            ).view(1, -1, 2)
+
+            lsv = get_state_visitations(footprint_learner_traj, metadata)
+            esv = get_state_visitations(footprint_expert_traj, metadata)
+
+            learner_cost = (lsv * costmap).sum()
+            expert_cost = (esv * costmap).sum()
+
             metadata = data["metadata"]
             fig, axs = plt.subplots(2, 3, figsize=(18, 12))
             axs = axs.flatten()
@@ -382,6 +401,8 @@ class MPPIIRLSpeedmaps:
                     break
 
             img = data["image"].permute(1, 2, 0)[:, :, [2, 1, 0]].cpu()
+
+            fig.suptitle("Expert cost = {:.4f}, Learner cost = {:.4f}".format(expert_cost.item(), learner_cost.item()))
 
             axs[0].imshow(img)
             axs[1].imshow(
