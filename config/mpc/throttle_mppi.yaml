@@ -1,85 +1,111 @@
 ---
 common:
     B: 1           #number of optimizations to run in parallel
-    H: 50          #number of timesteps to roll out
+    H: 75         #number of timesteps to roll out
     M: 2           #dim of action space
     dt: 0.1        #length of timestep
-    device: cpu   #device to run on 
+    device: cuda   #device to run on 
+    compile: false  #whether to compile MPC (runs faster but takes ~1 min on setup)
 
 model:
     type: SteerSetpointThrottleKBM
     args:
-        L: 3.0
+        L: 2.0
         throttle_lim: [0., 1.]
         steer_lim: [-0.52, 0.52]
-        steer_rate_lim: 0.2
-
-#    type: GravityThrottleKBM
-#    args:
-#        L: 3.0
-#        throttle_lim: [0., 1.]
-#        steer_lim: [-0.52, 0.52]
-#        steer_rate_lim: 0.2
-#        actuator_model: [-0.044, 0.5665, -2.0924, -1.5005, 2.0, -0.7938]
+        steer_rate_lim: 0.4
 
 sampling_strategies:
+    sampling_strategies:
     strategies:
         - type: ActionLibrary
           label: action_library
           args:
-            K: 100
+            K: 441
             path: "/home/tartandriver/tartandriver_ws/src/control/torch_mpc/data/action_libraries/yamaha_atv/H100_throttle_steer_unif.pt"
 
-#        - type: UniformGaussian
-#          label: gaussian_unif
-#          args:
-#            K: 512
-#            scale: [1.0, 0.2]
-
         - type: GaussianWalk
-          label: gaussian_walk
+          label: gaussian_walk1
           args:
-            K: 256
+            K: 1024
             initial_distribution:
                 type: gaussian
                 scale: [0.5, 0.0]
             alpha: [0.0, 0.0]   #low-pass on noise
-            scale: [0.000, 0.01]  #sample scale on change of noise
+            scale: [0.01, 0.01]  #sample scale on change of noise
+
+        - type: GaussianWalk
+          label: gaussian_walk2
+          args:
+            K: 512
+            initial_distribution:
+                type: gaussian
+                scale: [0.5, 0.0]
+            alpha: [0.0, 0.0]   #low-pass on noise
+            scale: [0.005, 0.005]  #sample scale on change of noise
+
+        - type: GaussianWalk
+          label: gaussian_walk3
+          args:
+            K: 512
+            initial_distribution:
+                type: gaussian
+                scale: [0.5, 0.0]
+            alpha: [0.0, 0.0]   #low-pass on noise
+            scale: [0.0025, 0.0025]  #sample scale on change of noise
 
 cost_function:
     terms:
-#        - type: SpeedLimit
-#          weight: 1.0
-#          args:
-#            target_speed: 4.5
-#            max_speed: 5.5
-
-        #smaller footprint for constraint
-#        - type: FootprintCostmapProjection
-#          weight: 0.001
-#          args:
-#            length: 0.75
-#            width: 0.75
-#            length_offset: -1.0
-#            width_offset: 0.0
-#            cost_thresh: 5.
-
         #full footprint for cost eval
         - type: FootprintCostmapProjection
           weight: 1.0
+          label: costmap_projection
           args:
-            costmap_key: costmap
-            length: 4.0
-            width: 2.0
-            length_offset: -1.0
+            costmap_key: local_navmap #should match the name in the ros section
+            feature_key: cost #should match a feature key in the ros section
+            length: 5.0
+            width: 3.0
+            length_offset: -0.5
             width_offset: 0.0
             nl: 5
             nw: 5
 
-        - type: SimpleEuclideanDistanceToGoal
+        - type: EuclideanDistanceToGoal
+          label: dist_to_goal
+          goal_key: waypoints
           weight: 5.0
           args:
-            goal_key: goals
+
+# this defines what the MPPI node subscribes to
+ros:
+    max_age: 2.
+
+    topics:
+      - name: state
+        topic: /superodometry/integrated_to_init
+        type: OdomRBState
+        args: {}
+
+      - name: steer_angle
+        topic: /talon/current_position
+        type: Float32
+        args: {}
+
+      - name: pitch
+        topic: /gps_pitch
+        type: Float32
+        args: {}
+
+      - name: local_navmap
+        topic: /local_navmap
+        type: BEVGrid
+        args: {}
+
+      - name: waypoints
+        topic: /next_waypoints/odom
+        type: GoalArray
+        args: {}
+
 
 update_rule:
     type: MPPI
@@ -87,23 +113,3 @@ update_rule:
         temperature: 0.1
         
 recovery_behavior: []
-
-ros:
-    observation:
-        "/integrated_to_init":
-            type: Odometry
-            remap: "state"
-
-        "/ros_talon/current_position":
-            type: Float32
-            remap: "steer_angle"
-
-        "/gps_pitch":
-            type: Float32
-            remap: "pitch"
-
-    action:
-        "/cmd":
-            type: Twist
-            options:
-                mode: "action"

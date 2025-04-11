@@ -161,8 +161,8 @@ class MPPIIRLSpeedmaps:
         x = self.mppi.model.get_observations(x0)
 
         self.mppi.reset()
-        self.mppi.cost_fn.data["goals"] = goals
-        self.mppi.cost_fn.data["costmap"] = {"data": costmaps, "metadata": map_params, "feature_keys":["costmap"]}
+        self.mppi.cost_fn.data["waypoints"] = goals
+        self.mppi.cost_fn.data["local_navmap"] = {"data": costmaps, "metadata": map_params, "feature_keys":["cost"]}
 
         for ii in range(self.mppi_itrs):
             with torch.no_grad():
@@ -274,9 +274,10 @@ class MPPIIRLSpeedmaps:
         sdiffs = expert_speedmaps - _sbins
         sdiffs[sdiffs < 0] = 1e10
         expert_speed_idxs = sdiffs.argmin(dim=1) + 1
+        expert_speed_idxs = expert_speed_idxs.clip(0, self.network.speed_nbins-1).long()
 
         mask = (
-            expert_speedmaps[:, 0] > 1e-2
+            expert_speedmaps[:, 0] > 1e-6
         )  # only want the cells that the expert drove in
         ce = torch.nn.functional.cross_entropy(
             speedmap_probs, expert_speed_idxs, reduction="none"
@@ -288,10 +289,12 @@ class MPPIIRLSpeedmaps:
             speedmap_probs, neg_labels, reduction="none"
         )[~mask]
 
-        speed_loss = ce.mean() * self.speed_coeff + 0.01 * ce_neg.mean()
+        neg_ratio = mask.sum() / (~mask | mask).sum()
 
-        # print('IRL GRAD:   {:.4f}'.format(torch.linalg.norm(grads).detach().cpu().item()))
-        # print('SPEED LOSS: {:.4f}'.format(speed_loss.detach().item()))
+        speed_loss = self.speed_coeff * (ce.mean() + 0.1 * neg_ratio * ce_neg.mean())
+
+        print('IRL GRAD:   {:.4f}'.format(torch.linalg.norm(grads).detach().cpu().item()))
+        print('SPEED LOSS: {:.4f}'.format(speed_loss.detach().item()))
 
         # add regularization
         reg = self.reg_coeff * costmaps
@@ -341,6 +344,14 @@ class MPPIIRLSpeedmaps:
             }
             x = torch.stack([self.mppi.model.get_observations(x0)] * self.mppi.B, dim=0)
 
+            X_expert = {
+                "state": expert_traj,
+                "steer_angle": data["steer"].unsqueeze(-1)
+                if "steer" in data.keys()
+                else torch.zeros(self.mppi.B, self.mppi.T, 1, device=initial_states.device),
+            }
+            expert_kbm_traj = self.mppi.model.get_observations(X_expert)
+
             map_params = {
                 "origin": torch.stack([metadata["origin"]] * self.mppi.B, dim=0),
                 "length": torch.stack([metadata["length"]] * self.mppi.B, dim=0),
@@ -352,11 +363,11 @@ class MPPIIRLSpeedmaps:
             ] * self.mppi.B
 
             self.mppi.reset()
-            self.mppi.cost_fn.data["goals"] = goals
-            self.mppi.cost_fn.data["costmap"] = {
+            self.mppi.cost_fn.data["waypoints"] = goals
+            self.mppi.cost_fn.data["local_navmap"] = {
                 "data": costmap,
                 "metadata": map_params,
-                "feature_keys": ["costmap"]
+                "feature_keys": ["cost"]
             }
 
             # solve for traj
@@ -365,6 +376,17 @@ class MPPIIRLSpeedmaps:
 
             tidx = self.mppi.last_cost.argmin()
             traj = self.mppi.last_states[tidx]
+
+            footprint_learner_traj = apply_footprint(traj, self.footprint).view(1, -1, 2)
+            footprint_expert_traj = apply_footprint(
+                expert_kbm_traj.unsqueeze(0), self.footprint
+            ).view(1, -1, 2)
+
+            lsv = get_state_visitations(footprint_learner_traj, metadata)
+            esv = get_state_visitations(footprint_expert_traj, metadata)
+
+            learner_cost = (lsv * costmap).sum()
+            expert_cost = (esv * costmap).sum()
 
             metadata = data["metadata"]
             fig, axs = plt.subplots(2, 3, figsize=(18, 12))
@@ -379,6 +401,8 @@ class MPPIIRLSpeedmaps:
                     break
 
             img = data["image"].permute(1, 2, 0)[:, :, [2, 1, 0]].cpu()
+
+            fig.suptitle("Expert cost = {:.4f}, Learner cost = {:.4f}".format(expert_cost.item(), learner_cost.item()))
 
             axs[0].imshow(img)
             axs[1].imshow(

@@ -1,27 +1,27 @@
 experiment:
     save_to: /home/tartandriver/workspace/experiments/yamaha_irl_dino/
-    name: radio_gascola_cexp
+    name: dinob_reg_gascola_categorical_log_cost_no_reg_no_height_feats
     device: cuda
-    epochs: 5
+    epochs: 10
     steps_per_epoch: -1
     save_every: 1
 
 footprint:
     params:
-        length: 3.0
-        width: 1.5
-        length_offset: -1.0
+        length: 5.0
+        width: 3.0
+        length_offset: -0.5
         width_offset: 0.0
-        nl: 15
-        nw: 15
+        nl: 25
+        nw: 25
 
 algo:
     type: MPPIIRLSpeedmaps
     params:
         batch_size: 4
-        reg_coeff: 1.0e-08
+        reg_coeff: 0.0
         speed_coeff: 1.0 #turn off speedmaps for now
-        grad_clip: 1.0
+        grad_clip: 10.0
 
 dataset:
     type: MaxEntIRLDataset
@@ -48,20 +48,23 @@ dataset:
             - dino_15
 
             # geom
-            - min_elevation
-            - max_elevation
+            # - min_elevation
+            # - max_elevation
             - num_voxels
-            - terrain
+            # - terrain
             - slope
             - diff
 
 network:
-    type: ResnetExpCostCategoricalSpeed
+    type: ResnetCategorical
     params:
-        speed_nbins: 30
+        speed_nbins: 15
         max_speed: 15.
+        cost_nbins: 20
+        max_cost: 10.
         hidden_channels: [128, 128]
-        hidden_activation: relu
+        hidden_activation: tanh
+        hidden_kernel_size: 5
         dropout: 0.0
 
 netopt:
