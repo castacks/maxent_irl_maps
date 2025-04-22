@@ -1,0 +1,217 @@
+common:
+  rate: 0.1 #time between iterations
+  device: cuda
+
+# list of data fields to store in the torch_coordinator code
+data_types:
+  #raw data from ROS
+  tf_odom_to_base: Transform
+  tf_base_to_odom: Transform
+  pointcloud_in_odom: PointCloud
+  pointcloud_in_vehicle: PointCloud
+  image: Image
+
+  image_intrinsics: Intrinsics
+  tf_base_to_cam: Transform
+
+  #processed fields
+
+  feature_image: FeatureImage
+  feature_image_intrinsics: Intrinsics
+
+  feature_pointcloud: FeaturePointCloud
+  feature_pointcloud_in_odom: FeaturePointCloud
+
+  feature_image_viz: Image
+  feature_pointcloud_viz: PointCloud
+
+  voxel_map: VoxelGrid
+  bev_map: BEVGrid
+  bev_map_reduce: BEVGrid
+  nav_map: BEVGrid
+
+ros_hooks:
+  rate: 0.1
+
+  hooks:
+    feature_image_viz: /feature_image
+    feature_pointcloud_viz: /feature_pointcloud
+    pointcloud_in_vehicle: /pc_in_vehicle
+    voxel_map: /dino_voxels_viz
+    # bev_map_reduce: /dino_gridmap
+    nav_map: /local_navmap
+
+# ros converter config (i.e. we need to get these topics from ros)
+ros_converter:
+  max_age: 1.
+
+  topics:
+    - name: odometry
+      topic: /superodometry/integrated_to_init #namespaced in new bags
+      type: OdomRBState
+      args: {}
+
+    - name: image_intrinsics
+      topic: /multisense/left/image_rect_color/camera_info
+      type: Intrinsics
+      args: {}
+
+    - name: image
+      topic: /multisense/left/image_rect_color
+      type: Image
+      args: {}
+
+    - name: pointcloud_in_odom
+      # topic: /velodyne_cloud_registered_with_features
+      topic: /superodometry/velodyne_cloud_registered #make sure this is in sensor_init and not sensor_init_rot
+      type: PointCloud
+      args: {}
+
+#unfortunately, integration with tfs is currently not clean.
+#I am currently handling this by making an additiional module in the torch coordinator that will query tf before proc.
+tfs:
+  tf_base_to_odom:
+    src_data: image #get the tf at this data's stamp
+    dst_frame: sensor_init
+    src_frame: vehicle
+
+  tf_odom_to_base:
+    src_data: image
+    dst_frame: vehicle
+    src_frame: sensor_init
+
+  # tf_base_to_cam:
+  #   src_data: image
+  #   dst_frame: vehicle
+  #   src_frame: multisense/left_camera_optical_frame
+
+# replace hard coded value in torch_coordinator_ros.py
+extrinsics:
+    # p: [0.17265, -0.15227, 0.05708]
+    # q: [0.55940, -0.54718, 0.44603, 0.43442] #xyzw
+
+    p: [ 0.15405, 0.210282, 0.165053]
+    q: [ 0.5574714, -0.54525728,  0.44844936,  0.43682184] #xyzw
+
+# set of nodes to run in the torch_coordinator pipeline
+# for now, I'll probably run them in this sequence but we can make this a DAG
+nodes:
+  #transform the feature pc into the image frame
+  -
+    name: pointcloud_to_img
+    type: PointCloudTransform
+
+    remap:
+      transform: tf_base_to_odom
+      input_pointcloud: pointcloud_in_odom
+      output_pointcloud: pointcloud_in_vehicle
+
+    args: {}
+
+  #run the RGB image through the image pipeline
+  - 
+    name: image_featurizer
+    type: ImageFeaturizer
+    
+    remap:
+      input_image: image
+      input_intrinsics: image_intrinsics
+      output_image: feature_image
+      output_intrinsics: feature_image_intrinsics
+
+    args:
+      image_pipeline_config_fp: /home/tartandriver/tartandriver_ws/src/planning/maxent_irl_maps/config/torch_coordinator/voxel_mapping_config.yaml
+
+  #colorize the pointcloud with the image features
+  - 
+    name: pointcloud_colorizer
+    type: PointCloudColorizer
+
+    remap:
+      image: feature_image
+      intrinsics: feature_image_intrinsics
+      extrinsics: tf_base_to_cam
+      input_pointcloud: pointcloud_in_vehicle
+      output_pointcloud: feature_pointcloud_in_vehicle
+
+    args: 
+      keep_uncolorized: true
+      bilinear_interpolation: true
+
+  -
+    name: feature_pointcloud_to_odom
+    type: PointCloudTransform
+
+    remap:
+      transform: tf_odom_to_base
+      input_pointcloud: feature_pointcloud_in_vehicle
+      output_pointcloud: feature_pointcloud_in_odom
+
+    args: {}
+
+  -
+    name: feature_image_viz
+    type: FeatureImageVisualizer
+
+    remap:
+      feature_image: feature_image
+      viz_image: feature_image_viz
+
+    args: {}
+
+#map both pcs with the voxel mapper
+  -
+    name: voxel_mapper
+    type: VoxelMapper
+    
+    remap:
+      pose: odometry
+      # base_pointcloud: pointcloud_in_odom
+      feature_pointcloud: feature_pointcloud_in_odom
+      voxel_map: voxel_map
+
+    args:
+      localmapper_config_fp: /home/tartandriver/tartandriver_ws/src/planning/maxent_irl_maps/config/torch_coordinator/voxel_mapping_config.yaml
+
+  #perform terrain estimation on the voxel grid
+  -
+    name: terrain_estimation
+    type: TerrainEstimation
+    
+    remap:
+      voxel_map: voxel_map
+      bev_map: bev_map
+
+    args:
+      terrain_estimator_config_fp: /home/tartandriver/tartandriver_ws/src/planning/maxent_irl_maps/config/torch_coordinator/voxel_mapping_config.yaml
+
+  -
+    name: cvar_maxent_irl_costmap
+    type: MaxEntIRLInference
+    
+    remap:
+      pose: tf_odom_to_base
+      bev_map: bev_map
+      nav_map: nav_map
+
+    args:
+      model_fp: /home/tartandriver/tartandriver_ws/models/maxent_irl_maps/yamaha/2025-04-07-19-50-37_dinob_reg_gascola_categorical_log_cost_no_reg_no_height_feats/itr_5.pt
+      speed_q: 0.5
+      return_dists: True
+
+# debug section for getting stuff from kitti dataset
+debug:
+  intrinsics:
+    K: [455.7750, 0., 497.1180, 0., 456.3191, 251.8580, 0., 0., 1.]
+    P: [455.7750, 0., 497.1180, 0., 456.3191, 251.8580, 0., 0., 1.]
+
+  extrinsics:
+    # p: [0.0, 0.4, -0.3]
+    # q: [0.569, -0.549, 0.416, 0.450] #xyzw
+    p: [0.17265, -0.15227, 0.05708]
+    q: [0.55940, -0.54718, 0.44603, 0.43442]
+
+  odom: odom
+  pcl: super_odometry_pc
+  image: image_left_color
+  gridmap: local_gridmap

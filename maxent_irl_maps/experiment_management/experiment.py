@@ -59,28 +59,32 @@ class Experiment:
             if e == 0:
                 self.build_experiment_dir()
 
-                #create a sample dataset to load
-                with open(os.path.join(self.algo.expert_dataset.root_fp, "normalizations.yaml"), "r") as fp:
-                    normalizations = yaml.safe_load(fp)
-                    target_fp = open(os.path.join(self.base_fp, "dummy_dataset","normalizations.yaml"), "w")
-                    yaml.dump(normalizations, target_fp)
+                # #create a sample dataset to load
+                # with open(os.path.join(self.algo.expert_dataset.root_fp, "normalizations.yaml"), "r") as fp:
+                #     normalizations = yaml.safe_load(fp)
+                #     target_fp = open(os.path.join(self.base_fp, "dummy_dataset","normalizations.yaml"), "w")
+                #     yaml.dump(normalizations, target_fp)
 
-                src_fp = os.path.join(self.algo.expert_dataset.root_fp, self.algo.expert_dataset.dpt_fps[0])
-                dst_fp = os.path.join(self.base_fp, "dummy_dataset", "traj_0.pt")
-                torch.save(torch.load(src_fp, weights_only=False), dst_fp)
+                # src_fp = os.path.join(self.algo.expert_dataset.root_fp, self.algo.expert_dataset.dpt_fps[0])
+                # dst_fp = os.path.join(self.base_fp, "dummy_dataset", "traj_0.pt")
+                # torch.save(torch.load(src_fp, weights_only=False), dst_fp)
                 
-                #save params
+                # #save params
                 with open(os.path.join(self.base_fp, "_params.yaml"), "w") as fp:
                     yaml.dump(self.params, fp, default_flow_style=False)
 
             if e % self.save_every == 0:
                 torch.save(
-                    self.algo.network.state_dict(),
-                    os.path.join(self.base_fp, "itr_{}.pt".format(e + 1)),
+                    self.algo.bev_network.state_dict(),
+                    os.path.join(self.base_fp, "itr_{}_bev.pt".format(e + 1)),
+                )
+                torch.save(
+                    self.algo.fpv_network.state_dict(),
+                    os.path.join(self.base_fp, "itr_{}_fpv.pt".format(e + 1)),
                 )
             self.algo = self.algo.to("cuda")
 
-        for i in range(10):
+        for i in range(5000):
             self.algo.visualize()
             plt.show()
 

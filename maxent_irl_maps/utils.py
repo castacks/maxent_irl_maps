@@ -88,19 +88,13 @@ def get_speedmap(trajs, speeds, map_metadata, weights=None):
 
     xs = trajs[..., 0]
     ys = trajs[..., 1]
-    ox = map_metadata["origin"][0].item()
-    oy = map_metadata["origin"][1].item()
+    ox = map_metadata.origin[0].item()
+    oy = map_metadata.origin[1].item()
 
-    if isinstance(map_metadata["resolution"], torch.Tensor):
-        rx = map_metadata["resolution"][0].item()
-        ry = map_metadata["resolution"][1].item()
-        nx = round(map_metadata["length"][0].item() / rx)
-        ny = round(map_metadata["length"][1].item() / ry)
-    else:
-        rx = map_metadata["resolution"][0]
-        ry = map_metadata["resolution"][1]
-        nx = round(map_metadata["length"][0] / res)
-        ny = round(map_metadata["length"][1] / res)
+    rx = map_metadata.resolution[0].item()
+    ry = map_metadata.resolution[1].item()
+    nx = map_metadata.N[0].item()
+    ny = map_metadata.N[1].item()
 
     width = max(nx, ny)
 
@@ -151,19 +145,13 @@ def get_speedmap(trajs, speeds, map_metadata, weights=None):
 def world_to_grid(trajs, map_metadata):
     xs = trajs[..., 0]
     ys = trajs[..., 1]
-    ox = map_metadata["origin"][0].item()
-    oy = map_metadata["origin"][1].item()
+    ox = map_metadata.origin[0].item()
+    oy = map_metadata.origin[1].item()
 
-    if isinstance(map_metadata["resolution"], torch.Tensor):
-        rx = map_metadata["resolution"][0].item()
-        ry = map_metadata["resolution"][1].item()
-        nx = round(map_metadata["length"][0].item() / rx)
-        ny = round(map_metadata["length"][1].item() / ry)
-    else:
-        rx = map_metadata["resolution"][0]
-        ry = map_metadata["resolution"][1]
-        nx = round(map_metadata["length"][0] / res)
-        ny = round(map_metadata["length"][1] / res)
+    rx = map_metadata.resolution[0].item()
+    ry = map_metadata.resolution[1].item()
+    nx = map_metadata.N[0].item()
+    ny = map_metadata.N[1].item()
 
     width = max(nx, ny)
 
@@ -174,7 +162,6 @@ def world_to_grid(trajs, map_metadata):
     coords = torch.stack([xidxs, yidxs], dim=-1)
     valid_mask = (xidxs >= 0) & (xidxs < ny) & (yidxs >= 0) & (yidxs < nx)
     return coords, valid_mask
-
 
 def get_state_visitations(trajs, map_metadata, weights=None):
     """
@@ -189,19 +176,13 @@ def get_state_visitations(trajs, map_metadata, weights=None):
 
     xs = trajs[..., 0]
     ys = trajs[..., 1]
-    ox = map_metadata["origin"][0].item()
-    oy = map_metadata["origin"][1].item()
+    ox = map_metadata.origin[0].item()
+    oy = map_metadata.origin[1].item()
 
-    if isinstance(map_metadata["resolution"], torch.Tensor):
-        rx = map_metadata["resolution"][0].item()
-        ry = map_metadata["resolution"][1].item()
-        nx = round(map_metadata["length"][0].item() / rx)
-        ny = round(map_metadata["length"][1].item() / ry)
-    else:
-        rx = map_metadata["resolution"][0]
-        ry = map_metadata["resolution"][1]
-        nx = round(map_metadata["length"][0] / res)
-        ny = round(map_metadata["length"][1] / res)
+    rx = map_metadata.resolution[0].item()
+    ry = map_metadata.resolution[1].item()
+    nx = map_metadata.N[0].item()
+    ny = map_metadata.N[1].item()
 
     width = max(nx, ny)
 
