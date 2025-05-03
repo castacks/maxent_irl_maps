@@ -15,6 +15,9 @@ model:
         steer_lim: [-0.52, 0.52]
         steer_rate_lim: 0.4
 
+        #planar offset (in body frame) from odom to center of vehicle
+        offset_to_center: [-1.0, 0.0]
+
 sampling_strategies:
     sampling_strategies:
     strategies:
@@ -55,21 +58,23 @@ sampling_strategies:
             scale: [0.0025, 0.0025]  #sample scale on change of noise
 
 cost_function:
+    footprint:
+        key: footprint_trajs
+        args:
+          length: 4.0
+          width: 2.0
+          nl: 11
+          nw: 5
+
     terms:
-        #full footprint for cost eval
         - type: FootprintCostmapProjection
           weight: 1.0
           label: costmap_projection
           args:
             costmap_key: local_navmap #should match the name in the ros section
             feature_key: cost #should match a feature key in the ros section
-            length: 5.0
-            width: 3.0
-            length_offset: -0.5
-            width_offset: 0.0
-            nl: 5
-            nw: 5
-
+            footprint_key: footprint_trajs
+            
         - type: EuclideanDistanceToGoal
           label: dist_to_goal
           goal_key: waypoints

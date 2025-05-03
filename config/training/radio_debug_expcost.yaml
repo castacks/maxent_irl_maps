@@ -1,6 +1,6 @@
 experiment:
     save_to: /home/tartandriver/workspace/experiments/yamaha_irl_dino/
-    name: dinob_reg_gascola_categorical_log_cost_no_reg_no_height_feats
+    name: dinob_reg_gascola_rr_mpc_patch
     device: cuda
     epochs: 10
     steps_per_epoch: -1
@@ -10,7 +10,7 @@ footprint:
     params:
         length: 5.0
         width: 3.0
-        length_offset: -0.5
+        length_offset: -1.0
         width_offset: 0.0
         nl: 25
         nw: 25
@@ -54,6 +54,7 @@ dataset:
             # - terrain
             - slope
             - diff
+            - min_elevation_filtered_inflated_mask
 
 network:
     type: ResnetCategorical

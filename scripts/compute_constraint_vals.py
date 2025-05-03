@@ -132,15 +132,15 @@ if __name__ == "__main__":
             axs[0, 0].plot(expert_traj[:, 0].cpu().numpy(), expert_traj[:, 1].cpu().numpy(), c='y')
 
             axs[0, 1].set_title('Costmap q95 ({:.4f})'.format(cost_q95))
-            axs[0, 1].imshow(costmap[0,0].T.cpu(), origin='lower', cmap='jet', extent=(xmin, xmax, ymin, ymax), vmax=cost_q90)
+            axs[0, 1].imshow(costmap[0,0].T.cpu(), origin='lower', cmap='jet', extent=(xmin, xmax, ymin, ymax), vmax=cost_q95)
             axs[0, 1].plot(expert_traj[:, 0].cpu().numpy(), expert_traj[:, 1].cpu().numpy(), c='y')
 
             axs[1, 0].set_title('Costmap q99 ({:.4f})'.format(cost_q99))
-            axs[1, 0].imshow(costmap[0,0].T.cpu(), origin='lower',  cmap='jet', extent=(xmin, xmax, ymin, ymax), vmax=cost_q95)
+            axs[1, 0].imshow(costmap[0,0].T.cpu(), origin='lower',  cmap='jet', extent=(xmin, xmax, ymin, ymax), vmax=cost_q99)
             axs[1, 0].plot(expert_traj[:, 0].cpu().numpy(), expert_traj[:, 1].cpu().numpy(), c='y')
 
             axs[1, 1].set_title('Costmap q995 ({:.4f})'.format(cost_q995))
-            axs[1, 1].imshow(costmap[0,0].T.cpu(), origin='lower', cmap='jet', extent=(xmin, xmax, ymin, ymax), vmax=cost_q99)
+            axs[1, 1].imshow(costmap[0,0].T.cpu(), origin='lower', cmap='jet', extent=(xmin, xmax, ymin, ymax), vmax=cost_q995)
             axs[1, 1].plot(expert_traj[:, 0].cpu().numpy(), expert_traj[:, 1].cpu().numpy(), c='y')
 
             plt.show()
