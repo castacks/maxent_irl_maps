@@ -9,9 +9,10 @@ import scipy.interpolate
 from torch.utils.data import DataLoader
 from scipy.spatial.transform import Rotation
 
+from torch_mpc.cost_functions.cost_terms.utils import apply_footprint
+
 from maxent_irl_maps.dataset.maxent_irl_dataset import MaxEntIRLDataset
 from maxent_irl_maps.utils import get_state_visitations, get_speedmap
-from maxent_irl_maps.geometry_utils import apply_footprint
 
 from physics_atv_visual_mapping.pointcloud_colorization.torch_color_pcl_utils import *
 

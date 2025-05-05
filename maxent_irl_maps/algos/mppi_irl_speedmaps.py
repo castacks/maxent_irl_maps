@@ -8,9 +8,10 @@ import scipy.interpolate
 
 from torch.utils.data import DataLoader
 
+from torch_mpc.cost_functions.cost_terms.utils import apply_footprint
+
 from maxent_irl_maps.dataset.maxent_irl_dataset import MaxEntIRLDataset
 from maxent_irl_maps.utils import get_state_visitations, get_speedmap, compute_map_mean_entropy
-from maxent_irl_maps.geometry_utils import apply_footprint
 
 class MPPIIRLSpeedmaps:
     """
@@ -196,7 +197,7 @@ class MPPIIRLSpeedmaps:
             expert_state_visitations.append(esv)
 
             """
-            fig, axs = plt.subplots(1, 2)
+            fig, axs = plt.subplots(1, 3)
             axs[0].plot(trajs[bi][weights[bi].argmax(), :, 0].cpu(), trajs[bi][weights[bi].argmax(), :, 1].cpu(), c='r')
             axs[0].imshow(lsv.T.cpu(), origin='lower', extent=(
                 map_params_b['origin'][0].item(),
@@ -214,6 +215,13 @@ class MPPIIRLSpeedmaps:
                 map_params_b['origin'][1].item() + map_params_b['length'][1].item(),
             ))
             axs[1].set_title('expert')
+
+            axs[2].imshow((esv - lsv).T.cpu(), origin='lower', extent=(
+                map_params_b['origin'][0].item(),
+                map_params_b['origin'][0].item() + map_params_b['length'][0].item(),
+                map_params_b['origin'][1].item(),
+                map_params_b['origin'][1].item() + map_params_b['length'][1].item(),
+            ))
             plt.show()
             """
 
@@ -391,7 +399,7 @@ class MPPIIRLSpeedmaps:
             axs = axs.flatten()
 
             fk = None
-            fklist = ["height_high", "step", "diff", "dino_0"]
+            fklist = ["dino_0", "max_elevation", "step", "diff", "dino_0"]
             for f in fklist:
                 if f in self.expert_dataset.feature_keys:
                     fk = f
