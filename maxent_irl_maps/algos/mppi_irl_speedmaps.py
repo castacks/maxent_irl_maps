@@ -399,7 +399,7 @@ class MPPIIRLSpeedmaps:
             axs = axs.flatten()
 
             fk = None
-            fklist = ["dino_0", "max_elevation", "step", "diff", "dino_0"]
+            fklist = ["num_voxels", "max_elevation", "step", "diff", "dino_0"]
             for f in fklist:
                 if f in self.expert_dataset.feature_keys:
                     fk = f
