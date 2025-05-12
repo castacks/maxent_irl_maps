@@ -118,54 +118,6 @@ class TrajectoryInterpolator:
 
         return traj
 
-
-def make_footprint(length, width, nl, nw, length_offset, width_offset, device="cpu"):
-    xs = torch.linspace(-length / 2.0, length / 2.0, nl, device=device) + length_offset
-    ys = torch.linspace(-width / 2.0, width / 2.0, nw, device=device) + width_offset
-    footprint = torch.stack(torch.meshgrid(xs, ys, indexing="ij"), dim=-1).view(-1, 2)
-    return footprint
-
-
-def apply_footprint(traj, footprint):
-    """
-    Given a B x K x T x 3 tensor of states (last dim is [x, y, th]),
-    return a B x K x T x F x 2 tensor of positions (F is each footprint sample)
-    """
-    tdims = traj.shape[:-1]
-    nf = footprint.shape[0]
-
-    pos = traj[..., :2]
-    th = traj[..., 2]
-
-    R = torch.stack(
-        [
-            torch.stack([th.cos(), -th.sin()], dim=-1),
-            torch.stack([th.sin(), th.cos()], dim=-1),
-        ],
-        dim=-2,
-    )  # [B x K x T x 2 x 2]
-
-    R_expand = R.view(*tdims, 1, 2, 2)  # [B x K x T x F x 2 x 2]
-    footprint_expand = footprint.view(1, 1, 1, nf, 2, 1)  # [B x K x T x F x 2 x 1]
-
-    footprint_rot = (R_expand @ footprint_expand).view(
-        *tdims, nf, 2
-    )  # [B x K x T X F x 2]
-    footprint_traj = pos.view(*tdims, 1, 2) + footprint_rot
-
-    #        #debug viz
-    #        import matplotlib.pyplot as plt
-    #        for i in range(footprint_traj.shape[1]):
-    #            tr = traj[0, i] #[T x 3]
-    #            ftr = footprint_traj[0, i].view(-1, 2)
-    #            plt.plot(tr[:, 0], tr[:, 1], c='r')
-    #            plt.scatter(ftr[:, 0], ftr[:, 1], c='b', alpha=0.1)
-    #            plt.gca().set_aspect(1.)
-    #            plt.show()
-
-    return footprint_traj
-
-
 if __name__ == "__main__":
     # test trajectory interpolator by reading a rosbag
     import rosbag

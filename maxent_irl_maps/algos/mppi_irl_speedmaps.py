@@ -8,9 +8,10 @@ import scipy.interpolate
 
 from torch.utils.data import DataLoader
 
+from torch_mpc.cost_functions.cost_terms.utils import apply_footprint
+
 from maxent_irl_maps.dataset.maxent_irl_dataset import MaxEntIRLDataset
 from maxent_irl_maps.utils import get_state_visitations, get_speedmap, compute_map_mean_entropy
-from maxent_irl_maps.geometry_utils import apply_footprint
 
 class MPPIIRLSpeedmaps:
     """
@@ -119,18 +120,6 @@ class MPPIIRLSpeedmaps:
         # initialize goals for cost function
         expert_traj = batch["traj"]
 
-        goals2 = [traj[[-1], :2] for traj in expert_traj]
-
-        goals = []
-        for bi in range(expert_traj.shape[0]):
-            map_params_b = {
-                "resolution": batch["metadata"]["resolution"][bi],
-                "length": batch["metadata"]["length"][bi],
-                "origin": batch["metadata"]["origin"][bi],
-            }
-            etraj = expert_traj[bi]
-            goals.append(self.clip_to_map_bounds(etraj[:, :2], map_params_b).view(1, 2))
-
         # initialize initial state for MPPI
         initial_states = expert_traj[:, 0]
         x0 = {
@@ -159,6 +148,16 @@ class MPPIIRLSpeedmaps:
             else torch.zeros(1, device=initial_state.device),
         }
         x = self.mppi.model.get_observations(x0)
+
+        goals = []
+        for bi in range(expert_traj.shape[0]):
+            map_params_b = {
+                "resolution": batch["metadata"]["resolution"][bi],
+                "length": batch["metadata"]["length"][bi],
+                "origin": batch["metadata"]["origin"][bi],
+            }
+            etraj = expert_kbm_traj[bi]
+            goals.append(self.clip_to_map_bounds(etraj[:, :2], map_params_b).view(1, 2))
 
         self.mppi.reset()
         self.mppi.cost_fn.data["waypoints"] = goals
@@ -198,7 +197,7 @@ class MPPIIRLSpeedmaps:
             expert_state_visitations.append(esv)
 
             """
-            fig, axs = plt.subplots(1, 2)
+            fig, axs = plt.subplots(1, 3)
             axs[0].plot(trajs[bi][weights[bi].argmax(), :, 0].cpu(), trajs[bi][weights[bi].argmax(), :, 1].cpu(), c='r')
             axs[0].imshow(lsv.T.cpu(), origin='lower', extent=(
                 map_params_b['origin'][0].item(),
@@ -216,6 +215,13 @@ class MPPIIRLSpeedmaps:
                 map_params_b['origin'][1].item() + map_params_b['length'][1].item(),
             ))
             axs[1].set_title('expert')
+
+            axs[2].imshow((esv - lsv).T.cpu(), origin='lower', extent=(
+                map_params_b['origin'][0].item(),
+                map_params_b['origin'][0].item() + map_params_b['length'][0].item(),
+                map_params_b['origin'][1].item(),
+                map_params_b['origin'][1].item() + map_params_b['length'][1].item(),
+            ))
             plt.show()
             """
 
@@ -359,7 +365,7 @@ class MPPIIRLSpeedmaps:
             }
 
             goals = [
-                self.clip_to_map_bounds(expert_traj[:, :2], metadata).view(1, 2)
+                self.clip_to_map_bounds(expert_kbm_traj[:, :2], metadata).view(1, 2)
             ] * self.mppi.B
 
             self.mppi.reset()
@@ -393,7 +399,7 @@ class MPPIIRLSpeedmaps:
             axs = axs.flatten()
 
             fk = None
-            fklist = ["height_high", "step", "diff", "dino_0"]
+            fklist = ["dino_0", "max_elevation", "step", "diff", "dino_0"]
             for f in fklist:
                 if f in self.expert_dataset.feature_keys:
                     fk = f
@@ -440,13 +446,14 @@ class MPPIIRLSpeedmaps:
                 extent=(xmin, xmax, ymin, ymax),
             )
 
+            #dont plot the initial state bc learner traj doesnt contain initial
             axs[1].plot(
-                expert_traj[:, 0].cpu(), expert_traj[:, 1].cpu(), c="y", label="expert"
+                expert_kbm_traj[1:, 0].cpu(), expert_kbm_traj[1:, 1].cpu(), c="y", label="expert"
             )
-            axs[2].plot(expert_traj[:, 0].cpu(), expert_traj[:, 1].cpu(), c="y")
-            axs[3].plot(expert_traj[:, 0].cpu(), expert_traj[:, 1].cpu(), c="y")
-            axs[4].plot(expert_traj[:, 0].cpu(), expert_traj[:, 1].cpu(), c="y")
-            axs[5].plot(expert_traj[:, 0].cpu(), expert_traj[:, 1].cpu(), c="y")
+            axs[2].plot(expert_kbm_traj[1:, 0].cpu(), expert_kbm_traj[1:, 1].cpu(), c="y")
+            axs[3].plot(expert_kbm_traj[1:, 0].cpu(), expert_kbm_traj[1:, 1].cpu(), c="y")
+            axs[4].plot(expert_kbm_traj[1:, 0].cpu(), expert_kbm_traj[1:, 1].cpu(), c="y")
+            axs[5].plot(expert_kbm_traj[1:, 0].cpu(), expert_kbm_traj[1:, 1].cpu(), c="y")
 
             #            axs[0].plot(traj_px[:, 0], traj_px[:, 1], c='g')
             axs[1].plot(traj[:, 0].cpu(), traj[:, 1].cpu(), c="g", label="learner")

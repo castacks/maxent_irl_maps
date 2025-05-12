@@ -124,6 +124,12 @@ def run_preproc_traj(traj_fp, dst_fp, config):
             sub_traj = odom_interp(target_times)
             sub_steer = steer_angle_interp(target_times)
 
+            sub_traj_speed = np.linalg.norm(sub_traj[:, 7:10], axis=-1)
+
+            if sub_traj_speed.mean() < config['min_avg_speed']:
+                print('skipping sample {}'.format(i))
+                continue
+
             img_idx = np.argmin(np.abs(gt - img_ts))
             pcl_idx = np.argmin(np.abs(gt - pcl_ts))
             pcl_t = pcl_ts[pcl_idx]

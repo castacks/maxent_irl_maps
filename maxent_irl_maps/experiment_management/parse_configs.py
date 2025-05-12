@@ -11,14 +11,13 @@ from torch_mpc.models.steer_setpoint_kbm import SteerSetpointKBM
 from torch_mpc.models.skid_steer import SkidSteer
 
 from torch_mpc.setup_mpc import setup_mpc
+from torch_mpc.cost_functions.cost_terms.utils import make_footprint
 
 # TODO uncomment when torch_state_lattice_planner is back
 # from torch_state_lattice_planner.setup_planner import setup_planner
 
 from maxent_irl_maps.algos.mppi_irl_speedmaps import MPPIIRLSpeedmaps
 from maxent_irl_maps.algos.planner_irl_speedmaps import PlannerIRLSpeedmaps
-
-from maxent_irl_maps.geometry_utils import make_footprint
 
 from maxent_irl_maps.networks.resnet import ResnetCategorical, ResnetExpCostCategoricalSpeed
 
