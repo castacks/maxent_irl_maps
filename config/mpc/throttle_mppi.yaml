@@ -16,7 +16,7 @@ model:
         steer_rate_lim: 0.4
 
         #planar offset (in body frame) from odom to center of vehicle
-        offset_to_center: [-1.0, 0.0]
+        offset_to_center: [-2.2, 0.0]
 
 sampling_strategies:
     sampling_strategies:
@@ -63,6 +63,11 @@ cost_function:
         args:
           length: 4.0
           width: 2.0
+          
+          #displacement to get to the center of the footprint from the center of the rear axle
+          length_offset: 1.2
+          width_offset: 0.0
+          
           nl: 11
           nw: 5
 

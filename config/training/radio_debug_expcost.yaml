@@ -1,6 +1,6 @@
 experiment:
     save_to: /home/tartandriver/workspace/experiments/yamaha_irl_dino/
-    name: dinob_reg_gascola_rr_mpc_patch
+    name: irl_vitb
     device: cuda
     epochs: 10
     steps_per_epoch: -1
@@ -10,8 +10,13 @@ footprint:
     params:
         length: 4.0
         width: 2.0
+          
+        #displacement to get to the center of the footprint from the center of the rear axle
+        length_offset: 1.2
+        width_offset: 0.0
+        
         nl: 25
-        nw: 25
+        nw: 15
 
 algo:
     type: MPPIIRLSpeedmaps
@@ -24,7 +29,7 @@ algo:
 dataset:
     type: MaxEntIRLDataset
     params:
-        root_fp: /home/tartandriver/workspace/datasets/2025_irl_data/test
+        root_fp: /home/tartandriver/workspace/datasets/2025_irl_data_dino_vitb/test
         device: cuda
         feature_keys:
             # VFM
@@ -61,7 +66,7 @@ network:
         max_speed: 15.
         cost_nbins: 20
         max_cost: 10.
-        hidden_channels: [128, 128]
+        hidden_channels: [128,]
         hidden_activation: tanh
         hidden_kernel_size: 5
         dropout: 0.0
