@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 from maxent_irl_maps.dataset.maxent_irl_dataset import MaxEntIRLDataset
 from maxent_irl_maps.experiment_management.parse_configs import setup_experiment, load_net_for_eval
 from maxent_irl_maps.utils import get_state_visitations
-from maxent_irl_maps.geometry_utils import apply_footprint
+from torch_mpc.cost_functions.cost_terms.utils import apply_footprint
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()

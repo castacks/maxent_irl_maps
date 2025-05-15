@@ -11,7 +11,7 @@ from torch.utils.data import DataLoader
 from torch_mpc.cost_functions.cost_terms.utils import apply_footprint
 
 from maxent_irl_maps.dataset.maxent_irl_dataset import MaxEntIRLDataset
-from maxent_irl_maps.utils import get_state_visitations, get_speedmap, compute_map_mean_entropy
+from maxent_irl_maps.utils import get_state_visitations, get_speedmap, compute_map_mean_entropy, compute_speedmap_quantile
 
 class MPPIIRLSpeedmaps:
     """
@@ -123,7 +123,7 @@ class MPPIIRLSpeedmaps:
         # initialize initial state for MPPI
         initial_states = expert_traj[:, 0]
         x0 = {
-            "state": initial_states,
+            "state": initial_states.clone(),
             "steer_angle": batch["steer"][:, [0]]
             if "steer" in batch.keys()
             else torch.zeros(initial_states.shape[0], device=initial_states.device),
@@ -132,7 +132,7 @@ class MPPIIRLSpeedmaps:
 
         # also get KBM states for expert
         X_expert = {
-            "state": expert_traj,
+            "state": expert_traj.clone(),
             "steer_angle": batch["steer"].unsqueeze(-1)
             if "steer" in batch.keys()
             else torch.zeros(self.mppi.B, self.mppi.T, 1, device=initial_states.device),
@@ -192,13 +192,14 @@ class MPPIIRLSpeedmaps:
             lsv = get_state_visitations(
                 footprint_learner_traj, map_params_b, weights[bi]
             )
+
             esv = get_state_visitations(footprint_expert_traj, map_params_b)
             learner_state_visitations.append(lsv)
             expert_state_visitations.append(esv)
 
             """
             fig, axs = plt.subplots(1, 3)
-            axs[0].plot(trajs[bi][weights[bi].argmax(), :, 0].cpu(), trajs[bi][weights[bi].argmax(), :, 1].cpu(), c='r')
+            axs[0].plot(trajs[bi][weights[bi].argmax(), :, 0].cpu(), trajs[bi][weights[bi].argmax(), :, 1].cpu(), c='r', marker='.')
             axs[0].imshow(lsv.T.cpu(), origin='lower', extent=(
                 map_params_b['origin'][0].item(),
                 map_params_b['origin'][0].item() + map_params_b['length'][0].item(),
@@ -207,7 +208,8 @@ class MPPIIRLSpeedmaps:
             ))
             axs[0].set_title('learner')
 
-            axs[1].plot(expert_traj[bi][:, 0].cpu(), expert_traj[bi][:, 1].cpu(), c='r')
+            axs[1].plot(expert_kbm_traj[bi][:, 0].cpu(), expert_kbm_traj[bi][:, 1].cpu(), c='r', marker='.')
+            axs[1].plot(batch['traj'][bi, :, 0].cpu(), batch['traj'][bi, :, 1].cpu(), c='b', marker='.')
             axs[1].imshow(esv.T.cpu(), origin='lower', extent=(
                 map_params_b['origin'][0].item(),
                 map_params_b['origin'][0].item() + map_params_b['length'][0].item(),
@@ -340,6 +342,10 @@ class MPPIIRLSpeedmaps:
             costmap_unc = res["costmap_entropy"]
             speedmap_unc = res["speedmap_entropy"]
 
+            #mess with cost quantiles
+            costmap_cdf = torch.cumsum(res['cost_logits'].softmax(dim=1), dim=1)
+            costmap_quantile = compute_speedmap_quantile(costmap_cdf[0], self.network.cost_bins, q=0.7).exp()
+
             # initialize solver
             initial_state = expert_traj[0]
             x0 = {
@@ -439,10 +445,18 @@ class MPPIIRLSpeedmaps:
                 extent=(xmin, xmax, ymin, ymax),
             )
 
+            # m4 = axs[5].imshow(
+            #     speedmap_unc[0, 0].T.cpu(),
+            #     origin="lower",
+            #     cmap="viridis",
+            #     extent=(xmin, xmax, ymin, ymax),
+            # )
+
             m4 = axs[5].imshow(
-                speedmap_unc[0, 0].T.cpu(),
+                costmap_quantile.T.cpu(),
                 origin="lower",
-                cmap="viridis",
+                cmap="jet",
+                vmax=costmap.max(),
                 extent=(xmin, xmax, ymin, ymax),
             )
 
@@ -472,7 +486,8 @@ class MPPIIRLSpeedmaps:
             axs[2].set_title("irl cost mean")
             axs[3].set_title("speedmap mean")
             axs[4].set_title("irl cost unc")
-            axs[5].set_title("speedmap unc")
+            # axs[5].set_title("speedmap unc")
+            axs[5].set_title("cost quantile")
 
             for i in [1, 2, 4, 5]:
                 axs[i].set_xlabel("X(m)")
