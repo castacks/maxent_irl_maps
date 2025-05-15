@@ -14,7 +14,7 @@ footprint:
         #displacement to get to the center of the footprint from the center of the rear axle
         length_offset: 1.2
         width_offset: 0.0
-
+        
         nl: 25
         nw: 15
 
@@ -22,7 +22,7 @@ algo:
     type: MPPIIRLSpeedmaps
     params:
         batch_size: 4
-        reg_coeff: 0.0
+        reg_coeff: 0.00000001
         speed_coeff: 1.0 #turn off speedmaps for now
         grad_clip: 10.0
 
