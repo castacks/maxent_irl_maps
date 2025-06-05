@@ -1,6 +1,6 @@
 experiment:
     save_to: /home/tartandriver/workspace/experiments/yamaha_irl_dino/
-    name: irl_vitb
+    name: irl_vitb_10x_reg_smaller_cost_bins
     device: cuda
     epochs: 10
     steps_per_epoch: -1
@@ -22,7 +22,8 @@ algo:
     type: MPPIIRLSpeedmaps
     params:
         batch_size: 4
-        reg_coeff: 0.00000001
+        reg_coeff: 0.0000001
+        # reg_coeff: 0.0
         speed_coeff: 1.0 #turn off speedmaps for now
         grad_clip: 10.0
 
@@ -65,7 +66,7 @@ network:
         speed_nbins: 15
         max_speed: 15.
         cost_nbins: 20
-        max_cost: 10.
+        max_cost: 4.
         hidden_channels: [128,]
         hidden_activation: tanh
         hidden_kernel_size: 5

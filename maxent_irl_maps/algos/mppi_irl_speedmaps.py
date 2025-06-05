@@ -344,7 +344,9 @@ class MPPIIRLSpeedmaps:
 
             #mess with cost quantiles
             costmap_cdf = torch.cumsum(res['cost_logits'].softmax(dim=1), dim=1)
-            costmap_quantile = compute_speedmap_quantile(costmap_cdf[0], self.network.cost_bins, q=0.7).exp()
+            costmap_quantile = compute_speedmap_quantile(costmap_cdf[0], self.network.cost_bins, q=0.8).exp()
+
+            costmap_quantile = (costmap_quantile.unsqueeze(0).tile(self.mppi.B, 1, 1)).view(*costmap.shape)
 
             # initialize solver
             initial_state = expert_traj[0]
@@ -377,6 +379,7 @@ class MPPIIRLSpeedmaps:
             self.mppi.reset()
             self.mppi.cost_fn.data["waypoints"] = goals
             self.mppi.cost_fn.data["local_navmap"] = {
+                # "data": costmap_quantile,
                 "data": costmap,
                 "metadata": map_params,
                 "feature_keys": ["cost"]
@@ -453,7 +456,7 @@ class MPPIIRLSpeedmaps:
             # )
 
             m4 = axs[5].imshow(
-                costmap_quantile.T.cpu(),
+                costmap_quantile[0, 0].T.cpu(),
                 origin="lower",
                 cmap="jet",
                 vmax=costmap.max(),
