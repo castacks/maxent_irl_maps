@@ -16,12 +16,15 @@ from torch_mpc.cost_functions.cost_terms.utils import make_footprint
 # TODO uncomment when torch_state_lattice_planner is back
 # from torch_state_lattice_planner.setup_planner import setup_planner
 
+from maxent_irl_maps.algos.voxel_mppi_irl import VoxelMPPIIRL
 from maxent_irl_maps.algos.mppi_irl_speedmaps import MPPIIRLSpeedmaps
 from maxent_irl_maps.algos.planner_irl_speedmaps import PlannerIRLSpeedmaps
 
 from maxent_irl_maps.networks.resnet import ResnetCategorical, ResnetExpCostCategoricalSpeed
+from maxent_irl_maps.networks.voxel import VoxelResnetCategorical
 
 from maxent_irl_maps.dataset.maxent_irl_dataset import MaxEntIRLDataset
+from maxent_irl_maps.dataset.voxel_irl_dataset import VoxelIRLDataset
 
 from maxent_irl_maps.experiment_management.experiment import Experiment
 
@@ -95,6 +98,8 @@ def setup_experiment(fp, skip_mpc=False):
     dataset_params = experiment_dict["dataset"]
     if dataset_params["type"] == "MaxEntIRLDataset":
         res["dataset"] = MaxEntIRLDataset(**dataset_params["params"]).to(device)
+    elif dataset_params["type"] == "VoxelIRLDataset":
+        res["dataset"] = VoxelIRLDataset(**dataset_params["params"]).to(device)
     else:
         print("Unsupported dataset type {}".format(dataset_params["type"]))
         exit(1)
@@ -108,6 +113,10 @@ def setup_experiment(fp, skip_mpc=False):
         ).to(device)
     elif network_params["type"] == "ResnetExpCostCategoricalSpeed":
         res["network"] = ResnetExpCostCategoricalSpeed(
+            in_channels=len(res["dataset"].feature_keys), **network_params["params"],
+        ).to(device)
+    elif network_params["type"] == "VoxelResnetCategorical":
+        res["network"] = VoxelResnetCategorical(
             in_channels=len(res["dataset"].feature_keys), **network_params["params"],
         ).to(device)
     else:
@@ -163,6 +172,16 @@ def setup_experiment(fp, skip_mpc=False):
 
     elif algo_params["type"] == "MPPIIRLSpeedmaps":
         res["algo"] = MPPIIRLSpeedmaps(
+            network=res["network"],
+            opt=res["netopt"],
+            expert_dataset=res["dataset"],
+            mppi=res["trajopt"],
+            footprint=res["footprint"],
+            **algo_params["params"]
+        ).to(device)
+
+    elif algo_params["type"] == "VoxelMPPIIRL":
+        res["algo"] = VoxelMPPIIRL(
             network=res["network"],
             opt=res["netopt"],
             expert_dataset=res["dataset"],
