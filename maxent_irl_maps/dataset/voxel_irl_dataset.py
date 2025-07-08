@@ -31,7 +31,7 @@ class VoxelIRLDataset(Dataset):
             bev_dir='bev_map_reduce',
             odom_dir='odometry',
             steer_angle_dir='steer_angle',
-            image_dir='image',
+            image_dir='image_left_color',
             device="cpu"
         ):
 
@@ -50,8 +50,8 @@ class VoxelIRLDataset(Dataset):
 
         self.device = device
 
-        self.feature_keys = ["vfm_{}".format(i) for i in range(self[0]["voxel_grid"].features.shape[-1])]
-        self.bev_feature_keys = self[0]["bev_grid"].feature_keys
+        self.feature_keys = ["vfm_{}".format(i) for i in range(self[0][self.voxel_dir].features.shape[-1])]
+        self.bev_feature_keys = self[0][self.bev_dir].feature_keys
 
     def get_voxel_fps(self):
         voxel_fps = []
@@ -78,6 +78,11 @@ class VoxelIRLDataset(Dataset):
                 valid_voxel_idxs = valid_voxel_idxs[vels.mean(axis=-1) > self.min_avg_speed]
 
                 voxel_fps.extend([(rdir, i) for i in valid_voxel_idxs])
+            else:
+                print('found invalid run dir {} (is kitti dir = {}).'.format(rdir, is_kitti_dir(run_dir)))
+                for x in (self.voxel_dir, self.odom_dir, self.steer_angle_dir, self.image_dir):
+                    print('found {}? {}'.format(x, x in subdirs))
+                exit(1)
 
         return voxel_fps
 
