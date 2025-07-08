@@ -30,12 +30,15 @@ algo:
 dataset:
     type: VoxelIRLDataset
     params:
-        root_fp: /media/charlie/sam_ssd_2/yamaha_kitti_debug/train
+        root_fp: /media/striest/offroad/datasets/irl_kitti
         device: cuda
 
         H: 75
         sample_every: 20
         min_avg_speed: 1.0
+
+        odom_dir: odom
+        image_dir: image_left_color
 
 network:
     type: VoxelResnetCategorical
