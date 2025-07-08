@@ -113,7 +113,7 @@ class VoxelMPPIIRL:
         speed_loss = []
 
         # first generate all the costmaps
-        res = [self.network.predict(vg, return_mean_entropy=True) for vg in batch["voxel_grid"]]
+        res = [self.network.predict(vg, bev, return_mean_entropy=True) for vg, bev in zip(batch["voxel_grid"], batch["bev_grid"])]
         res = {k:torch.cat([x[k] for x in res], dim=0) for k in res[0].keys()}
 
         costmaps = res["costmap"]
@@ -357,7 +357,7 @@ class VoxelMPPIIRL:
 
             expert_traj = data["traj"]
 
-            res = self.network.predict(data["voxel_grid"], return_mean_entropy=True)
+            res = self.network.predict(data["voxel_grid"], data["bev_grid"], return_mean_entropy=True)
 
             costmap = res["costmap"].tile(self.mppi.B, 1, 1, 1)
             speedmap = res["speedmap"].tile(self.mppi.B, 1, 1, 1)
