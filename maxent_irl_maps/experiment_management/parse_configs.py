@@ -117,7 +117,7 @@ def setup_experiment(fp, skip_mpc=False):
         ).to(device)
     elif network_params["type"] == "VoxelResnetCategorical":
         res["network"] = VoxelResnetCategorical(
-            in_channels=len(res["dataset"].feature_keys), **network_params["params"],
+            in_channels=len(res["dataset"].feature_keys), bev_in_channels=len(res["dataset"].bev_feature_keys), **network_params["params"],
         ).to(device)
     else:
         print("Unsupported network type {}".format(network_params["type"]))

@@ -9,6 +9,7 @@ import matplotlib.pyplot as plt
 from torch.utils.data import Dataset
 
 from ros_torch_converter.datatypes.voxel_grid import VoxelGridTorch
+from ros_torch_converter.datatypes.bev_grid import BEVGridTorch
 from ros_torch_converter.datatypes.image import ImageTorch
 
 from tartandriver_utils.os_utils import is_kitti_dir
@@ -27,9 +28,10 @@ class VoxelIRLDataset(Dataset):
             sample_every=20,
             min_avg_speed=1.,
             voxel_dir='voxel_map',
-            odom_dir='odom',
+            bev_dir='bev_map_reduce',
+            odom_dir='odometry',
             steer_angle_dir='steer_angle',
-            image_dir='image_left_color',
+            image_dir='image',
             device="cpu"
         ):
 
@@ -39,6 +41,7 @@ class VoxelIRLDataset(Dataset):
 
         self.root_fp = root_fp
         self.voxel_dir = voxel_dir
+        self.bev_dir = bev_dir
         self.odom_dir = odom_dir
         self.steer_angle_dir = steer_angle_dir
         self.image_dir = image_dir
@@ -48,6 +51,7 @@ class VoxelIRLDataset(Dataset):
         self.device = device
 
         self.feature_keys = ["vfm_{}".format(i) for i in range(self[0]["voxel_grid"].features.shape[-1])]
+        self.bev_feature_keys = self[0]["bev_grid"].feature_keys
 
     def get_voxel_fps(self):
         voxel_fps = []
@@ -84,6 +88,7 @@ class VoxelIRLDataset(Dataset):
         run_dir, i = self.voxel_fps[idx]
 
         voxel_map = VoxelGridTorch.from_kitti(os.path.join(self.root_fp, run_dir, self.voxel_dir), i, self.device)
+        bev_map = BEVGridTorch.from_kitti(os.path.join(self.root_fp, run_dir, self.bev_dir), i, self.device)
         image = ImageTorch.from_kitti(os.path.join(self.root_fp, run_dir, self.image_dir), i, self.device)
 
         odom = np.loadtxt(os.path.join(self.root_fp, run_dir, self.odom_dir, 'data.txt'))
@@ -92,11 +97,27 @@ class VoxelIRLDataset(Dataset):
         sub_odom = odom[i:i+self.H]
         sub_steer = steer[i:i+self.H]
 
+        fks = []
+        idxs = []
+        bev_grid = bev_map.bev_grid
+        curr_z = sub_odom[0, 2]
+        for i,k in enumerate(bev_map.bev_grid.feature_keys):
+            if k in ['terrain', 'min_elevation', 'max_elevation']:
+                bev_grid.data[..., i] -= curr_z
+
+            if 'dino' not in k:
+                fks.append(k)
+                idxs.append(i)
+
+        bev_grid.feature_keys = fks
+        bev_grid.data = bev_grid.data[..., idxs]
+
         return {
             'traj': torch.tensor(sub_odom).float().to(self.device),
             'steer': torch.tensor(sub_steer).float().to(self.device),
             'image': image.image,
-            'voxel_grid': voxel_map.voxel_grid
+            'voxel_grid': voxel_map.voxel_grid,
+            'bev_grid': bev_grid,
         }
 
     def to(self, device):
