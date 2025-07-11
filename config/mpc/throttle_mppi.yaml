@@ -24,13 +24,13 @@ sampling_strategies:
         - type: ActionLibrary
           label: action_library
           args:
-            K: 441
-            path: "/home/tartandriver/tartandriver_ws/src/control/torch_mpc/data/action_libraries/yamaha_atv/H100_throttle_steer_unif.pt"
+            K: 505
+            path: "/home/tartandriver/tartandriver_ws/src/control/torch_mpc/data/action_libraries/yamaha_atv/H300_throttle_steer_unif.pt"
 
         - type: GaussianWalk
           label: gaussian_walk1
           args:
-            K: 1024
+            K: 512
             initial_distribution:
                 type: gaussian
                 scale: [0.5, 0.0]

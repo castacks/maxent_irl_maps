@@ -46,6 +46,7 @@ class VoxelMPPIIRL:
         batch_size=64,
         speed_coeff=1.0,
         reg_coeff=1e-2,
+        tv_coeff=0.1,
         grad_clip=1.0,
         device="cpu",
     ):
@@ -72,6 +73,7 @@ class VoxelMPPIIRL:
         self.batch_size = batch_size
         self.reg_coeff = reg_coeff
         self.speed_coeff = speed_coeff
+        self.tv_coeff = tv_coeff
         self.grad_clip = grad_clip
 
         self.itr = 0
@@ -311,8 +313,17 @@ class VoxelMPPIIRL:
 
         speed_loss = self.speed_coeff * (ce.mean() + 0.1 * neg_ratio * ce_neg.mean())
 
+        #eww tv loss
+        costmap_speedmap = torch.cat([costmaps, speedmaps], dim=1)
+        tv = self.compute_tv(costmap_speedmap)
+
+        tv_loss = self.tv_coeff * tv.mean()
+
+        loss = speed_loss + tv_loss
+
         print('IRL GRAD:   {:.4f}'.format(torch.linalg.norm(grads).detach().cpu().item()))
         print('SPEED LOSS: {:.4f}'.format(speed_loss.detach().item()))
+        print('TV LOSS:    {:.4f}'.format(tv_loss.detach().item()))
 
         # add regularization
         reg = self.reg_coeff * costmaps
@@ -321,10 +332,20 @@ class VoxelMPPIIRL:
         # I think we need two backward passes through the computation graph.
         self.network_opt.zero_grad()
         costmaps.backward(gradient=(grads + reg), retain_graph=True)
-        speed_loss.backward()
+        loss.backward()
 
         torch.nn.utils.clip_grad_norm_(self.network.parameters(), self.grad_clip)
         self.network_opt.step()
+
+    def compute_tv(self, x):
+        up = x[:, :, 1:, :]
+        down = x[:, :, :-1, :]
+        left = x[:, :, :, 1:]
+        right = x[:, :, :, :-1]
+
+        tv = (up - down).abs().mean() + (left - right).abs().mean()
+
+        return tv
 
     def visualize(self, idx=-1):
         """

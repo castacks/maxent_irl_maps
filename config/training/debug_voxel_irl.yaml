@@ -1,9 +1,9 @@
 experiment:
     save_to: /home/tartandriver/workspace/experiments/yamaha_irl_dino/
-    name: debug_voxel_irl_with_bev_geom_radio_siglip
+    name: debug_voxel_irl_with_bev_geom_radio_siglip_eww_tv_loss_longer_horiz
     device: cuda
-    epochs: 50
-    steps_per_epoch: 100
+    epochs: 10
+    steps_per_epoch: -1
     save_every: 1
 
 footprint:
@@ -25,6 +25,7 @@ algo:
         reg_coeff: 0.0000001
         # reg_coeff: 0.0
         speed_coeff: 1.0 #turn off speedmaps for now
+        tv_coeff: 0.1
         grad_clip: 10.0
 
 dataset:
@@ -35,7 +36,7 @@ dataset:
 
         voxel_n_features: 16
 
-        H: 75
+        H: 150
         sample_every: 20
         min_avg_speed: 1.0
 
