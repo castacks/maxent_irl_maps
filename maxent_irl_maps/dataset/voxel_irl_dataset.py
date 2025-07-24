@@ -28,6 +28,7 @@ class VoxelIRLDataset(Dataset):
             sample_every=20,
             min_avg_speed=1.,
             voxel_n_features=-1,
+            remove_bev_vfm_feats=True,
             voxel_dir='voxel_map',
             bev_dir='bev_map_reduce',
             odom_dir='odometry',
@@ -40,6 +41,7 @@ class VoxelIRLDataset(Dataset):
         self.sample_every = sample_every
         self.min_avg_speed = min_avg_speed
         self.voxel_n_features = voxel_n_features
+        self.remove_bev_vfm_feats = remove_bev_vfm_feats
 
         self.root_fp = root_fp
         self.voxel_dir = voxel_dir
@@ -115,7 +117,7 @@ class VoxelIRLDataset(Dataset):
             if k in ['terrain', 'min_elevation', 'max_elevation']:
                 bev_grid.data[..., i] -= curr_z
 
-            if 'dino' not in k:
+            if ('dino' not in k) or (not self.remove_bev_vfm_feats):
                 fks.append(k)
                 idxs.append(i)
 
