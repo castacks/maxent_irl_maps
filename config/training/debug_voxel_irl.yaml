@@ -35,6 +35,7 @@ dataset:
         device: cuda
 
         voxel_n_features: 16
+        remove_bev_vfm_feats: true
 
         H: 150
         sample_every: 20
@@ -43,6 +44,8 @@ dataset:
 network:
     type: VoxelResnetCategorical
     params:
+        no_voxel_branch: false
+
         voxel_params:
             hidden_channels: [64, 64, 64]
             hidden_activation: tanh

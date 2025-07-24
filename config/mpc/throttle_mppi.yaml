@@ -83,7 +83,7 @@ cost_function:
         - type: EuclideanDistanceToGoal
           label: dist_to_goal
           goal_key: waypoints
-          weight: 5.0
+          weight: 1.0
           args:
 
 # this defines what the MPPI node subscribes to
