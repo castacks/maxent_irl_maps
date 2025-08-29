@@ -1,5 +1,5 @@
-src_dir: /media/striest/aaa/2025_irl_kitti_rr
-dst_dir: /home/tartandriver/workspace/datasets/2025_irl_rr_data_dino_vitb
+src_dir: /media/striest/aaa/2025_irl_kitti/train
+dst_dir: /media/striest/aaa/2025_irl
 save_every: 20 #add every n-th frame
 min_avg_speed: 1.0 #dont use samples below this average speed
 
@@ -9,8 +9,8 @@ dt: 0.1
 #data folders
 cmd: cmd
 steer_angle: steer_angle
-odom: odom
+odom: odometry
 gps_odom: gps_odom
-local_gridmap: vfm_gridmap_dinob
-pcl: super_odometry_pc
-img: image_left_color
+local_gridmap: bev_map_reduce
+pcl: pointcloud_in_odom
+img: image

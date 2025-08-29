@@ -166,6 +166,10 @@ def run_preproc_traj(traj_fp, dst_fp, config):
             )
 
             gridmap_feature_keys = gridmap_metadata["feature_keys"]
+
+            #temp hack for the 10 minutes that this script will coexist with current feat keys
+            gridmap_feature_keys = [k.split(',')[0] for k in gridmap_feature_keys]
+
             gridmap_metadata = {
                 k: torch.tensor(v).float()
                 for k, v in gridmap_metadata.items()
