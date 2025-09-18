@@ -1,4 +1,5 @@
 import torch
+import torch_scatter
 
 def compute_map_mean_entropy(logits, bin_edges):
     """
@@ -73,169 +74,145 @@ def compute_speedmap_quantile(speedmap_cdf, speed_bins, q):
 
     return _speedmap.reshape(*speedmap_cdf.shape[1:])
 
-
-def get_speedmap(trajs, speeds, map_metadata, weights=None):
+def get_speedmap(trajs, speeds, metadata):
     """
     Given a set of trajectories, produce a map where each cell contains the speed the traj in that cell
     Args:
         trajs: the trajs to compute speeds over
         speeds: the speeds corresponding to pos
         map_metadata: The map params to get speeds over
-        weights: optional weighting on each trajectory
     """
-    if weights is None:
-        weights = torch.ones(trajs.shape[0], device=trajs.device) / trajs.shape[0]
+    assert (metadata.N[:, 0] * metadata.N[:, 1] == metadata.N[0, 0] * metadata.N[0, 1]).all()
 
-    xs = trajs[..., 0]
-    ys = trajs[..., 1]
-    ox = map_metadata["origin"][0].item()
-    oy = map_metadata["origin"][1].item()
+    B = trajs.shape[0]
+    N = trajs.shape[-1]
+    ncells = metadata.N[0, 0] * metadata.N[0, 1]
 
-    if isinstance(map_metadata["resolution"], torch.Tensor):
-        rx = map_metadata["resolution"][0].item()
-        ry = map_metadata["resolution"][1].item()
-        nx = round(map_metadata["length"][0].item() / rx)
-        ny = round(map_metadata["length"][1].item() / ry)
-    else:
-        rx = map_metadata["resolution"][0]
-        ry = map_metadata["resolution"][1]
-        nx = round(map_metadata["length"][0] / res)
-        ny = round(map_metadata["length"][1] / res)
+    trajs_flat = trajs.view(B, -1, N)
+    speeds_flat = speeds.view(B, -1)
+    
+    xys = trajs_flat[:, :, :2]
 
-    width = max(nx, ny)
+    gxys, valid_mask = world_to_grid(xys, metadata)
 
-    xidxs = ((xs - ox) / rx).long()
-    yidxs = ((ys - oy) / ry).long()
+    gxys[~valid_mask] = 0
+    speeds_flat[~valid_mask] = 0.
 
-    # 1 iff. valid
-    valid_mask = (xidxs >= 0) & (xidxs < ny) & (yidxs >= 0) & (yidxs < nx)
+    #TODO double-check i didnt transpose the raster
+    raster_idxs = gxys[:, :, 0] * metadata.N[:, 1].view(B, 1) + gxys[:, :, 1]
 
-    # I'm pretty sure all I have to do is replace the ones from svs w/ the actual speeds
-    binweights = (
-        torch.ones(trajs.shape[:-1], device=trajs.device)
-        * weights.view(-1, 1)
-        * valid_mask.float()
+    # better to enforce that unvisited = 0
+    speedmap_flat = torch.zeros(B, ncells, device=trajs.device)
+
+    torch_scatter.scatter(
+        src = speeds_flat,
+        index = raster_idxs,
+        out = speedmap_flat,
+        dim=-1,
+        reduce = 'max'
     )
-    speed_binweights = speeds * binweights
 
-    flat_binweights = binweights.flatten()
-    flat_speed_binweights = speed_binweights.flatten()
+    speedmap = speedmap_flat.reshape(B, metadata.N[0, 0], metadata.N[0, 1])
 
-    flat_speeds = (ny * xidxs + yidxs).flatten().clamp(0, nx * ny - 1).long()
-    flat_speed_counts = torch.bincount(flat_speeds, weights=flat_speed_binweights)
+    return speedmap
 
-    flat_visits = (ny * xidxs + yidxs).flatten().clamp(0, nx * ny - 1).long()
-    flat_visit_counts = torch.bincount(flat_visits, weights=flat_binweights) + 1e-6
+def world_to_grid(trajs, metadata):
+    """
+    Args:
+        trajs: [B x ... x N] Tensor of trajs
+        metadata: [B] stack of metadata
+    """
+    tshape = trajs.shape
+    B = tshape[0]
 
-    bins = torch.zeros(nx * ny, device=trajs.device)
-    bins[: len(flat_speed_counts)] += flat_speed_counts / flat_visit_counts
-    speed_counts = bins.view(nx, ny)
+    xys = trajs[..., :2]
+    xys_flat = xys.view(B, -1, 2)
+    
+    _o = metadata.origin.unsqueeze(1)
+    _l = metadata.length.unsqueeze(1)
+    _r = metadata.resolution.unsqueeze(1)
 
-    # # debug
-    # with torch.no_grad():
-    #     idx_diffs = (((nx * yidxs + xidxs)[..., 1:] - (nx * yidxs + xidxs)[..., :-1]).abs() > 1e-4).float()
+    gxys_flat = (xys_flat - _o) / _r
 
-    #     import matplotlib.pyplot as plt
-    #     fig, axs = plt.subplots(1, 3, figsize=(18, 6))
-    #     axs = axs.flatten()
-    #     for traj, sp, diff in zip(trajs, speeds, idx_diffs):
-    #         axs[0].plot(traj[:, 0].cpu(), traj[:, 1].cpu(), c='b', alpha=0.5)
-    #         axs[2].plot(sp.cpu())
-    #         axs[2].scatter(torch.arange(len(diff)) + 1, diff.cpu() * sp[1:].cpu(), c='r', s=2.)
-    #     axs[0].imshow(speed_counts.T.cpu(), origin='lower', extent=(ox, ox+map_metadata['width'], oy, oy+map_metadata['height']))
-    #     axs[1].imshow(speed_counts.T.cpu(), origin='lower', extent=(ox, ox+map_metadata['width'], oy, oy+map_metadata['height']))
-    #     plt.show()
+    valid_mask_flat = (xys_flat >= _o).all(dim=-1) & (xys_flat < (_o+_l)).all(dim=-1)
 
-    return speed_counts
+    gxys = gxys_flat.reshape(*tshape[:-1], 2)
+    valid_mask = valid_mask_flat.reshape(*tshape[:-1])
 
-def world_to_grid(trajs, map_metadata):
-    xs = trajs[..., 0]
-    ys = trajs[..., 1]
-    ox = map_metadata["origin"][0].item()
-    oy = map_metadata["origin"][1].item()
+    return gxys.long(), valid_mask
 
-    if isinstance(map_metadata["resolution"], torch.Tensor):
-        rx = map_metadata["resolution"][0].item()
-        ry = map_metadata["resolution"][1].item()
-        nx = round(map_metadata["length"][0].item() / rx)
-        ny = round(map_metadata["length"][1].item() / ry)
-    else:
-        rx = map_metadata["resolution"][0]
-        ry = map_metadata["resolution"][1]
-        nx = round(map_metadata["length"][0] / res)
-        ny = round(map_metadata["length"][1] / res)
-
-    width = max(nx, ny)
-
-    xidxs = ((xs - ox) / rx).long()
-    yidxs = ((ys - oy) / ry).long()
-
-    # 1 iff. valid
-    coords = torch.stack([xidxs, yidxs], dim=-1)
-    valid_mask = (xidxs >= 0) & (xidxs < ny) & (yidxs >= 0) & (yidxs < nx)
-    return coords, valid_mask
-
-
-def get_state_visitations(trajs, map_metadata, weights=None):
+def get_state_visitations(trajs, metadata, weights=None):
     """
     Given a set of trajectories and map metadata, compute the visitations on the map for each traj.
     Args:
-        trajs: The trajs to get visit counts of
+        trajs: [B x ... x N] Tensor of trajs to compute visit counts for (we will collapse all the middle dims)
         map_metadata: The map parameters to get visit counts from
-        weights: (optional) the amount to weight each traj by
+        weights: [B x ...] Tensor (optional) the amount to weight each traj by
     """
+    assert (metadata.N[:, 0] * metadata.N[:, 1] == metadata.N[0, 0] * metadata.N[0, 1]).all()
+
+    B = trajs.shape[0]
+    N = trajs.shape[-1]
+    ncells = metadata.N[0, 0] * metadata.N[0, 1]
+
+    trajs_flat = trajs.view(B, -1, N)
+    
     if weights is None:
-        weights = torch.ones(trajs.shape[0], device=trajs.device) / trajs.shape[0]
-
-    xs = trajs[..., 0]
-    ys = trajs[..., 1]
-    ox = map_metadata["origin"][0].item()
-    oy = map_metadata["origin"][1].item()
-
-    if isinstance(map_metadata["resolution"], torch.Tensor):
-        rx = map_metadata["resolution"][0].item()
-        ry = map_metadata["resolution"][1].item()
-        nx = round(map_metadata["length"][0].item() / rx)
-        ny = round(map_metadata["length"][1].item() / ry)
+        weights = torch.ones(B, trajs_flat.shape[1], device=trajs.device)
     else:
-        rx = map_metadata["resolution"][0]
-        ry = map_metadata["resolution"][1]
-        nx = round(map_metadata["length"][0] / res)
-        ny = round(map_metadata["length"][1] / res)
+        weights = weights.view(B, -1)
 
-    width = max(nx, ny)
+    xys = trajs_flat[:, :, :2]
 
-    xidxs = ((xs - ox) / rx).long()
-    yidxs = ((ys - oy) / ry).long()
+    gxys, valid_mask = world_to_grid(xys, metadata)
 
-    # 1 iff. valid
-    valid_mask = (xidxs >= 0) & (xidxs < ny) & (yidxs >= 0) & (yidxs < nx)
+    gxys[~valid_mask] = 0
+    weights[~valid_mask] = 0.
 
-    binweights = (
-        torch.ones(trajs.shape[:-1], device=trajs.device)
-        * weights.view(-1, 1)
-        * valid_mask.float()
+    #TODO double-check i didnt transpose the raster
+    raster_idxs = gxys[:, :, 0] * metadata.N[:, 1].view(B, 1) + gxys[:, :, 1]
+
+    flat_visitations = torch.zeros(B, ncells, device=trajs.device)
+
+    torch_scatter.scatter(
+        src = weights,
+        index = raster_idxs,
+        out = flat_visitations,
+        dim=-1,
+        reduce = 'sum'
     )
-    flat_binweights = binweights.flatten()
 
-    flat_visits = (ny * xidxs + yidxs).flatten().clamp(0, nx * ny - 1).long()
-    flat_visit_counts = torch.bincount(flat_visits, weights=flat_binweights)
-    bins = torch.zeros(nx * ny, device=trajs.device)
-    bins[: len(flat_visit_counts)] += flat_visit_counts
-    visit_counts = bins.view(nx, ny)
-    visitation_probs = visit_counts / visit_counts.sum()
+    flat_visitations /= flat_visitations.sum(dim=-1, keepdims=True)
 
-    # debug
-    #    with torch.no_grad():
-    #        import matplotlib.pyplot as plt
-    #        fig, axs = plt.subplots(1, 2)
-    #        for traj in trajs:
-    #            axs[0].plot(traj[:, 0].cpu(), traj[:, 1].cpu(), c='b', alpha=0.1)
-    #        axs[0].imshow(visitation_probs.cpu(), origin='lower', extent=(ox, ox+map_metadata['width'], oy, oy+map_metadata['height']))
-    #        axs[1].imshow(visitation_probs.cpu(), origin='lower', extent=(ox, ox+map_metadata['width'], oy, oy+map_metadata['height']))
-    #        plt.show()
+    visitations = flat_visitations.reshape(B, metadata.N[0, 0], metadata.N[0, 1])
 
-    return visitation_probs
+    return visitations
+
+def clip_to_map_bounds(traj, metadata):
+    """
+    Given traj, find last point (temporally) in the map bounds
+
+    Args:
+        traj: [BxTxN] tensor of trajs
+        metadata: [B] stack of LocalMapperMetadata
+    """
+    B, T, _ = traj.shape
+
+    xs = traj[..., 0]
+    ys = traj[..., 1]
+    #unpack along T
+    xmin = metadata.origin[..., [0]]
+    ymin = metadata.origin[..., [1]]
+    xmax = xmin + metadata.length[..., [0]]
+    ymax = ymin + metadata.length[..., [1]]
+
+    in_bounds = (xs >= xmin) & (xs < xmax) & (ys >= ymin) & (ys < ymax)
+    idxs = torch.arange(xs.shape[-1], device=traj.device).unsqueeze(0).tile(B, 1)
+
+    idx = (idxs * in_bounds).argmax(dim=-1)
+    ibs = torch.arange(B, device=traj.device)
+
+    return traj[ibs, idx]
 
 def dict_to(d1, device):
     if isinstance(d1, dict):

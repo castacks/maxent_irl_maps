@@ -1,0 +1,32 @@
+common:
+  root_dir: /home/tartandriver/workspace/datasets/kitti_debug
+  device: cuda
+  use_multiprocessing: true
+
+datatypes:
+  bev_data:
+    dtype: BEVGrid
+    dir: bev_map_reduce
+    
+    args:
+      remove_keys: [min_elevation, max_elevation, terrain]
+
+  odometry:
+    dtype: OdomRBState
+    dir: odometry
+    temporal_sample: [0, 76]
+
+    args: {}
+
+  steer_angle:
+    dtype: Float32
+    dir: steer_angle
+    temporal_sample: [0, 76]
+
+    args: {}
+
+  image:
+    dtype: Image
+    dir: image
+
+    args: {}

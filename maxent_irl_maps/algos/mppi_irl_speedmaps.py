@@ -11,7 +11,7 @@ from torch.utils.data import DataLoader
 from torch_mpc.cost_functions.cost_terms.utils import apply_footprint
 
 from maxent_irl_maps.dataset.maxent_irl_dataset import MaxEntIRLDataset
-from maxent_irl_maps.utils import get_state_visitations, get_speedmap, compute_map_mean_entropy, compute_speedmap_quantile
+from maxent_irl_maps.utils import get_state_visitations, get_speedmap, clip_to_map_bounds
 
 class MPPIIRLSpeedmaps:
     """
@@ -66,7 +66,7 @@ class MPPIIRLSpeedmaps:
 
         print(self.network)
         print("({} params)".format(sum([x.numel() for x in self.network.parameters()])))
-        print(expert_dataset.feature_keys)
+        print(expert_dataset[0]["bev_data"]["feature_keys"])
         self.network_opt = opt
 
         self.batch_size = batch_size
@@ -82,19 +82,23 @@ class MPPIIRLSpeedmaps:
         High-level method that runs training for one epoch.
         """
         self.itr += 1
-        dl = DataLoader(self.expert_dataset, batch_size=self.batch_size, shuffle=True)
-        for i, batch in enumerate(dl):
-            if n > -1 and i >= n:
-                break
 
-            # skip the last batch in the dataset as MPPI batching forces a fixed size
-            if batch["traj"].shape[0] < self.batch_size:
+        # DataLoader broken for now
+        idxs = torch.randperm(len(self.expert_dataset))
+        rem = len(idxs) - (len(idxs) % self.batch_size)
+        idxs = idxs[:rem]
+        idxs = idxs.reshape(-1, self.batch_size)
+
+        for i, bidxs in enumerate(idxs):
+            if n > -1 and i >= n:
                 break
 
             print(
                 "{}/{}".format(i + 1, int(len(self.expert_dataset) / self.batch_size)),
                 end="\r",
             )
+
+            batch = self.expert_dataset.getitem_batch(bidxs)
             self.gradient_step(batch)
 
         print("_____ITR {}_____".format(self.itr))
@@ -104,189 +108,117 @@ class MPPIIRLSpeedmaps:
         Apply the MaxEnt update to the network given a batch
         """
         assert (
-            self.batch_size == 1 or batch["metadata"]["resolution"].std() < 1e-4
+            self.batch_size == 1 or batch["bev_data"]["metadata"].resolution.std() < 1e-4
         ), "got mutliple resolutions in a batch, which we currently don't support"
 
         grads = []
         speed_loss = []
 
-        # first generate all the costmaps
-        res = self.network.forward(batch["map_features"], return_mean_entropy=True)
-        costmaps = res["costmap"]
-        speedmaps = res["speedmap"]
+        metadata = batch["bev_data"]["metadata"]
+        map_features = batch["bev_data"]["data"]
 
-        # initialize metadata for cost function
-        map_params = batch["metadata"]
-        # initialize goals for cost function
-        expert_traj = batch["traj"]
+        ## get network outputs ##
+        #TODO: net takes in the data dict
+        res = self.network.forward(map_features, return_mean_entropy=True)
 
-        # initialize initial state for MPPI
-        initial_states = expert_traj[:, 0]
-        x0 = {
-            "state": initial_states.clone(),
-            "steer_angle": batch["steer"][:, [0]]
-            if "steer" in batch.keys()
-            else torch.zeros(initial_states.shape[0], device=initial_states.device),
-        }
-        x = self.mppi.model.get_observations(x0)
+        costmap = res["costmap"]
+        speedmap = res["speedmap"]
+        costmap_unc = res["costmap_entropy"]
+        speedmap_unc = res["speedmap_entropy"]
 
-        # also get KBM states for expert
-        X_expert = {
-            "state": expert_traj.clone(),
-            "steer_angle": batch["steer"].unsqueeze(-1)
-            if "steer" in batch.keys()
-            else torch.zeros(self.mppi.B, self.mppi.T, 1, device=initial_states.device),
-        }
-        expert_kbm_traj = self.mppi.model.get_observations(X_expert)
+        ## Run solver ##
+        expert_kbm_traj = self.get_expert_state_traj(batch)
 
-        # initialize solver
-        initial_state = expert_traj[:, 0]
-        x0 = {
-            "state": initial_state,
-            "steer_angle": batch["steer"][:, [0]]
-            if "steer" in batch.keys()
-            else torch.zeros(1, device=initial_state.device),
-        }
-        x = self.mppi.model.get_observations(x0)
+        with torch.no_grad():
+            learner_trajs, weights, learner_best_traj = self.run_solver_on_costmap(costmap, metadata, expert_kbm_traj)
 
-        goals = []
-        for bi in range(expert_traj.shape[0]):
-            map_params_b = {
-                "resolution": batch["metadata"]["resolution"][bi],
-                "length": batch["metadata"]["length"][bi],
-                "origin": batch["metadata"]["origin"][bi],
-            }
+        #take the initial state out of expert traj
+        expert_kbm_traj = expert_kbm_traj[:, 1:]
+
+        footprint_learner_traj = apply_footprint(learner_best_traj, self.footprint)
+        footprint_expert_traj = apply_footprint(expert_kbm_traj, self.footprint)
+
+        learner_state_visitations = get_state_visitations(footprint_learner_traj, metadata)
+        expert_state_visitations = get_state_visitations(footprint_expert_traj, metadata)
+
+        """
+        for bi in range(map_features.shape[0]):
+            ltraj = learner_best_traj[bi]
             etraj = expert_kbm_traj[bi]
-            goals.append(self.clip_to_map_bounds(etraj[:, :2], map_params_b).view(1, 2))
+            lsv = learner_state_visitations[bi]
+            esv = expert_state_visitations[bi]
 
-        self.mppi.reset()
-        self.mppi.cost_fn.data["waypoints"] = goals
-        self.mppi.cost_fn.data["local_navmap"] = {"data": costmaps, "metadata": map_params, "feature_keys":["cost"]}
-
-        for ii in range(self.mppi_itrs):
-            with torch.no_grad():
-                self.mppi.get_control(x, step=False)
-
-        # weighting version
-        trajs = self.mppi.noisy_states.clone()
-        weights = self.mppi.last_weights.clone()
-
-        # afaik, this op is not batch-able because of torch.bincount
-        # so just loop it - this is not the speed bottleneck
-        learner_state_visitations = []
-        expert_state_visitations = []
-        for bi in range(trajs.shape[0]):
-            map_params_b = {
-                "resolution": batch["metadata"]["resolution"][bi],
-                "length": batch["metadata"]["length"][bi],
-                "origin": batch["metadata"]["origin"][bi],
-            }
-
-            footprint_learner_traj = apply_footprint(trajs[bi], self.footprint).view(
-                self.mppi.K, -1, 2
-            )
-            footprint_expert_traj = apply_footprint(
-                expert_kbm_traj[bi].unsqueeze(0), self.footprint
-            ).view(1, -1, 2)
-
-            lsv = get_state_visitations(
-                footprint_learner_traj, map_params_b, weights[bi]
+            extent = (
+                metadata.origin[bi, 0].item(),
+                metadata.origin[bi, 0].item() + metadata.length[bi, 0].item(),
+                metadata.origin[bi, 1].item(),
+                metadata.origin[bi, 1].item() + metadata.length[bi, 1].item(),
             )
 
-            esv = get_state_visitations(footprint_expert_traj, map_params_b)
-            learner_state_visitations.append(lsv)
-            expert_state_visitations.append(esv)
-
-            """
             fig, axs = plt.subplots(1, 3)
-            axs[0].plot(trajs[bi][weights[bi].argmax(), :, 0].cpu(), trajs[bi][weights[bi].argmax(), :, 1].cpu(), c='r', marker='.')
-            axs[0].imshow(lsv.T.cpu(), origin='lower', extent=(
-                map_params_b['origin'][0].item(),
-                map_params_b['origin'][0].item() + map_params_b['length'][0].item(),
-                map_params_b['origin'][1].item(),
-                map_params_b['origin'][1].item() + map_params_b['length'][1].item(),
-            ))
+            axs[0].plot(ltraj[:, 0].cpu(), ltraj[:, 1].cpu(), c='r', marker='.')
+            axs[0].imshow(lsv.T.cpu(), origin='lower', extent=extent)
             axs[0].set_title('learner')
 
-            axs[1].plot(expert_kbm_traj[bi][:, 0].cpu(), expert_kbm_traj[bi][:, 1].cpu(), c='r', marker='.')
-            axs[1].plot(batch['traj'][bi, :, 0].cpu(), batch['traj'][bi, :, 1].cpu(), c='b', marker='.')
-            axs[1].imshow(esv.T.cpu(), origin='lower', extent=(
-                map_params_b['origin'][0].item(),
-                map_params_b['origin'][0].item() + map_params_b['length'][0].item(),
-                map_params_b['origin'][1].item(),
-                map_params_b['origin'][1].item() + map_params_b['length'][1].item(),
-            ))
+            axs[1].plot(etraj[:, 0].cpu(), etraj[:, 1].cpu(), c='r', marker='.')
+            axs[1].plot(batch['odometry'][bi, :, 0].cpu(), batch['odometry'][bi, :, 1].cpu(), c='b', marker='.')
+            axs[1].imshow(esv.T.cpu(), origin='lower', extent=extent)
             axs[1].set_title('expert')
 
-            axs[2].imshow((esv - lsv).T.cpu(), origin='lower', extent=(
-                map_params_b['origin'][0].item(),
-                map_params_b['origin'][0].item() + map_params_b['length'][0].item(),
-                map_params_b['origin'][1].item(),
-                map_params_b['origin'][1].item() + map_params_b['length'][1].item(),
-            ))
+            axs[2].imshow((esv - lsv).T.cpu(), origin='lower', extent=extent)
             plt.show()
-            """
+        """
 
-        learner_state_visitations = torch.stack(learner_state_visitations, dim=0)
-        expert_state_visitations = torch.stack(expert_state_visitations, dim=0)
-
-        grads = (expert_state_visitations - learner_state_visitations) / trajs.shape[0]
+        grads = (expert_state_visitations - learner_state_visitations) / map_features.shape[0]
         grads = grads.unsqueeze(1) #grad shape needs to match costmap shape
 
         if not torch.isfinite(grads).all():
             import pdb; pdb.set_trace()
 
         # Speedmaps here:
-        expert_speedmaps = []
-        for bi in range(expert_traj.shape[0]):
-            map_params_b = {
-                "resolution": batch["metadata"]["resolution"][bi],
-                "length": batch["metadata"]["length"][bi],
-                "origin": batch["metadata"]["origin"][bi],
-            }
-            # no footprint
-            #            epos = expert_traj[bi][:, :2].unsqueeze(0)
-            #            espeeds = torch.linalg.norm(expert_traj[bi][:, 7:10], dim=-1).unsqueeze(0)
-            #            esm = get_speedmap(epos, espeeds, map_params_b).view(costmaps[bi].shape)
-
-            # footprint
-            epos = apply_footprint(
-                expert_kbm_traj[bi].unsqueeze(0), self.footprint
-            ).view(1, -1, 2)
-            espeeds = torch.linalg.norm(expert_traj[bi][:, 7:10], dim=-1).unsqueeze(0)
-            espeeds = espeeds.unsqueeze(2).tile(1, 1, len(self.footprint)).view(1, -1)
-            esm = get_speedmap(epos, espeeds, map_params_b).view(costmaps[bi].shape)
-
-            expert_speedmaps.append(esm)
-
-            #debug viz
-            """
-            fig, axs = plt.subplots(1, 2)
-            axs[0].plot(expert_kbm_traj[bi][:, 0].cpu(), expert_kbm_traj[bi][:, 1].cpu(), c='r')
-            axs[0].imshow(esm.T.cpu(), origin='lower', extent=(
-                map_params_b['origin'][0].item(),
-                map_params_b['origin'][0].item() + map_params_b['length'][0].item(),
-                map_params_b['origin'][1].item(),
-                map_params_b['origin'][1].item() + map_params_b['length'][1].item(),
-            ))
-            axs[0].set_title('expert speedmap')
-            plt.show()
-            """
-
-        expert_speedmaps = torch.stack(expert_speedmaps, dim=0)
+        espeeds = expert_kbm_traj[:, :, 3]
+        #tile espeeds to match footprint
+        espeeds = espeeds.unsqueeze(2).tile(1, 1, self.footprint.shape[0])
+        
+        expert_speedmaps = get_speedmap(footprint_expert_traj, espeeds, metadata)
 
         speedmap_probs = res["speed_logits"].softmax(axis=1)
 
         # bin expert speeds
         _sbins = self.network.speed_bins[:-1].to(self.device).view(1, -1, 1, 1)
-        sdiffs = expert_speedmaps - _sbins
+        sdiffs = expert_speedmaps.unsqueeze(1) - _sbins
         sdiffs[sdiffs < 0] = 1e10
-        expert_speed_idxs = sdiffs.argmin(dim=1) + 1
+        expert_speed_idxs = sdiffs.argmin(dim=1)
         expert_speed_idxs = expert_speed_idxs.clip(0, self.network.speed_nbins-1).long()
 
-        mask = (
-            expert_speedmaps[:, 0] > 1e-6
-        )  # only want the cells that the expert drove in
+        #debug viz
+        """
+        for bi in range(map_features.shape[0]):
+            etraj = expert_kbm_traj[bi]
+            esm = expert_speedmaps[bi]
+            ebins = expert_speed_idxs[bi]
+
+            extent = (
+                metadata.origin[bi, 0].item(),
+                metadata.origin[bi, 0].item() + metadata.length[bi, 0].item(),
+                metadata.origin[bi, 1].item(),
+                metadata.origin[bi, 1].item() + metadata.length[bi, 1].item(),
+            )
+            fig, axs = plt.subplots(1, 2)
+            axs[0].plot(etraj[:, 0].cpu(), etraj[:, 1].cpu(), c='r')
+            axs[0].imshow(esm.T.cpu(), origin='lower', extent=extent)
+            axs[0].set_title('expert speedmap')
+
+            axs[1].plot(etraj[:, 0].cpu(), etraj[:, 1].cpu(), c='r')
+            axs[1].imshow(ebins.T.cpu(), origin='lower', extent=extent)
+            axs[1].set_title('expert speed bins')
+
+            plt.show()
+        """
+        
+        #only want cells that the expert drove in
+        mask = expert_speedmaps > 1e-6
+
         ce = torch.nn.functional.cross_entropy(
             speedmap_probs, expert_speed_idxs, reduction="none"
         )[mask]
@@ -305,16 +237,71 @@ class MPPIIRLSpeedmaps:
         print('SPEED LOSS: {:.4f}'.format(speed_loss.detach().item()))
 
         # add regularization
-        reg = self.reg_coeff * costmaps
+        reg = self.reg_coeff * costmap
 
         # kinda jank, but since we're multi-headed and have a loss and a gradient,
         # I think we need two backward passes through the computation graph.
         self.network_opt.zero_grad()
-        costmaps.backward(gradient=(grads + reg), retain_graph=True)
+        costmap.backward(gradient=(grads + reg), retain_graph=True)
         speed_loss.backward()
 
         torch.nn.utils.clip_grad_norm_(self.network.parameters(), self.grad_clip)
         self.network_opt.step()
+
+    def get_expert_state_traj(self, dpt):
+        """
+        Get the expert trajectory (in MPC states) from datapoint
+        """
+        inp = {
+            'state': dpt["odometry"],
+            'steer_angle': dpt["steer_angle"].unsqueeze(-1)
+        }
+        return self.mppi.model.get_observations(inp)
+
+    def run_solver_on_costmap(self, costmap, metadata, expert_traj, clip_goals=True):
+        """
+        Run MPPI on the corrent costmap from the expert initial state to final state
+        Args:
+            costmap: [BxWxH] Tensor of costs
+            metadata: LocalMapperMetadata object corresponding to the costmap
+            expert_traj: [BxTxN] Tensor of expert trajectories
+        
+        Returns:
+            trajs: [BxKxTxN] Tensor of all MPPI samples
+            weights: [BxK] Tensor of MPPI sampling weights
+            best_traj: [BxTxN] Tensor of the lowest-cost MPPI traj
+
+        Also note that this function will modify the state of the MPPI object
+        """
+        initial_states = expert_traj[:, 0]
+        map_params = {
+            "origin": metadata.origin,
+            "length": metadata.length,
+            "resolution": metadata.resolution,
+        }
+
+        if clip_goals:
+            goals = clip_to_map_bounds(expert_traj[..., :2], metadata).unsqueeze(1)
+        else:
+            goals = expert_traj[:, [-1], :2]
+
+        self.mppi.reset()
+        self.mppi.cost_fn.data["waypoints"] = goals
+        self.mppi.cost_fn.data["local_navmap"] = {
+            "data": costmap,
+            "metadata": map_params,
+            "feature_keys": ["cost"]
+        }
+
+        # solve for traj
+        for ii in range(self.mppi_itrs):
+            self.mppi.get_control(initial_states, step=False)
+
+        best_traj = self.mppi.last_states
+        weights = self.mppi.last_weights
+        all_trajs = self.mppi.noisy_states
+
+        return all_trajs, weights, best_traj
 
     def visualize(self, idx=-1):
         """
@@ -324,17 +311,13 @@ class MPPIIRLSpeedmaps:
             idx = np.random.randint(len(self.expert_dataset))
 
         with torch.no_grad():
-            data = self.expert_dataset[idx]
+            dpt = self.expert_dataset.getitem_batch([idx] * self.mppi.B)
 
-            # hack back to single dim
-            map_features = torch.stack([data["map_features"]] * self.mppi.B, dim=0)
-            metadata = data["metadata"]
-            xmin = metadata["origin"][0].cpu()
-            ymin = metadata["origin"][1].cpu()
-            xmax = xmin + metadata["length"][0].cpu()
-            ymax = ymin + metadata["length"][1].cpu()
-            expert_traj = data["traj"]
+            metadata = dpt["bev_data"]["metadata"]
+            map_features = dpt["bev_data"]["data"]
 
+            ## get network outputs ##
+            #TODO: net takes in the data dict
             res = self.network.forward(map_features, return_mean_entropy=True)
 
             costmap = res["costmap"]
@@ -342,60 +325,16 @@ class MPPIIRLSpeedmaps:
             costmap_unc = res["costmap_entropy"]
             speedmap_unc = res["speedmap_entropy"]
 
-            #mess with cost quantiles
-            costmap_cdf = torch.cumsum(res['cost_logits'].softmax(dim=1), dim=1)
-            costmap_quantile = compute_speedmap_quantile(costmap_cdf[0], self.network.cost_bins, q=0.8).exp()
+            ## Run solver ##
+            expert_kbm_traj = self.get_expert_state_traj(dpt)
 
-            costmap_quantile = (costmap_quantile.unsqueeze(0).tile(self.mppi.B, 1, 1)).view(*costmap.shape)
+            learner_trajs, weights, learner_best_traj = self.run_solver_on_costmap(costmap, metadata, expert_kbm_traj)
 
-            # initialize solver
-            initial_state = expert_traj[0]
-            x0 = {
-                "state": initial_state,
-                "steer_angle": data["steer"][[0]]
-                if "steer" in data.keys()
-                else torch.zeros(1, device=initial_state.device),
-            }
-            x = torch.stack([self.mppi.model.get_observations(x0)] * self.mppi.B, dim=0)
+            #take the initial state out of expert traj
+            expert_kbm_traj = expert_kbm_traj[:, 1:]
 
-            X_expert = {
-                "state": expert_traj,
-                "steer_angle": data["steer"].unsqueeze(-1)
-                if "steer" in data.keys()
-                else torch.zeros(self.mppi.B, self.mppi.T, 1, device=initial_states.device),
-            }
-            expert_kbm_traj = self.mppi.model.get_observations(X_expert)
-
-            map_params = {
-                "origin": torch.stack([metadata["origin"]] * self.mppi.B, dim=0),
-                "length": torch.stack([metadata["length"]] * self.mppi.B, dim=0),
-                "resolution": torch.stack([metadata["resolution"]] * self.mppi.B, dim=0),
-            }
-
-            goals = [
-                self.clip_to_map_bounds(expert_kbm_traj[:, :2], metadata).view(1, 2)
-            ] * self.mppi.B
-
-            self.mppi.reset()
-            self.mppi.cost_fn.data["waypoints"] = goals
-            self.mppi.cost_fn.data["local_navmap"] = {
-                # "data": costmap_quantile,
-                "data": costmap,
-                "metadata": map_params,
-                "feature_keys": ["cost"]
-            }
-
-            # solve for traj
-            for ii in range(self.mppi_itrs):
-                self.mppi.get_control(x, step=False)
-
-            tidx = self.mppi.last_cost.argmin()
-            traj = self.mppi.last_states[tidx]
-
-            footprint_learner_traj = apply_footprint(traj, self.footprint).view(1, -1, 2)
-            footprint_expert_traj = apply_footprint(
-                expert_kbm_traj.unsqueeze(0), self.footprint
-            ).view(1, -1, 2)
+            footprint_learner_traj = apply_footprint(learner_best_traj, self.footprint)
+            footprint_expert_traj = apply_footprint(expert_kbm_traj, self.footprint)
 
             lsv = get_state_visitations(footprint_learner_traj, metadata)
             esv = get_state_visitations(footprint_expert_traj, metadata)
@@ -403,19 +342,26 @@ class MPPIIRLSpeedmaps:
             learner_cost = (lsv * costmap).sum()
             expert_cost = (esv * costmap).sum()
 
-            metadata = data["metadata"]
+            ## viz ##
+            extent = (
+                metadata.origin[0, 0].item(),
+                metadata.origin[0, 0].item() + metadata.length[0, 0].item(),
+                metadata.origin[0, 1].item(),
+                metadata.origin[0, 1].item() + metadata.length[0, 1].item(),
+            )
+
             fig, axs = plt.subplots(2, 3, figsize=(18, 12))
             axs = axs.flatten()
 
             fk = None
             fklist = ["num_voxels", "max_elevation", "step", "diff", "dino_0"]
             for f in fklist:
-                if f in self.expert_dataset.feature_keys:
+                if f in dpt["bev_data"]["feature_keys"].label:
                     fk = f
-                    idx = self.expert_dataset.feature_keys.index(fk)
+                    idx = dpt["bev_data"]["feature_keys"].index(fk)
                     break
 
-            img = data["image"].permute(1, 2, 0)[:, :, [2, 1, 0]].cpu()
+            img = dpt["image"][0].permute(1, 2, 0)[:, :, [2, 1, 0]].cpu()
 
             fig.suptitle("Expert cost = {:.4f}, Learner cost = {:.4f}".format(expert_cost.item(), learner_cost.item()))
 
@@ -424,20 +370,20 @@ class MPPIIRLSpeedmaps:
                 map_features[0][idx].T.cpu(),
                 origin="lower",
                 cmap="gray",
-                extent=(xmin, xmax, ymin, ymax),
+                extent=extent,
             )
             m1 = axs[2].imshow(
                 costmap[0, 0].T.cpu(),
                 origin="lower",
                 cmap="jet",
-                extent=(xmin, xmax, ymin, ymax),
+                extent=extent,
             )
 
             m2 = axs[3].imshow(
                 speedmap[0, 0].T.cpu(),
                 origin="lower",
                 cmap="jet",
-                extent=(xmin, xmax, ymin, ymax),
+                extent=extent,
                 vmin=0.0,
                 vmax=10.0,
             )
@@ -445,51 +391,23 @@ class MPPIIRLSpeedmaps:
                 costmap_unc[0, 0].T.cpu(),
                 origin="lower",
                 cmap="viridis",
-                extent=(xmin, xmax, ymin, ymax),
-            )
-
-            # m4 = axs[5].imshow(
-            #     speedmap_unc[0, 0].T.cpu(),
-            #     origin="lower",
-            #     cmap="viridis",
-            #     extent=(xmin, xmax, ymin, ymax),
-            # )
-
-            m4 = axs[5].imshow(
-                costmap_quantile[0, 0].T.cpu(),
-                origin="lower",
-                cmap="jet",
-                vmax=costmap.max(),
-                extent=(xmin, xmax, ymin, ymax),
+                extent=extent,
             )
 
             #dont plot the initial state bc learner traj doesnt contain initial
-            axs[1].plot(
-                expert_kbm_traj[1:, 0].cpu(), expert_kbm_traj[1:, 1].cpu(), c="y", label="expert"
-            )
-            axs[2].plot(expert_kbm_traj[1:, 0].cpu(), expert_kbm_traj[1:, 1].cpu(), c="y")
-            axs[3].plot(expert_kbm_traj[1:, 0].cpu(), expert_kbm_traj[1:, 1].cpu(), c="y")
-            axs[4].plot(expert_kbm_traj[1:, 0].cpu(), expert_kbm_traj[1:, 1].cpu(), c="y")
-            axs[5].plot(expert_kbm_traj[1:, 0].cpu(), expert_kbm_traj[1:, 1].cpu(), c="y")
-
-            #            axs[0].plot(traj_px[:, 0], traj_px[:, 1], c='g')
-            axs[1].plot(traj[:, 0].cpu(), traj[:, 1].cpu(), c="g", label="learner")
-            axs[2].plot(traj[:, 0].cpu(), traj[:, 1].cpu(), c="g")
-            axs[3].plot(traj[:, 0].cpu(), traj[:, 1].cpu(), c="g")
-            axs[4].plot(traj[:, 0].cpu(), traj[:, 1].cpu(), c="g")
-            axs[5].plot(traj[:, 0].cpu(), traj[:, 1].cpu(), c="g")
+            for i, ax_i in enumerate([1,2,3,4,5]):
+                axs[ax_i].plot(expert_kbm_traj[0, :, 0].cpu(), expert_kbm_traj[0, :, 1].cpu(), c="y", label="expert" if i == 0 else None)
+                axs[ax_i].plot(learner_best_traj[0, :, 0].cpu(), learner_best_traj[0, :, 1].cpu(), c="g", label="learner" if i == 0 else None)
 
             for ax in axs[1:]:
-                ax.set_xlim(xmin, xmax)
-                ax.set_ylim(ymin, ymax)
+                ax.set_xlim(extent[0], extent[1])
+                ax.set_ylim(extent[2], extent[3])
 
             axs[0].set_title("FPV")
             axs[1].set_title("gridmap {}".format(fk))
-            #            axs[2].set_title('irl cost (clipped)')
             axs[2].set_title("irl cost mean")
             axs[3].set_title("speedmap mean")
             axs[4].set_title("irl cost unc")
-            # axs[5].set_title("speedmap unc")
             axs[5].set_title("cost quantile")
 
             for i in [1, 2, 4, 5]:
@@ -501,26 +419,8 @@ class MPPIIRLSpeedmaps:
             plt.colorbar(m1, ax=axs[2])
             plt.colorbar(m2, ax=axs[3])
             plt.colorbar(m3, ax=axs[4])
-            plt.colorbar(m4, ax=axs[5])
+
         return fig, axs
-
-    def clip_to_map_bounds(self, traj, metadata):
-        """
-        Given traj, find last point (temporally) in the map bounds
-        """
-        ox = metadata["origin"][0]
-        oy = metadata["origin"][1]
-        lx = metadata["length"][0]
-        ly = metadata["length"][1]
-        xs = traj[:, 0]
-        ys = traj[:, 1]
-
-        in_bounds = (xs > ox) & (xs < ox + lx) & (ys > oy) & (ys < oy + ly)
-        idx = (torch.arange(in_bounds.shape[0], device=self.device) * in_bounds).argmax(
-            dim=0
-        )
-
-        return traj[idx]
 
     def to(self, device):
         self.device = device
