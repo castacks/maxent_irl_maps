@@ -84,7 +84,10 @@ class MPPIIRLSpeedmaps:
         self.itr += 1
 
         # DataLoader broken for now
-        idxs = torch.randperm(len(self.expert_dataset))
+        # idxs = torch.randperm(len(self.expert_dataset))
+
+        idxs = torch.arange(len(self.expert_dataset))
+
         rem = len(idxs) - (len(idxs) % self.batch_size)
         idxs = idxs[:rem]
         idxs = idxs.reshape(-1, self.batch_size)
@@ -118,8 +121,7 @@ class MPPIIRLSpeedmaps:
         map_features = batch["bev_data"]["data"]
 
         ## get network outputs ##
-        #TODO: net takes in the data dict
-        res = self.network.forward(map_features, return_mean_entropy=True)
+        res = self.network.forward(batch, return_mean_entropy=True)
 
         costmap = res["costmap"]
         speedmap = res["speedmap"]
@@ -253,8 +255,8 @@ class MPPIIRLSpeedmaps:
         Get the expert trajectory (in MPC states) from datapoint
         """
         inp = {
-            'state': dpt["odometry"],
-            'steer_angle': dpt["steer_angle"].unsqueeze(-1)
+            'state': dpt["odometry"]["data"],
+            'steer_angle': dpt["steer_angle"]["data"].unsqueeze(-1)
         }
         return self.mppi.model.get_observations(inp)
 
@@ -317,8 +319,7 @@ class MPPIIRLSpeedmaps:
             map_features = dpt["bev_data"]["data"]
 
             ## get network outputs ##
-            #TODO: net takes in the data dict
-            res = self.network.forward(map_features, return_mean_entropy=True)
+            res = self.network.forward(dpt, return_mean_entropy=True)
 
             costmap = res["costmap"]
             speedmap = res["speedmap"]
@@ -361,9 +362,9 @@ class MPPIIRLSpeedmaps:
                     idx = dpt["bev_data"]["feature_keys"].index(fk)
                     break
 
-            img = dpt["image"][0].permute(1, 2, 0)[:, :, [2, 1, 0]].cpu()
+            img = dpt["image"]["data"][0].permute(1, 2, 0)[:, :, [2, 1, 0]].cpu()
 
-            fig.suptitle("Expert cost = {:.4f}, Learner cost = {:.4f}".format(expert_cost.item(), learner_cost.item()))
+            fig.suptitle("dpt {}: Expert cost = {:.4f}, Learner cost = {:.4f}".format(idx, expert_cost.item(), learner_cost.item()))
 
             axs[0].imshow(img)
             axs[1].imshow(

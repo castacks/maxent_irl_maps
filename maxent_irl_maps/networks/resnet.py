@@ -9,6 +9,21 @@ from maxent_irl_maps.utils import compute_map_mean_entropy
 """
 A collection of basic CNN blocks to try.
 """
+class ResnetCategorical(nn.Module):
+    def __init__(
+        self,
+        in_channels,
+        hidden_channels,
+        speed_nbins=30,
+        max_speed=15.0,
+        cost_nbins=30,
+        max_cost=10.0,
+        hidden_activation="tanh",
+        hidden_kernel_size=3,
+        dropout=0.0,
+        device="cpu",
+    ):
+        import pdb;pdb.set_trace()
 
 class ResnetExpCostCategoricalSpeed(nn.Module):
     def __init__(

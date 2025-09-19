@@ -18,8 +18,10 @@ from torch_mpc.cost_functions.cost_terms.utils import make_footprint
 
 from maxent_irl_maps.algos.mppi_irl_speedmaps import MPPIIRLSpeedmaps
 
-from maxent_irl_maps.networks.resnet import ResnetCategorical, ResnetExpCostCategoricalSpeed
-from maxent_irl_maps.networks.voxel import VoxelResnetCategorical
+# from maxent_irl_maps.networks.resnet import ResnetCategorical, ResnetExpCostCategoricalSpeed
+# from maxent_irl_maps.networks.voxel import VoxelResnetCategorical
+
+from maxent_irl_maps.networks.bev import BEVToCostSpeed, BEVLSSToCostSpeed
 
 from maxent_irl_maps.dataset.maxent_irl_dataset import MaxEntIRLDataset
 
@@ -95,13 +97,26 @@ def setup_experiment(fp, skip_mpc=False):
 
     # setup network
     network_params = experiment_dict["network"]
-    network_params["params"]["device"] = device
 
-    bev_fks = res["dataset"][0]["bev_data"]["feature_keys"]
+    sample_dpt = res["dataset"][0]
+    bev_fks = sample_dpt["bev_data"]["feature_keys"]
+    bev_normalizations = res["dataset"].compute_normalizations("bev_data")
 
-    if network_params["type"] == "ResnetCategorical":
-        res["network"] = ResnetCategorical(
-            in_channels=len(bev_fks), **network_params["params"],
+    if network_params["type"] ==  "BEVToCostSpeed":
+        res["network"] = BEVToCostSpeed(
+            in_channels=len(bev_fks),
+            bev_normalizations=bev_normalizations,
+            **network_params["args"], device=device,
+        ).to(device)
+
+    elif network_params["type"] ==  "BEVLSSToCostSpeed":
+        image_insize = sample_dpt["feature_image"]["data"].shape
+        res["network"] = BEVLSSToCostSpeed(
+            in_channels=len(bev_fks),
+            bev_normalizations=bev_normalizations,
+            image_insize=image_insize,
+            **network_params["args"],
+            device=device,
         ).to(device)
     else:
         print("Unsupported network type {}".format(network_params["type"]))
@@ -133,7 +148,7 @@ def setup_experiment(fp, skip_mpc=False):
             # have to make batching params match top-level config
             mpc_config["common"]["B"] = experiment_dict["algo"]["params"]["batch_size"]
             #note that we want to plan 1 fewer state than the expert as the expert traj includes the initial state
-            mpc_config["common"]["H"] = res["dataset"][0]["odometry"].shape[0] - 1
+            mpc_config["common"]["H"] = res["dataset"][0]["odometry"]["data"].shape[0] - 1
             res["trajopt"] = setup_mpc(mpc_config)
 
         elif solver_params["type"] == "planner":
