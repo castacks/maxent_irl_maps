@@ -24,7 +24,9 @@ class BEVToCostSpeed(nn.Module):
         self.device = device
         self.in_channels = in_channels
 
-        self.bev_normalizations = bev_normalizations
+        # self.bev_normalizations = bev_normalizations
+        self.register_buffer('bev_normalizations_mean', bev_normalizations['mean'])
+        self.register_buffer('bev_normalizations_std', bev_normalizations['std'])
 
         self.setup_resnet(resnet_params)
         self.setup_cost_head(cost_params)
@@ -63,19 +65,20 @@ class BEVToCostSpeed(nn.Module):
         return res
     
     def normalize_bev_features(self, x):
-        _mean = self.bev_normalizations['mean'].view(-1, 1, 1)
-        _std = self.bev_normalizations['std'].view(-1, 1, 1)
+        _mean = self.bev_normalizations_mean.view(-1, 1, 1)
+        _std = self.bev_normalizations_std.view(-1, 1, 1)
 
         return ((x - _mean) / _std).clip(-10., 10.)
 
     def setup_resnet(self, params):
-        hidden_channels = params.pop('hidden_channels')
+        hidden_channels = params['hidden_channels']
+        _params = {k:v for k,v in params.items() if k != 'hidden_channels'}
         self.resnet = ResNet(
             in_channels = self.in_channels,
             out_channels = hidden_channels[-1],
             hidden_channels = hidden_channels[:-1],
             device = self.device,
-            **params
+            **_params
         )
 
     def setup_cost_head(self, params):
@@ -121,7 +124,10 @@ class BEVToCostSpeed(nn.Module):
         self.resnet = self.resnet.to(self.device)
         self.cost_head = self.cost_head.to(self.device)
         self.speed_head = self.speed_head.to(self.device)
-        self.bev_normalizations = {k:v.to(self.device) for k,v in self.bev_normalizations.items()}
+        
+        self.bev_normalizations_mean = self.bev_normalizations_mean.to(self.device)
+        self.bev_normalizations_std = self.bev_normalizations_std.to(self.device)
+
         return self
     
 class BEVLSSToCostSpeed(BEVToCostSpeed):
@@ -155,13 +161,14 @@ class BEVLSSToCostSpeed(BEVToCostSpeed):
         """
         ResNet insize changes because it consumes lss and bev
         """
-        hidden_channels = params.pop('hidden_channels')
+        hidden_channels = params['hidden_channels']
+        _params = {k:v for k,v in params.items() if k != 'hidden_channels'}
         self.resnet = ResNet(
             in_channels = self.in_channels + self.image_insize[0],
             out_channels = hidden_channels[-1],
             hidden_channels = hidden_channels[:-1],
             device = self.device,
-            **params
+            **_params
         )
 
     def forward(self, x, return_mean_entropy=True):

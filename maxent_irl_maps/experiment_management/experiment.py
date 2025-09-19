@@ -79,9 +79,6 @@ class Experiment:
                     os.path.join(self.base_fp, "itr_{}.pt".format(e + 1)),
                 )
 
-                torch.save(self.algo, os.path.join(self.base_fp, "sam_is_lazy_{}.pt".format(e + 1)))
-            self.algo = self.algo.to("cuda")
-
         for i in range(10):
             self.algo.visualize()
             plt.show()

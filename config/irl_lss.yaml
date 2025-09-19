@@ -1,6 +1,6 @@
 experiment:
     save_to: /home/tartandriver/workspace/experiments/yamaha_irl_dino/
-    name: irl_radiov3_siglip2_oft
+    name: irl_radiov3_siglip2_lss
     device: cuda
     epochs: 5
     steps_per_epoch: -1
@@ -119,7 +119,7 @@ network:
                 hidden_activation: relu
 
         lss_params:
-            uniform_depth: true
+            uniform_depth: false
             n_depth_bins: 128
 
             depth_net_params:

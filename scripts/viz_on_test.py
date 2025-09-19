@@ -21,12 +21,15 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    res = load_net_for_eval(args.model_fp, device=args.device, skip_mpc=False)
+    model_base_dir = os.path.split(args.model_fp)[0]
+    config_fp = os.path.join(model_base_dir, '_params.yaml')
+    config = yaml.safe_load(open(config_fp, 'r'))
 
-    dataset = MaxEntIRLDataset(
-        root_fp=args.test_fp, feature_keys=res.expert_dataset.feature_keys
-    ).to(args.device)
-    res.expert_dataset = dataset
+    config['dataset']['common']['root_dir'] = args.test_fp
+
+    res = setup_experiment(config, skip_norms=True)["algo"].to(args.device)
+    res.network.load_state_dict(torch.load(args.model_fp, weights_only=True, map_location=args.device))
+    res.network.eval()
 
     for i in range(args.n):
         res.visualize()

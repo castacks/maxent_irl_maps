@@ -27,7 +27,7 @@ from maxent_irl_maps.dataset.maxent_irl_dataset import MaxEntIRLDataset
 
 from maxent_irl_maps.experiment_management.experiment import Experiment
 
-def load_net_for_eval(model_fp, device='cuda', skip_mpc=True):
+def load_net_for_eval(model_fp, device='cuda', skip_mpc=True,):
     """
     Set up IRL network for eval
 
@@ -47,7 +47,7 @@ def load_net_for_eval(model_fp, device='cuda', skip_mpc=True):
 
     return res
 
-def setup_experiment(fp, skip_mpc=False):
+def setup_experiment(fp, skip_mpc=False, skip_norms=False):
     """
     Expect the following top-level keys in the YAML:
         1. experiment: high-level params such as where to save to, epochs, etc.
@@ -100,7 +100,11 @@ def setup_experiment(fp, skip_mpc=False):
 
     sample_dpt = res["dataset"][0]
     bev_fks = sample_dpt["bev_data"]["feature_keys"]
-    bev_normalizations = res["dataset"].compute_normalizations("bev_data")
+
+    if skip_norms:
+        bev_normalizations = res["dataset"].compute_normalizations("bev_data", max_n_dpts=1)
+    else:
+        bev_normalizations = res["dataset"].compute_normalizations("bev_data")
 
     if network_params["type"] ==  "BEVToCostSpeed":
         res["network"] = BEVToCostSpeed(
