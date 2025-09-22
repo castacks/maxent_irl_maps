@@ -161,16 +161,21 @@ class BEVLSSToCostSpeed(BEVToCostSpeed):
             bev_normalizations,
             device
         )
+
         self.setup_lss(lss_params)
 
-    def setup_resnet(self, params):
+        ## need to re-setup resnet with lss input features
+        del(self.resnet)
+        self.resetup_resnet(resnet_params)
+
+    def resetup_resnet(self, params):
         """
         ResNet insize changes because it consumes lss and bev
         """
         hidden_channels = params['hidden_channels']
         _params = {k:v for k,v in params.items() if k != 'hidden_channels'}
         self.resnet = ResNet(
-            in_channels = self.in_channels + self.image_insize[0],
+            in_channels = self.in_channels + self.lss.out_channels,
             out_channels = hidden_channels[-1],
             hidden_channels = hidden_channels[:-1],
             device = self.device,
