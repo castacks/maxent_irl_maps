@@ -49,9 +49,9 @@ class Experiment:
         maybe_mkdir(os.path.join(self.base_fp, "dummy_dataset"), True)
 
     def run(self):
-        for i in range(3):
-            self.algo.visualize()
-            plt.show()
+        # for i in range(3):
+        #     self.algo.visualize()
+        #     plt.show()
 
         for e in range(self.epochs):
             self.algo.update(self.steps_per_epoch)
@@ -79,9 +79,9 @@ class Experiment:
                     os.path.join(self.base_fp, "itr_{}.pt".format(e + 1)),
                 )
 
-        for i in range(10):
-            self.algo.visualize()
-            plt.show()
+        # for i in range(10):
+        #     self.algo.visualize()
+        #     plt.show()
 
     def to(self, device):
         self.device = device

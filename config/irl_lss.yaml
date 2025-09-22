@@ -34,7 +34,8 @@ dataset:
         sample_every: 20
 
     common:
-        root_dir: /media/airlab/ssd1/2025_irl_kitti/train
+        # root_dir: /media/airlab/ssd1/2025_irl_kitti/train
+        root_dir: /media/airlab/offroad/datasets/2025_irl_kitti/train
         device: cuda
         use_multiprocessing: true
 

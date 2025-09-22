@@ -52,8 +52,9 @@ class BEVToCostSpeed(nn.Module):
             if return_mean_entropy:
                 res["costmap"], res["costmap_entropy"] = compute_map_mean_entropy(cost_logits, self.cost_bins)
         elif self.cost_type == 'Continuous':
-            import pdb;pdb.set_trace()
-
+            if return_mean_entropy:
+                res["costmap"] = cost_logits
+                res["costmap_entropy"] = torch.zeros_like(res["costmap"])
 
         if self.speed_type == 'Categorical':
             res['speed_logits'] = speed_logits
@@ -98,7 +99,12 @@ class BEVToCostSpeed(nn.Module):
             )
 
         elif params['type'] == 'Continuous':
-            pass
+            self.cost_head = ResNet(
+                in_channels = self.resnet.channel_sizes[-1],
+                out_channels = 1,
+                device = self.device,
+                **net_params
+            )
 
     def setup_speed_head(self, params):
         self.speed_type = params['type']
