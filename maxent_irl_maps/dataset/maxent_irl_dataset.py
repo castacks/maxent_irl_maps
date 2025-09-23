@@ -23,6 +23,11 @@ class MaxEntIRLDataset(PerceptionDataset):
 
         self.min_speed = config['irl']['min_speed']
         self.sample_every = config['irl']['sample_every']
+
+        print(f"Found {len(self.rdirs)} run dirs:")
+        for rdir in self.rdirs:
+            print('\t' + rdir)
+
         self.filter_speed_idxs()
 
     def filter_speed_idxs(self):

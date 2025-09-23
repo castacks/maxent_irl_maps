@@ -243,9 +243,12 @@ class MPPIIRLSpeedmaps:
 
         # kinda jank, but since we're multi-headed and have a loss and a gradient,
         # I think we need two backward passes through the computation graph.
-        self.network_opt.zero_grad()
-        costmap.backward(gradient=(grads + reg), retain_graph=True)
-        speed_loss.backward()
+        try:
+            self.network_opt.zero_grad()
+            costmap.backward(gradient=(grads + reg), retain_graph=True)
+            speed_loss.backward()
+        except:
+            import pdb;pdb.set_trace()
 
         torch.nn.utils.clip_grad_norm_(self.network.parameters(), self.grad_clip)
         self.network_opt.step()
