@@ -3,6 +3,9 @@ import torch
 
 from maxent_irl_maps.experiment_management.parse_configs import setup_experiment
 
+import matplotlib
+matplotlib.use("TkAgg")
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(

@@ -79,9 +79,9 @@ class Experiment:
                     os.path.join(self.base_fp, "itr_{}.pt".format(e + 1)),
                 )
 
-        # for i in range(10):
-        #     self.algo.visualize()
-        #     plt.show()
+        for i in range(10):
+            self.algo.visualize()
+            plt.show()
 
     def to(self, device):
         self.device = device

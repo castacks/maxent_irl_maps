@@ -21,7 +21,7 @@ from maxent_irl_maps.algos.mppi_irl_speedmaps import MPPIIRLSpeedmaps
 # from maxent_irl_maps.networks.resnet import ResnetCategorical, ResnetExpCostCategoricalSpeed
 # from maxent_irl_maps.networks.voxel import VoxelResnetCategorical
 
-from maxent_irl_maps.networks.bev import BEVToCostSpeed, BEVLSSToCostSpeed
+from maxent_irl_maps.networks.bev import BEVToCostSpeed, BEVLSSToCostSpeed, VoxelRecolorBEVToCostSpeed
 
 from maxent_irl_maps.dataset.maxent_irl_dataset import MaxEntIRLDataset
 
@@ -122,6 +122,15 @@ def setup_experiment(fp, skip_mpc=False, skip_norms=False):
             **network_params["args"],
             device=device,
         ).to(device)
+    elif network_params["type"] == "VoxelRecolorBEVToCostSpeed":
+        image_insize = sample_dpt["feature_image"]["data"].shape
+        res["network"] = VoxelRecolorBEVToCostSpeed(
+            in_channels=len(bev_fks),
+            bev_normalizations=bev_normalizations,
+            image_insize=image_insize,
+            **network_params["args"],
+            device=device,
+        )
     else:
         print("Unsupported network type {}".format(network_params["type"]))
         exit(1)

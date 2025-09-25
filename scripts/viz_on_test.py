@@ -4,6 +4,8 @@ import torch
 import argparse
 import matplotlib.pyplot as plt
 
+import matplotlib; matplotlib.use("TkAgg")
+
 from maxent_irl_maps.dataset.maxent_irl_dataset import MaxEntIRLDataset
 from maxent_irl_maps.experiment_management.parse_configs import setup_experiment, load_net_for_eval
 
@@ -31,6 +33,24 @@ if __name__ == "__main__":
     res.network.load_state_dict(torch.load(args.model_fp, weights_only=True, map_location=args.device))
     res.network.eval()
 
-    for i in range(args.n):
-        res.visualize()
+    idxs = torch.randperm(len(res.expert_dataset))[:args.n]
+
+    for idx in idxs:
+        fig, axs = res.visualize(idx=idx)
+
+        ## show feat image
+        from physics_atv_visual_mapping.utils import normalize_dino
+
+        axs[-1].cla()
+        img = res.expert_dataset[idx]["feature_image"]
+        img = img['data'].unsqueeze(0)
+        with torch.no_grad():
+            feat_img = res.network.voxel_recolor.feat_net(img)[0].permute(1,2,0)
+
+        U,S,V = torch.pca_lowrank(feat_img.flatten(end_dim=-2))
+
+        feat_img_pca = feat_img @ V
+
+        axs[-1].imshow(normalize_dino(feat_img_pca).cpu().numpy())
+
         plt.show()
