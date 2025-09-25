@@ -1,10 +1,10 @@
 import os
 import yaml
+import tqdm
 import torch
 import argparse
+import numpy as np
 import matplotlib.pyplot as plt
-
-import matplotlib; matplotlib.use("TkAgg")
 
 from maxent_irl_maps.dataset.maxent_irl_dataset import MaxEntIRLDataset
 from maxent_irl_maps.experiment_management.parse_configs import setup_experiment, load_net_for_eval
@@ -15,30 +15,44 @@ if __name__ == "__main__":
     parser.add_argument(
         "--test_fp", type=str, required=True, help="path to preproc data"
     )
-    parser.add_argument(
-        "--n", type=int, required=False, default=10, help="number of viz to run"
-    )
+    parser.add_argument('--randomize', action='store_true', help='set this flag to gen plots in random order')
     parser.add_argument(
         "--device", type=str, required=False, default="cpu", help="the device to run on"
     )
     args = parser.parse_args()
 
-    model_base_dir = os.path.split(args.model_fp)[0]
+    model_base_dir, model_name = os.path.split(args.model_fp)
     config_fp = os.path.join(model_base_dir, '_params.yaml')
     config = yaml.safe_load(open(config_fp, 'r'))
 
     config['dataset']['common']['root_dir'] = args.test_fp
 
+    save_dir = os.path.join(model_base_dir, 'metrics', model_name.strip('.pt'))
+    os.makedirs(os.path.join(save_dir, 'viz'), exist_ok=True)
+
     res = setup_experiment(config, skip_norms=True)["algo"].to(args.device)
     res.network.load_state_dict(torch.load(args.model_fp, weights_only=True, map_location=args.device))
     res.network.eval()
 
-    idxs = torch.randperm(len(res.expert_dataset))
+    N = len(res.expert_dataset)
 
-    for i in range(args.n):
-        idx = idxs[i]
+    idxs = torch.randperm(N) if args.randomize else torch.arange(N)
 
-        fig, axs = res.visualize(idx=idx)
+    metrics_all = None
+
+    for idx in tqdm.tqdm(idxs):
+        results = res.visualize(idx=idx)
+        fig, axs = results['viz']
+        metrics = {k:np.array(v).reshape(1) for k,v in results['metrics'].items()}
+
+        if metrics_all is None:
+            metrics_all = metrics
+        else:
+            metrics_all = {k:np.concatenate([metrics_all[k], metrics[k]]) for k in metrics_all.keys()}
+
+        np.savez(os.path.join(save_dir, 'metrics.npz'), **metrics_all)
+        plt.savefig(os.path.join(save_dir, 'viz', f'{idx:08d}.png'))
+        plt.close()
 
         if False:
             ## show feat image
@@ -55,8 +69,6 @@ if __name__ == "__main__":
             feat_img_pca = feat_img @ V
 
             axs[-1].imshow(normalize_dino(feat_img_pca).cpu().numpy())
-
-        plt.show()
 
         if False:
             ## LSS viz code (prob shouldnt be here lol)

@@ -11,7 +11,7 @@ from torch.utils.data import DataLoader
 from torch_mpc.cost_functions.cost_terms.utils import apply_footprint
 
 from maxent_irl_maps.dataset.maxent_irl_dataset import MaxEntIRLDataset
-from maxent_irl_maps.utils import get_state_visitations, get_speedmap, clip_to_map_bounds
+from maxent_irl_maps.utils import get_state_visitations, get_speedmap, clip_to_map_bounds, modified_hausdorff_distance
 
 class MPPIIRLSpeedmaps:
     """
@@ -135,7 +135,7 @@ class MPPIIRLSpeedmaps:
         expert_kbm_traj = self.get_expert_state_traj(batch)
 
         with torch.no_grad():
-            learner_trajs, weights, learner_best_traj = self.run_solver_on_costmap(costmap, metadata, expert_kbm_traj)
+            learner_trajs, weights, learner_best_traj, cost_results = self.run_solver_on_costmap(costmap, metadata, expert_kbm_traj)
 
         #take the initial state out of expert traj
         expert_kbm_traj = expert_kbm_traj[:, 1:]
@@ -266,7 +266,7 @@ class MPPIIRLSpeedmaps:
         }
         return self.mppi.model.get_observations(inp)
 
-    def run_solver_on_costmap(self, costmap, metadata, expert_traj, clip_goals=True):
+    def run_solver_on_costmap(self, costmap, metadata, expert_traj, clip_goals=True, return_cost_results=False):
         """
         Run MPPI on the corrent costmap from the expert initial state to final state
         Args:
@@ -301,22 +301,71 @@ class MPPIIRLSpeedmaps:
             "feature_keys": ["cost"]
         }
 
+        cost_results_all = []
+
         # solve for traj
         for ii in range(self.mppi_itrs):
-            self.mppi.get_control(initial_states, step=False)
+            _, cost_results = self.mppi.get_control(initial_states, step=False)
+            cost_results_all.append(cost_results)
+
+        cost_results_all = {k: torch.stack([x[k]['cost'] for x in cost_results_all], dim=1) for k in cost_results_all[0].keys()}
 
         best_traj = self.mppi.last_states
         weights = self.mppi.last_weights
         all_trajs = self.mppi.noisy_states
 
-        return all_trajs, weights, best_traj
+        return all_trajs, weights, best_traj, cost_results_all
+    
+    def get_expert_cost(self, costmap, metadata, expert_traj):
+        initial_states = expert_traj[:, 0]
+        map_params = {
+            "origin": metadata.origin,
+            "length": metadata.length,
+            "resolution": metadata.resolution,
+        }
 
-    def visualize(self, idx=-1):
+        goals = expert_traj[:, [-1], :2]
+
+        self.mppi.reset()
+        self.mppi.cost_fn.data["waypoints"] = goals
+        self.mppi.cost_fn.data["local_navmap"] = {
+            "data": costmap,
+            "metadata": map_params,
+            "feature_keys": ["cost"]
+        }
+
+        ## assume control costs not relevant here
+        dummy_controls = self.mppi.noisy_controls[:, [0]].clone()
+
+        _, _, cost_results = self.mppi.cost_fn.cost(expert_traj.unsqueeze(1), dummy_controls)
+
+        cost_results = {k:v['cost'][:, 0] for k,v in cost_results.items()}
+
+        return cost_results
+
+    def visualize(self, idx=-1, return_metrics=True):
         """
         Create a visualization of MaxEnt IRL inputs/outputs for the idx-th datapoint.
+        Also hijacking this script to return a few metrics, namely:
+            1. MHD bet. best learner trajectory and expert
+            2. Expert log-prob
+
+        Expert log-prob computation:
+            - Under maxent IRL, p(tau) \propto exp(-J(tau))
+            - p(tau) = (1/Z) exp(-J(tau)), where
+            - Z = sum_{all tau} [exp(-J(tau))]
+            - We will say that Z ~ sum{all_mppi} [exp(-J(tau))]
+
+            Thus:
+            log(p(tau_E)) =
+            log(exp(-J(tau_E))) - log(Z) ~= 
+            -J(tau_E) - logsumexp(-J(tau_mppi))
         """
+        if isinstance(idx, torch.Tensor):
+            idx = idx.item()
+            
         if idx == -1:
-            idx = np.random.randint(len(self.expert_dataset))
+            idx = np.random.randint(len(self.expert_dataset)).item()
 
         with torch.no_grad():
             dpt = self.expert_dataset.getitem_batch([idx] * self.mppi.B)
@@ -335,19 +384,44 @@ class MPPIIRLSpeedmaps:
             ## Run solver ##
             expert_kbm_traj = self.get_expert_state_traj(dpt)
 
-            learner_trajs, weights, learner_best_traj = self.run_solver_on_costmap(costmap, metadata, expert_kbm_traj)
+            learner_trajs, weights, learner_best_traj, learner_cost_results = self.run_solver_on_costmap(costmap, metadata, expert_kbm_traj)
 
             #take the initial state out of expert traj
             expert_kbm_traj = expert_kbm_traj[:, 1:]
+            expert_cost_results = self.get_expert_cost(costmap, metadata, expert_kbm_traj)
 
-            footprint_learner_traj = apply_footprint(learner_best_traj, self.footprint)
-            footprint_expert_traj = apply_footprint(expert_kbm_traj, self.footprint)
+            ## compute expert log prob
+            learner_rewards = -learner_cost_results['costmap_projection'].reshape(self.mppi.B, -1)
+            expert_rewards = -expert_cost_results['costmap_projection']
+        
+            partition_fn = torch.logsumexp(learner_rewards, dim=-1)
 
-            lsv = get_state_visitations(footprint_learner_traj, metadata)
-            esv = get_state_visitations(footprint_expert_traj, metadata)
+            expert_log_prob = (expert_rewards - partition_fn).mean()
 
-            learner_cost = (lsv * costmap).sum()
-            expert_cost = (esv * costmap).sum()
+            learner_rewards = -learner_cost_results['FINAL'].reshape(self.mppi.B, -1)
+            expert_rewards = -expert_cost_results['FINAL']
+        
+            partition_fn = torch.logsumexp(learner_rewards, dim=-1)
+
+            expert_log_prob_goal = (expert_rewards - partition_fn).mean()
+
+            expert_costmap_cost = expert_cost_results['costmap_projection'].mean()
+
+            learner_costmap_cost = learner_cost_results['costmap_projection']
+            best_idxs = weights.argmax(dim=-1)
+            best_learner_costmap_cost = learner_costmap_cost[torch.arange(self.mppi.B), 0, best_idxs].mean()
+
+            ## compute MHD
+            mhd = torch.stack([modified_hausdorff_distance(et, lt) for et, lt in zip(expert_kbm_traj, learner_best_traj)]).mean()
+
+            metrics = {
+                'expert_log_prob': expert_log_prob.item(),
+                'expert_log_goal': expert_log_prob_goal.item(),
+                'expert_costmap_cost': expert_costmap_cost.item(),
+                'learner_costmap_cost': best_learner_costmap_cost.item(),
+                'mhd': mhd.item(),
+                'idx': idx
+            }
 
             ## viz ##
             extent = (
@@ -365,16 +439,23 @@ class MPPIIRLSpeedmaps:
             for f in fklist:
                 if f in dpt["bev_data"]["feature_keys"].label:
                     fk = f
-                    idx = dpt["bev_data"]["feature_keys"].index(fk)
+                    fidx = dpt["bev_data"]["feature_keys"].index(fk)
                     break
 
             img = dpt["image"]["data"][0].permute(1, 2, 0)[:, :, [2, 1, 0]].cpu()
 
-            fig.suptitle("dpt {}: Expert cost = {:.4f}, Learner cost = {:.4f}".format(idx, expert_cost.item(), learner_cost.item()))
+            fig.suptitle("dpt {}: MHD={:.4f} Log prob={:.4f} Log prob goal={:.4f} Expert costmap cost={:.4f} Learner costmap cost={:.4f}".format(
+                idx,
+                mhd.item(),
+                expert_log_prob.item(),
+                expert_log_prob_goal.item(),
+                expert_costmap_cost.item(),
+                best_learner_costmap_cost.item()
+            ))
 
             axs[0].imshow(img)
             axs[1].imshow(
-                map_features[0][idx].T.cpu(),
+                map_features[0][fidx].T.cpu(),
                 origin="lower",
                 cmap="gray",
                 extent=extent,
@@ -427,7 +508,10 @@ class MPPIIRLSpeedmaps:
             plt.colorbar(m2, ax=axs[3])
             plt.colorbar(m3, ax=axs[4])
 
-        return fig, axs
+        return {
+            'viz': (fig, axs),
+            'metrics': metrics
+        }
 
     def to(self, device):
         self.device = device

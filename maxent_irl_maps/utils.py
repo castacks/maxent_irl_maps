@@ -1,6 +1,12 @@
 import torch
 import torch_scatter
 
+def modified_hausdorff_distance(traj1, traj2):
+    dist_mat = torch.linalg.norm(traj1.unsqueeze(0) - traj2.unsqueeze(1), dim=-1)
+    mhd1 = dist_mat.min(dim=0)[0].mean()
+    mhd2 = dist_mat.min(dim=1)[0].mean()
+    return max(mhd1, mhd2)
+
 def compute_map_mean_entropy(logits, bin_edges):
     """
     Compute the mean and entropy of a map represented as a categorical
