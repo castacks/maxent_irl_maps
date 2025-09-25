@@ -1,9 +1,9 @@
 experiment:
     save_to: /home/tartandriver/workspace/experiments/yamaha_irl_dino/
-    name: irl_radiov3_siglip2_lss_feathead
+    name: irl_radiov3_siglip2_voxel_recolor
     device: cuda
-    epochs: 10
-    steps_per_epoch: -1
+    epochs: 100
+    steps_per_epoch: 100
     save_every: 1
 
 footprint:
@@ -21,7 +21,7 @@ footprint:
 algo:
     type: MPPIIRLSpeedmaps
     params:
-        batch_size: 4
+        batch_size: 1
         reg_coeff: 0.0000001
         # reg_coeff: 0.0 #turn off speedmaps for now
         speed_coeff: 1.0
@@ -34,7 +34,7 @@ dataset:
         sample_every: 20
 
     common:
-        # root_dir: /media/airlab/ssd1/2025_irl_kitti/debug
+        # root_dir: /media/airlab/ssd1/2025_irl_kitti/train
         root_dir: /media/charlie/extreme_ssd/2025_irl_kitti/train
         device: cuda
         use_multiprocessing: true
@@ -44,8 +44,14 @@ dataset:
             dtype: BEVGrid
             dir: bev_map_reduce
             
+            args: {}
+
+        coord_voxel_data:
+            dtype: VoxelGrid
+            dir: coord_voxel_map
+
             args:
-                remove_keys: [min_elevation, max_elevation, terrain]
+                subtract_curr_height: false
 
         odometry:
             dtype: OdomRBState
@@ -92,9 +98,21 @@ dataset:
             dst_frame: multisense/left_camera_optical_frame
 
 network:
-    type: BEVLSSToCostSpeed
+    type: VoxelRecolorBEVToCostSpeed
 
     args:
+        terrain_layer: terrain
+        bev_layers: ['num_voxels', 'slope', 'diff', 'min_elevation_filtered_inflated_mask']
+
+        recolor_params:
+            coord_vg_key: 'coord_voxel_data'
+            img_keys: ['radio3_siglip2_feature_image_full']
+
+            feat_net_params:
+                hidden_channels: [128, 128]
+                hidden_activation: relu
+                out_channels: 64
+
         resnet_params:
             hidden_channels: [128,]
             hidden_activation: relu
@@ -118,19 +136,6 @@ network:
             net_params:
                 hidden_channels: []
                 hidden_activation: relu
-
-        lss_params:
-            uniform_depth: false
-            n_depth_bins: 128
-
-            depth_net_params:
-                hidden_channels: [128, 128]
-                hidden_activation: relu
-
-            feat_net_params:
-                hidden_channels: [128, 128]
-                hidden_activation: relu
-                out_channels: 64
 
 netopt:
     type: Adam

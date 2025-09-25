@@ -1,9 +1,12 @@
 import torch
 from torch import nn
 
+import torch_scatter
+
 # from tartandriver_perception_infra.networks.building_blocks.mlp import MLP
 from tartandriver_perception_infra.networks.building_blocks.resnet import ResNet
 from tartandriver_perception_infra.networks.building_blocks.lss import LSS
+from tartandriver_perception_infra.networks.building_blocks.voxel_recolor import VoxelRecolor
 from tartandriver_perception_infra.networks.util import get_rays_from_camera_matrix
 
 from tartandriver_utils.geometry_utils import pose_to_htm
@@ -135,7 +138,189 @@ class BEVToCostSpeed(nn.Module):
         self.bev_normalizations_std = self.bev_normalizations_std.to(self.device)
 
         return self
+
+class VoxelRecolorBEVToCostSpeed(BEVToCostSpeed):
+    """
+    Same as the basic BEV outputs, but on the input side, perform a feature extraction
+     and recolor on the voxel grid, then terrain-aware BEV-splat it
+    """
+    def __init__(
+        self,
+        in_channels,
+        image_insize,
+        resnet_params,
+        cost_params,
+        speed_params,
+        bev_normalizations,
+        recolor_params,
+        terrain_layer='terrain',
+        bev_layers=['num_voxels', 'slope', 'diff', 'min_elevation_filtered_inflated_mask'],
+        overhang=2.0,
+        device="cpu",
+    ):
+        self.image_insize = image_insize
+        self.terrain_layer = terrain_layer
+        self.bev_layers = bev_layers
+        self.overhang = overhang
+
+        super(VoxelRecolorBEVToCostSpeed, self).__init__(
+            in_channels,
+            resnet_params,
+            cost_params,
+            speed_params,
+            bev_normalizations,
+            device
+        )
+
+        self.setup_voxel_recolor(recolor_params)
+
+        ## need to re-setup resnet with new input features
+        del(self.resnet)
+        self.resetup_resnet(resnet_params)
     
+    def forward(self, x, return_mean_entropy=True):
+        bev_metadata = x['bev_data']['metadata']
+        voxel_metadata = x['coord_voxel_data']['metadata']
+
+        assert torch.allclose(bev_metadata.origin, voxel_metadata.origin[:, :2])
+        assert torch.allclose(bev_metadata.length, voxel_metadata.length[:, :2])
+        assert torch.allclose(bev_metadata.resolution, voxel_metadata.resolution[:, :2])
+
+        bev_features = x["bev_data"]["data"]
+        bev_features_norm = self.normalize_bev_features(bev_features)
+
+        ## voxel recolor here
+        voxel_recolor_data = self.voxel_recolor.forward(x)
+
+        if voxel_recolor_data is None:
+            return None
+
+        ## batch-splat terrain features
+        terrain_idx = x['bev_data']['feature_keys'].index(self.terrain_layer)
+        terrain = bev_features[:, terrain_idx] #[BxWxH]
+
+        splat_voxel_features = self.terrain_splat_voxel_features(voxel_recolor_data, terrain)
+
+        bev_feat_idxs = [x['bev_data']['feature_keys'].index(k) for k in self.bev_layers]
+        bev_inp_features = bev_features_norm[:, bev_feat_idxs]
+
+        inp_features = torch.cat([bev_inp_features, splat_voxel_features], dim=1)
+
+        features = self.resnet.forward(inp_features)
+
+        res = self.run_cost_speed_heads(features, return_mean_entropy)
+
+        return res
+
+    def terrain_splat_voxel_features(self, voxel_data, terrain):
+        """
+        Args:
+            voxel_data: [VxN] SpConv tensor
+            terrain: [BxWxH] terrain map (assumed to have same metadata as voxels)
+        """
+        _voxels = voxel_data['data']
+
+        _voxel_features = _voxels.features[:, :self.voxel_recolor.out_channels]
+        _voxel_idxs = _voxels.indices
+        _feat_mask = _voxels.features[:, voxel_data['feature_keys'].index('feature_mask')] > 0.5
+
+        _voxel_metadata = voxel_data['metadata']
+
+        _terrain_flat = terrain.flatten()
+
+        _bis, _xis, _yis, _zis = _voxel_idxs.long().T
+
+        B = _voxels.batch_size
+        nx, ny, nz = _voxels.spatial_shape
+        _os = _voxel_metadata.origin[_bis]
+        _rs = _voxel_metadata.resolution[_bis]
+
+        _voxel_elevs = (_zis * _rs[:, 2]) + _os[:, 2]
+        _raster_idxs = (_bis*nx*ny) + (_xis*ny) + _yis
+        _terrain_cmp_elev = _terrain_flat[_raster_idxs]
+
+        _overhang_mask = (_voxel_elevs - _terrain_cmp_elev) < self.overhang
+
+        full_mask = _feat_mask & _overhang_mask
+
+        feats_sum = torch_scatter.scatter(
+            src = _voxel_features[full_mask],
+            index = _raster_idxs[full_mask],
+            dim_size = B*nx*ny,
+            reduce = 'sum',
+            dim=0
+        )
+
+        feats_cnt = torch_scatter.scatter(
+            src = torch.ones(full_mask.sum(), device=self.device),
+            index = _raster_idxs[full_mask],
+            dim_size = B*nx*ny,
+            reduce = 'sum'
+        ) + 1e-8
+
+        feats = feats_sum / feats_cnt.unsqueeze(-1)
+
+        bev_feats = feats.reshape(B, nx, ny, -1).permute(0,3,1,2)
+
+        # ##debug viz
+        # import open3d as o3d
+        # from physics_atv_visual_mapping.utils import normalize_dino
+        # from physics_atv_visual_mapping.localmapping.metadata import LocalMapperMetadata
+        # from tartandriver_utils.o3d_viz_utils import make_bev_mesh
+        # for i in range(_voxels.batch_size):
+        #     bmask = _bis == i
+        #     _metadata = LocalMapperMetadata(
+        #         origin = _voxel_metadata.origin[i],
+        #         length = _voxel_metadata.length[i],
+        #         resolution = _voxel_metadata.resolution[i],
+        #     )
+
+        #     bev_metadata = LocalMapperMetadata(
+        #         origin = _voxel_metadata.origin[i, :2],
+        #         length = _voxel_metadata.length[i, :2],
+        #         resolution = _voxel_metadata.resolution[i, :2],
+        #     )
+
+        #     mask = bmask & _overhang_mask & _feat_mask
+        #     _pts = _voxel_idxs[mask][:, 1:] * _metadata.resolution.view(1, 3) + _metadata.origin.view(1, 3)
+        #     _colors = normalize_dino(_voxel_features[mask])
+
+        #     pc = o3d.geometry.PointCloud()
+        #     pc.points = o3d.utility.Vector3dVector(_pts.detach().cpu().numpy())
+        #     pc.colors = o3d.utility.Vector3dVector(_colors.detach().cpu().numpy())
+
+        #     _bev_feats = normalize_dino(bev_feats[i].permute(1,2,0)).detach()
+        #     _bev_cnt = feats_cnt.reshape(B,nx,ny)[i]
+        #     _terrain = terrain[i]
+
+        #     bev_mesh = make_bev_mesh(bev_metadata, _terrain, _bev_cnt > 0, _bev_feats)
+
+        #     o3d.visualization.draw_geometries([pc, bev_mesh])
+
+        return bev_feats
+
+    def setup_voxel_recolor(self, params):
+        self.voxel_recolor = VoxelRecolor(
+            image_insize=self.image_insize,
+            device=self.device,
+            # return_coord_data=False,
+            **params
+        )
+
+    def resetup_resnet(self, params):
+        """
+        ResNet insize changes because it consumes lss and bev
+        """
+        hidden_channels = params['hidden_channels']
+        _params = {k:v for k,v in params.items() if k != 'hidden_channels'}
+        self.resnet = ResNet(
+            in_channels = len(self.bev_layers) + self.voxel_recolor.out_channels,
+            out_channels = hidden_channels[-1],
+            hidden_channels = hidden_channels[:-1],
+            device = self.device,
+            **_params
+        )
+
 class BEVLSSToCostSpeed(BEVToCostSpeed):
     """
     Same as the basic BEV network, but also add in a

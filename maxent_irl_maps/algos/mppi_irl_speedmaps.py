@@ -84,9 +84,9 @@ class MPPIIRLSpeedmaps:
         self.itr += 1
 
         # DataLoader broken for now
-        # idxs = torch.randperm(len(self.expert_dataset))
+        idxs = torch.randperm(len(self.expert_dataset))
 
-        idxs = torch.arange(len(self.expert_dataset))
+        # idxs = torch.arange(len(self.expert_dataset))
 
         rem = len(idxs) - (len(idxs) % self.batch_size)
         idxs = idxs[:rem]
@@ -122,6 +122,9 @@ class MPPIIRLSpeedmaps:
 
         ## get network outputs ##
         res = self.network.forward(batch, return_mean_entropy=True)
+
+        if res is None:
+            return
 
         costmap = res["costmap"]
         speedmap = res["speedmap"]
