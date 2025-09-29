@@ -5,15 +5,14 @@ common:
     M: 2           #dim of action space
     dt: 0.1        #length of timestep
     device: cuda   #device to run on 
-    compile: true  #whether to compile MPC (runs faster but takes ~1 min on setup)
+    compile: false  #whether to compile MPC (runs faster but takes ~1 min on setup)
 
 model:
-    type: SteerSetpointThrottleKBM
+    type: KBM
     args:
         L: 2.0
-        throttle_lim: [0., 1.]
+        v_lim: [0., 15.]
         steer_lim: [-0.52, 0.52]
-        steer_rate_lim: 0.4
 
         #planar offset (in body frame) from odom to center of vehicle
         offset_to_center: [-2.2, 0.0]
@@ -21,41 +20,59 @@ model:
 sampling_strategies:
     sampling_strategies:
     strategies:
-        - type: ActionLibrary
-          label: action_library
+        - type: UniformGaussian
+          label: gaussian1
           args:
-            K: 505
-            path: "/home/tartandriver/tartandriver_ws/src/control/torch_mpc/data/action_libraries/yamaha_atv/H300_throttle_steer_unif.pt"
+            K: 1024
+            scale: [5.0, 0.25]  #sample scale on change of noise
 
-        - type: GaussianWalk
-          label: gaussian_walk1
+        - type: UniformGaussian
+          label: gaussian2
           args:
-            K: 512
-            initial_distribution:
-                type: gaussian
-                scale: [0.5, 0.0]
-            alpha: [0.0, 0.0]   #low-pass on noise
-            scale: [0.01, 0.01]  #sample scale on change of noise
+            K: 1024
+            scale: [2.0, 0.1]  #sample scale on change of noise
 
-        - type: GaussianWalk
-          label: gaussian_walk2
+        - type: UniformGaussian
+          label: gaussian3
           args:
-            K: 512
-            initial_distribution:
-                type: gaussian
-                scale: [0.5, 0.0]
-            alpha: [0.0, 0.0]   #low-pass on noise
-            scale: [0.005, 0.005]  #sample scale on change of noise
+            K: 1024
+            scale: [1.0, 0.05]  #sample scale on change of noise
 
-        - type: GaussianWalk
-          label: gaussian_walk3
+        - type: UniformGaussian
+          label: gaussian4
           args:
-            K: 512
-            initial_distribution:
-                type: gaussian
-                scale: [0.5, 0.0]
-            alpha: [0.0, 0.0]   #low-pass on noise
-            scale: [0.0025, 0.0025]  #sample scale on change of noise
+            K: 1024
+            scale: [0.5, 0.01]  #sample scale on change of noise
+        
+        # - type: GaussianWalk
+        #   label: gaussian_walk1
+        #   args:
+        #     K: 512
+        #     initial_distribution:
+        #         type: gaussian
+        #         scale: [0.5, 0.0]
+        #     alpha: [0.0, 0.0]   #low-pass on noise
+        #     scale: [0.01, 0.01]  #sample scale on change of noise
+
+        # - type: GaussianWalk
+        #   label: gaussian_walk2
+        #   args:
+        #     K: 512
+        #     initial_distribution:
+        #         type: gaussian
+        #         scale: [0.5, 0.0]
+        #     alpha: [0.0, 0.0]   #low-pass on noise
+        #     scale: [0.005, 0.005]  #sample scale on change of noise
+
+        # - type: GaussianWalk
+        #   label: gaussian_walk3
+        #   args:
+        #     K: 512
+        #     initial_distribution:
+        #         type: gaussian
+        #         scale: [0.5, 0.0]
+        #     alpha: [0.0, 0.0]   #low-pass on noise
+        #     scale: [0.0025, 0.0025]  #sample scale on change of noise
 
 cost_function:
     footprint:

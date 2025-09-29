@@ -181,7 +181,13 @@ class MPPIIRLSpeedmaps:
             import pdb; pdb.set_trace()
 
         # Speedmaps here:
-        espeeds = expert_kbm_traj[:, :, 3]
+
+        ## get expert speed from state if possible, else compute from odom
+        if expert_kbm_traj.shape[-1] >= 4:
+            espeeds = expert_kbm_traj[:, :, 3]
+        else:
+            espeeds = torch.linalg.norm(batch["odometry"]["data"][:, 1:, 7:10], dim=-1)
+
         #tile espeeds to match footprint
         espeeds = espeeds.unsqueeze(2).tile(1, 1, self.footprint.shape[0])
         
@@ -266,7 +272,7 @@ class MPPIIRLSpeedmaps:
         }
         return self.mppi.model.get_observations(inp)
 
-    def run_solver_on_costmap(self, costmap, metadata, expert_traj, clip_goals=True, return_cost_results=False):
+    def run_solver_on_costmap(self, costmap, metadata, expert_traj, clip_goals=False, return_cost_results=False):
         """
         Run MPPI on the corrent costmap from the expert initial state to final state
         Args:
@@ -365,7 +371,7 @@ class MPPIIRLSpeedmaps:
             idx = idx.item()
             
         if idx == -1:
-            idx = np.random.randint(len(self.expert_dataset)).item()
+            idx = np.random.randint(len(self.expert_dataset))
 
         with torch.no_grad():
             dpt = self.expert_dataset.getitem_batch([idx] * self.mppi.B)
@@ -390,26 +396,30 @@ class MPPIIRLSpeedmaps:
             expert_kbm_traj = expert_kbm_traj[:, 1:]
             expert_cost_results = self.get_expert_cost(costmap, metadata, expert_kbm_traj)
 
+            learner_best_cost_results = self.get_expert_cost(costmap, metadata, learner_best_traj)
+
             ## compute expert log prob
             learner_rewards = -learner_cost_results['costmap_projection'].reshape(self.mppi.B, -1)
             expert_rewards = -expert_cost_results['costmap_projection']
+            all_rewards = torch.cat([learner_rewards, expert_rewards.unsqueeze(-1)], dim=-1)
         
-            partition_fn = torch.logsumexp(learner_rewards, dim=-1)
+            partition_fn = torch.logsumexp(all_rewards, dim=-1)
 
             expert_log_prob = (expert_rewards - partition_fn).mean()
 
             learner_rewards = -learner_cost_results['FINAL'].reshape(self.mppi.B, -1)
             expert_rewards = -expert_cost_results['FINAL']
-        
-            partition_fn = torch.logsumexp(learner_rewards, dim=-1)
+
+            ## fair game to throw the expert traj into the partition fn
+            all_rewards = torch.cat([learner_rewards, expert_rewards.unsqueeze(-1)], dim=-1)
+
+            partition_fn = torch.logsumexp(all_rewards, dim=-1)
 
             expert_log_prob_goal = (expert_rewards - partition_fn).mean()
 
+            ## compute costmap costs
             expert_costmap_cost = expert_cost_results['costmap_projection'].mean()
-
-            learner_costmap_cost = learner_cost_results['costmap_projection']
-            best_idxs = weights.argmax(dim=-1)
-            best_learner_costmap_cost = learner_costmap_cost[torch.arange(self.mppi.B), 0, best_idxs].mean()
+            best_learner_costmap_cost = learner_best_cost_results['costmap_projection'].mean()
 
             ## compute MHD
             mhd = torch.stack([modified_hausdorff_distance(et, lt) for et, lt in zip(expert_kbm_traj, learner_best_traj)]).mean()

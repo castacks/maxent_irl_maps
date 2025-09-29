@@ -1,6 +1,6 @@
 experiment:
     save_to: /home/tartandriver/workspace/experiments/yamaha_irl_dino/
-    name: irl_radiov3_siglip2_vanilla
+    name: irl_radiov3_siglip2_vanilla_base_kbm
     device: cuda
     epochs: 10
     steps_per_epoch: -1
@@ -125,4 +125,4 @@ netopt:
 
 solver:
     type: mpc
-    mpc_fp: /home/tartandriver/tartandriver_ws/src/planning/maxent_irl_maps/config/mpc/throttle_mppi.yaml
+    mpc_fp: /home/tartandriver/tartandriver_ws/src/planning/maxent_irl_maps/config/mpc/kbm_mppi.yaml
