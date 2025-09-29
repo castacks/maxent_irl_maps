@@ -1,134 +1,65 @@
-import torch
-from torch.utils.data import Dataset
-import numpy as np
-import yaml
 import os
-import tqdm
-import matplotlib.pyplot as plt
 
-from maxent_irl_maps.os_utils import walk_bags
+import torch
+import numpy as np
 
+from tartandriver_perception_infra.dataset.dataset import PerceptionDataset
 
-class MaxEntIRLDataset(Dataset):
-    """ """
+class MaxEntIRLDataset(PerceptionDataset):
+    """
+    Wrapper around base perception dataset that:
+        1. Adds a min speed filter
+        2. TODO computes feature normalizations
+    """
+    def __init__(self, config):
+        super(MaxEntIRLDataset, self).__init__(config)
 
-    def __init__(self, root_fp, feature_keys=None, device="cpu"):
-        self.root_fp = root_fp
-        self.dpt_fps = walk_bags(self.root_fp, extension=".pt")
+        ## only assert these two because the perception inputs can change
+        assert 'odometry' in self.dataloaders.keys(), "Expect 'odometry to be a data key'"
+        assert 'steer_angle' in self.dataloaders.keys(), "Expect 'steer_angle to be a data key'"
+        assert 'tsample' in self.dataloaders['odometry'].keys(), "Need to forward sample odometry for IRL"
+        assert 'tsample' in self.dataloaders['steer_angle'].keys(), "Need to forward sample steer angle for IRL"
+        assert (self.dataloaders['odometry']['tsample'] == self.dataloaders['steer_angle']['tsample']).all()
 
-        if self.should_preprocess():
-            print("preprocessing...")
-            self.preprocess()
+        self.min_speed = config['irl']['min_speed']
+        self.sample_every = config['irl']['sample_every']
 
-        ## load feature normalizations
-        normalizations = yaml.safe_load(
-            open(os.path.join(self.root_fp, "normalizations.yaml"), "r")
-        )
-        self.feature_mean = torch.tensor(
-            normalizations["feature_mean"], device=device
-        ).float()
-        self.feature_std = torch.tensor(
-            normalizations["feature_std"], device=device
-        ).float()
+        print(f"Found {len(self.rdirs)} run dirs:")
+        for rdir in self.rdirs:
+            print('\t' + rdir)
 
-        if feature_keys is None:
-            self.feature_keys = normalizations["feature_keys"]
-        else:
-            self.feature_keys = feature_keys
+        self.filter_speed_idxs()
 
-        self.fidxs = self.compute_feature_idxs(
-            self.feature_keys, normalizations["feature_keys"]
-        )
+    def filter_speed_idxs(self):
+        odom_dl = self.dataloaders['odometry']
+        idx_hash_new = []
 
-        self.device = device
+        ## its faster to load the data directly
+        for i, rdir in enumerate(self.rdirs):
+            odom_data = torch.tensor(np.loadtxt(os.path.join(rdir, odom_dl['dir'], 'data.txt')))
+            idxs = self.idx_hash[self.idx_hash[:, 0] == i]
 
-    def compute_feature_idxs(self, target_keys, src_keys):
-        res = []
-        for ti, tk in enumerate(target_keys):
-            try:
-                si = src_keys.index(tk)
-                res.append(si)
-            except:
-                print(
-                    "couldnt find key {} in gridmap. Check normalizations.yaml".format(
-                        tk
-                    )
-                )
-                exit(1)
+            assert odom_data.shape[0] == (idxs.shape[0] + odom_dl['tsample'].shape[0])
 
-        return res
+            H = odom_dl['tsample'].shape[0]
+            N = idxs.shape[0]
 
-    def should_preprocess(self):
-        return not os.path.exists(os.path.join(self.root_fp, "normalizations.yaml"))
+            speeds = torch.linalg.norm(odom_data[:, 7:10], axis=-1)
+            speed_seg_idxs = torch.arange(N).reshape(N,1) + odom_dl['tsample'].reshape(1,H)
+            speed_seg = speeds[speed_seg_idxs]
 
-    def preprocess(self):
-        sample_dpt = torch.load(
-            os.path.join(self.root_fp, self.dpt_fps[0]), weights_only=False
-        )
+            avg_speed = speed_seg.mean(dim=-1)
+            valid_idxs = torch.argwhere(avg_speed > self.min_speed).squeeze()
 
-        fks = sample_dpt["gridmap_feature_keys"]
-        fbuf = torch.zeros(0, len(fks))
+            valid_idxs = valid_idxs[::self.sample_every]
 
-        for i in tqdm.tqdm(range(min(1000, len(self)))):
-            idx = np.random.randint(len(self.dpt_fps))
-            dfp = self.dpt_fps[idx]
-            fp = os.path.join(self.root_fp, dfp)
-            dpt = torch.load(fp, weights_only=False)
-            mfeats = dpt["gridmap_data"]
-            mask = torch.all(torch.isfinite(mfeats), axis=0)
-            mfeats = mfeats.permute(1, 2, 0)[mask]
+            _ihn = torch.stack([
+                torch.zeros(valid_idxs.shape[0], dtype=torch.long) + i,
+                valid_idxs
+            ], dim=-1)
 
-            sidxs = torch.randperm(len(mfeats))[:1000]
+            idx_hash_new.append(_ihn)
 
-            fbuf = torch.cat([fbuf, mfeats[sidxs]], axis=0)
-
-        feature_mean = fbuf.mean(dim=0)
-        feature_std = fbuf.std(dim=0) + 1e-6
-
-        res = {
-            "feature_keys": fks,
-            "feature_mean": feature_mean.numpy().tolist(),
-            "feature_std": feature_std.numpy().tolist(),
-        }
-
-        with open(os.path.join(self.root_fp, "normalizations.yaml"), "w") as fh:
-            yaml.dump(res, fh)
-
-    def __len__(self):
-        return len(self.dpt_fps)
-
-    def __getitem__(self, idx):
-        dpt = torch.load(
-            os.path.join(self.root_fp, self.dpt_fps[idx]),
-            map_location=self.device,
-            weights_only=False,
-        )
-
-        map_data = dpt["gridmap_data"][self.fidxs]
-        _mean = self.feature_mean[self.fidxs].view(-1, 1, 1)
-        _std = self.feature_std[self.fidxs].view(-1, 1, 1)
-        map_data_norm = (map_data - _mean) / _std
-        map_data_clip = map_data_norm.clip(-10.0, 10.0)
-        fmask = ~torch.isfinite(map_data_clip)
-        map_data_clip[fmask] = 10.0
-
-        if fmask.sum() > 0:
-            print(
-                "found NaN in dataset! (fp={})".format(
-                    os.path.join(self.root_fp, self.dpt_fps[idx])
-                )
-            )
-
-        return {
-            "traj": dpt["traj"],
-            "steer": dpt["steer"],
-            "image": dpt["image"],
-            "map_features": map_data_clip,
-            "metadata": dpt["gridmap_metadata"],
-        }
-
-    def to(self, device):
-        self.device = device
-        self.feature_mean = self.feature_mean.to(device)
-        self.feature_std = self.feature_std.to(device)
-        return self
+        idx_hash_new = torch.cat(idx_hash_new, dim=0)
+        print(f"subsampled {self.idx_hash.shape[0]}->{idx_hash_new.shape[0]} dpts")
+        self.idx_hash = idx_hash_new

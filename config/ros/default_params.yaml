@@ -1,9 +1,0 @@
-cvar_maxent_irl_node:
-  ros__parameters:
-    device: cuda
-    baseline: none #set ot one of {alter, semantic, alter_semantic} to run those baselines
-    gridmap_topic: /dino_gridmap
-    output_topic: /local_navmap
-    odom_topic: /superodometry/integrated_to_init
-    cvar_topic: /irl_cvar
-    speedmap_q_topic: /speedmap_quantile

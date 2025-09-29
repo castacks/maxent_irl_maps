@@ -17,15 +17,17 @@ from torch_mpc.cost_functions.cost_terms.utils import make_footprint
 # from torch_state_lattice_planner.setup_planner import setup_planner
 
 from maxent_irl_maps.algos.mppi_irl_speedmaps import MPPIIRLSpeedmaps
-from maxent_irl_maps.algos.planner_irl_speedmaps import PlannerIRLSpeedmaps
 
-from maxent_irl_maps.networks.resnet import ResnetCategorical, ResnetExpCostCategoricalSpeed
+# from maxent_irl_maps.networks.resnet import ResnetCategorical, ResnetExpCostCategoricalSpeed
+# from maxent_irl_maps.networks.voxel import VoxelResnetCategorical
+
+from maxent_irl_maps.networks.bev import BEVToCostSpeed, BEVLSSToCostSpeed, VoxelRecolorBEVToCostSpeed
 
 from maxent_irl_maps.dataset.maxent_irl_dataset import MaxEntIRLDataset
 
 from maxent_irl_maps.experiment_management.experiment import Experiment
 
-def load_net_for_eval(model_fp, device='cuda', skip_mpc=True):
+def load_net_for_eval(model_fp, device='cuda', skip_mpc=True,):
     """
     Set up IRL network for eval
 
@@ -45,7 +47,7 @@ def load_net_for_eval(model_fp, device='cuda', skip_mpc=True):
 
     return res
 
-def setup_experiment(fp, skip_mpc=False):
+def setup_experiment(fp, skip_mpc=False, skip_norms=False):
     """
     Expect the following top-level keys in the YAML:
         1. experiment: high-level params such as where to save to, epochs, etc.
@@ -54,7 +56,6 @@ def setup_experiment(fp, skip_mpc=False):
         4. trajopt
         5. cost_function
         6. model
-        7. metrics
 
     Design decision to use case statements instead of dicts of class types in case I want to
     handle params in specific ways for certain classes
@@ -71,7 +72,6 @@ def setup_experiment(fp, skip_mpc=False):
         "netopt",
         "footprint",
         "solver",
-        "metrics",
     ]
     res = {}
     # check validity of experiment YAML
@@ -93,23 +93,44 @@ def setup_experiment(fp, skip_mpc=False):
 
     # setup dataset
     dataset_params = experiment_dict["dataset"]
-    if dataset_params["type"] == "MaxEntIRLDataset":
-        res["dataset"] = MaxEntIRLDataset(**dataset_params["params"]).to(device)
-    else:
-        print("Unsupported dataset type {}".format(dataset_params["type"]))
-        exit(1)
+    res["dataset"] = MaxEntIRLDataset(dataset_params)
 
     # setup network
     network_params = experiment_dict["network"]
-    network_params["params"]["device"] = device
-    if network_params["type"] == "ResnetCategorical":
-        res["network"] = ResnetCategorical(
-            in_channels=len(res["dataset"].feature_keys), **network_params["params"],
+
+    sample_dpt = res["dataset"][0]
+    bev_fks = sample_dpt["bev_data"]["feature_keys"]
+
+    if skip_norms:
+        bev_normalizations = res["dataset"].compute_normalizations("bev_data", max_n_dpts=1)
+    else:
+        bev_normalizations = res["dataset"].compute_normalizations("bev_data")
+
+    if network_params["type"] ==  "BEVToCostSpeed":
+        res["network"] = BEVToCostSpeed(
+            in_channels=len(bev_fks),
+            bev_normalizations=bev_normalizations,
+            **network_params["args"], device=device,
         ).to(device)
-    elif network_params["type"] == "ResnetExpCostCategoricalSpeed":
-        res["network"] = ResnetExpCostCategoricalSpeed(
-            in_channels=len(res["dataset"].feature_keys), **network_params["params"],
+
+    elif network_params["type"] ==  "BEVLSSToCostSpeed":
+        image_insize = sample_dpt["feature_image"]["data"].shape
+        res["network"] = BEVLSSToCostSpeed(
+            in_channels=len(bev_fks),
+            bev_normalizations=bev_normalizations,
+            image_insize=image_insize,
+            **network_params["args"],
+            device=device,
         ).to(device)
+    elif network_params["type"] == "VoxelRecolorBEVToCostSpeed":
+        image_insize = sample_dpt["feature_image"]["data"].shape
+        res["network"] = VoxelRecolorBEVToCostSpeed(
+            in_channels=len(bev_fks),
+            bev_normalizations=bev_normalizations,
+            image_insize=image_insize,
+            **network_params["args"],
+            device=device,
+        )
     else:
         print("Unsupported network type {}".format(network_params["type"]))
         exit(1)
@@ -139,7 +160,8 @@ def setup_experiment(fp, skip_mpc=False):
             mpc_config = yaml.safe_load(open(experiment_dict["solver"]["mpc_fp"], "r"))
             # have to make batching params match top-level config
             mpc_config["common"]["B"] = experiment_dict["algo"]["params"]["batch_size"]
-            mpc_config["common"]["H"] = res["dataset"][0]["traj"].shape[0]
+            #note that we want to plan 1 fewer state than the expert as the expert traj includes the initial state
+            mpc_config["common"]["H"] = res["dataset"][0]["odometry"]["data"].shape[0] - 1
             res["trajopt"] = setup_mpc(mpc_config)
 
         elif solver_params["type"] == "planner":
@@ -152,16 +174,8 @@ def setup_experiment(fp, skip_mpc=False):
 
     # setup algo
     algo_params = experiment_dict["algo"]
-    if algo_params["type"] == "MPPIIRL":
-        res["algo"] = MPPIIRL(
-            network=res["network"],
-            opt=res["netopt"],
-            expert_dataset=res["dataset"],
-            mppi=res["trajopt"],
-            **algo_params["params"]
-        ).to(device)
-
-    elif algo_params["type"] == "MPPIIRLSpeedmaps":
+    algo_type = algo_params["type"]
+    if algo_params["type"] == "MPPIIRLSpeedmaps":
         res["algo"] = MPPIIRLSpeedmaps(
             network=res["network"],
             opt=res["netopt"],
@@ -170,16 +184,8 @@ def setup_experiment(fp, skip_mpc=False):
             footprint=res["footprint"],
             **algo_params["params"]
         ).to(device)
-
-    elif algo_params["type"] == "PlannerIRLSpeedmaps":
-        res["algo"] = PlannerIRLSpeedmaps(
-            network=res["network"],
-            opt=res["netopt"],
-            expert_dataset=res["dataset"],
-            planner=res["planner"],
-            footprint=res["footprint"],
-            **algo_params["params"]
-        ).to(device)
+    else:
+        print(f"Unsupported algo type {algo_type}")
 
     # setup experiment
     experiment_params = experiment_dict["experiment"]

@@ -14,15 +14,4 @@ if __name__ == "__main__":
 
     print("dataset size: {}".format(len(res["dataset"])))
 
-    print(
-        {
-            k: v.shape if isinstance(v, torch.Tensor) else v
-            for k, v in res["dataset"][1].items()
-        }
-    )
-
-    #    for i in range(10):
-    #        res['dataset'].visualize()
-    #        plt.show()
-
     res["experiment"].run()
