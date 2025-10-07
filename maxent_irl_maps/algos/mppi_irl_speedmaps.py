@@ -374,7 +374,7 @@ class MPPIIRLSpeedmaps:
             idx = np.random.randint(len(self.expert_dataset))
 
         with torch.no_grad():
-            dpt = self.expert_dataset.getitem_batch([idx] * self.mppi.B)
+            dpt = self.expert_dataset.getitem_batch([idx])
 
             metadata = dpt["bev_data"]["metadata"]
             map_features = dpt["bev_data"]["data"]
@@ -382,13 +382,13 @@ class MPPIIRLSpeedmaps:
             ## get network outputs ##
             res = self.network.forward(dpt, return_mean_entropy=True)
 
-            costmap = res["costmap"]
-            speedmap = res["speedmap"]
-            costmap_unc = res["costmap_entropy"]
-            speedmap_unc = res["speedmap_entropy"]
+            costmap = res["costmap"].tile(self.mppi.B, 1, 1, 1)
+            speedmap = res["speedmap"].tile(self.mppi.B, 1, 1, 1)
+            costmap_unc = res["costmap_entropy"].tile(self.mppi.B, 1, 1, 1)
+            speedmap_unc = res["speedmap_entropy"].tile(self.mppi.B, 1, 1, 1)
 
             ## Run solver ##
-            expert_kbm_traj = self.get_expert_state_traj(dpt)
+            expert_kbm_traj = self.get_expert_state_traj(dpt).tile(self.mppi.B, 1, 1)
 
             learner_trajs, weights, learner_best_traj, learner_cost_results = self.run_solver_on_costmap(costmap, metadata, expert_kbm_traj)
 
