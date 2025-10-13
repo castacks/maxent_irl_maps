@@ -49,25 +49,19 @@ class Experiment:
         maybe_mkdir(os.path.join(self.base_fp, "dummy_dataset"), True)
 
     def run(self):
-        # for i in range(3):
-        #     self.algo.visualize()
-        #     plt.show()
+        for i in range(3):
+            self.algo.visualize()
+            plt.show()
 
         for e in range(self.epochs):
             self.algo.update(self.steps_per_epoch)
 
             if e == 0:
                 self.build_experiment_dir()
-
-                # #create a sample dataset to load
-                # with open(os.path.join(self.algo.expert_dataset.root_fp, "normalizations.yaml"), "r") as fp:
-                #     normalizations = yaml.safe_load(fp)
-                #     target_fp = open(os.path.join(self.base_fp, "dummy_dataset","normalizations.yaml"), "w")
-                #     yaml.dump(normalizations, target_fp)
-
-                # src_fp = os.path.join(self.algo.expert_dataset.root_fp, self.algo.expert_dataset.dpt_fps[0])
-                # dst_fp = os.path.join(self.base_fp, "dummy_dataset", "traj_0.pt")
-                # torch.save(torch.load(src_fp, weights_only=False), dst_fp)
+                
+                src_data = self.algo.expert_dataset[0]
+                dst_fp = os.path.join(self.base_fp, "dummy_dataset", "sample_dpt.pt")
+                torch.save(src_data, dst_fp)
                 
                 #save params
                 with open(os.path.join(self.base_fp, "_params.yaml"), "w") as fp:

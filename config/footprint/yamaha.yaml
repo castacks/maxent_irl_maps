@@ -1,0 +1,10 @@
+params:
+    length: 4.0
+    width: 2.0
+      
+    #displacement to get to the center of the footprint from the center of the rear axle
+    length_offset: 1.2
+    width_offset: 0.0
+    
+    nl: 25
+    nw: 15

@@ -1,0 +1,61 @@
+irl:
+    min_speed: 1.0
+    sample_every: 20
+
+common:
+    # root_dir: /media/airlab/ssd1/2025_irl_kitti/train
+    root_dir: /media/airlab/offroad/datasets/2025_irl_kitti/train
+    device: cuda
+    use_multiprocessing: true
+
+datatypes:
+    bev_data:
+        dtype: BEVGrid
+        dir: bev_map_reduce
+        
+        args:
+            remove_keys: [min_elevation, max_elevation, terrain, dist_to_traj]
+
+    odometry:
+        dtype: OdomRBState
+        dir: odometry
+        temporal_sample: [0, 76]
+
+        args: {}
+
+    steer_angle:
+        dtype: Float32
+        dir: steer_angle
+        temporal_sample: [0, 76]
+
+        args: {}
+
+    feature_image:
+        dtype: FeatureImage
+        dir: radio3_siglip2_feature_image_full
+
+        args: {}
+
+    feature_image_intrinsics:
+        dtype: Intrinsics
+        dir: feature_image_intrinsics
+
+        args: {}
+
+    image:
+        dtype: Image
+        dir: image
+
+        args: {}
+
+    image_intrinsics:
+        dtype: Intrinsics
+        dir: image_intrinsics
+
+        args: {}
+
+transforms:
+    tf_odom_to_cam:
+        src_data: image
+        src_frame: sensor_init
+        dst_frame: multisense/left_camera_optical_frame

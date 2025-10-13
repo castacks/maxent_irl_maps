@@ -1,0 +1,7 @@
+type: MPPIIRLSpeedmaps
+params:
+    batch_size: 4
+    reg_coeff: 0.0000001
+    # reg_coeff: 0.0 #turn off speedmaps for now
+    speed_coeff: 1.0
+    grad_clip: 10.0

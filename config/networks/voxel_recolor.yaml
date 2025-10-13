@@ -1,0 +1,38 @@
+type: VoxelRecolorBEVToCostSpeed
+
+args:
+    terrain_layer: terrain
+    bev_layers: ['num_voxels', 'slope', 'diff', 'min_elevation_filtered_inflated_mask']
+
+    recolor_params:
+        coord_vg_key: 'coord_voxel_data'
+        img_keys: ['radio3_siglip2_feature_image_full']
+
+        feat_net_params:
+            hidden_channels: [128, 128]
+            hidden_activation: relu
+            out_channels: 64
+
+    resnet_params:
+        hidden_channels: [128,]
+        hidden_activation: relu
+
+    cost_params:
+        type: Categorical
+        output_params:
+            bounds: [0., 5.]
+            nbins: 20
+
+        net_params:
+            hidden_channels: []
+            hidden_activation: relu
+
+    speed_params:
+        type: Categorical
+        output_params:
+            bounds: [0., 15.]
+            nbins: 15
+            
+        net_params:
+            hidden_channels: []
+          hidden_activation: relu

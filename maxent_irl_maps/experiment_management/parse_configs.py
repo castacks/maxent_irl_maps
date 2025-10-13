@@ -7,8 +7,7 @@ import yaml
 import torch
 import matplotlib.pyplot as plt
 
-from torch_mpc.models.steer_setpoint_kbm import SteerSetpointKBM
-from torch_mpc.models.skid_steer import SkidSteer
+from tartandriver_utils.os_utils import load_yaml
 
 from torch_mpc.setup_mpc import setup_mpc
 from torch_mpc.cost_functions.cost_terms.utils import make_footprint
@@ -17,9 +16,6 @@ from torch_mpc.cost_functions.cost_terms.utils import make_footprint
 # from torch_state_lattice_planner.setup_planner import setup_planner
 
 from maxent_irl_maps.algos.mppi_irl_speedmaps import MPPIIRLSpeedmaps
-
-# from maxent_irl_maps.networks.resnet import ResnetCategorical, ResnetExpCostCategoricalSpeed
-# from maxent_irl_maps.networks.voxel import VoxelResnetCategorical
 
 from maxent_irl_maps.networks.bev import BEVToCostSpeed, BEVLSSToCostSpeed, VoxelRecolorBEVToCostSpeed
 
@@ -61,7 +57,8 @@ def setup_experiment(fp, skip_mpc=False, skip_norms=False):
     handle params in specific ways for certain classes
     """
     if isinstance(fp, str):
-        experiment_dict = yaml.safe_load(open(fp, "r"))
+        # experiment_dict = yaml.safe_load(open(fp, "r"))
+        experiment_dict = load_yaml(fp)
     else:
         experiment_dict = fp
 

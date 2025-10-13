@@ -1,0 +1,26 @@
+type: BEVToCostSpeed
+
+args:
+    resnet_params:
+        hidden_channels: [128, 128]
+        hidden_activation: relu
+
+    cost_params:
+        type: Categorical
+        output_params:
+            bounds: [0., 5.]
+            nbins: 20
+
+        net_params:
+            hidden_channels: [128,]
+            hidden_activation: relu
+
+    speed_params:
+        type: Categorical
+        output_params:
+            bounds: [0., 15.]
+            nbins: 15
+            
+        net_params:
+            hidden_channels: [128,]
+            hidden_activation: relu
