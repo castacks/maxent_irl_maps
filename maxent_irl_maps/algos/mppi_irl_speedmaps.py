@@ -66,7 +66,9 @@ class MPPIIRLSpeedmaps:
 
         print(self.network)
         print("({} params)".format(sum([x.numel() for x in self.network.parameters()])))
-        print(expert_dataset[0]["bev_data"]["feature_keys"])
+        if 'bev_data' in expert_dataset[0].keys():
+            print(expert_dataset[0]["bev_data"]["feature_keys"])
+
         self.network_opt = opt
 
         self.batch_size = batch_size
@@ -121,15 +123,19 @@ class MPPIIRLSpeedmaps:
         map_features = batch["bev_data"]["data"]
 
         ## get network outputs ##
-        res = self.network.forward(batch, return_mean_entropy=True)
+        # res = self.network.forward(batch, return_mean_entropy=True)
 
-        if res is None:
-            return
+        # if res is None:
+        #     return
 
-        costmap = res["costmap"]
-        speedmap = res["speedmap"]
-        costmap_unc = res["costmap_entropy"]
-        speedmap_unc = res["speedmap_entropy"]
+        # costmap = res["costmap"]
+        # speedmap = res["speedmap"]
+        # costmap_unc = res["costmap_entropy"]
+        # speedmap_unc = res["speedmap_entropy"]
+
+        ## get network outputs (new) ##
+        res = self.network.forward(batch)
+        costmap = res['cost']['preds']
 
         ## Run solver ##
         expert_kbm_traj = self.get_expert_state_traj(batch)
@@ -166,7 +172,7 @@ class MPPIIRLSpeedmaps:
             axs[0].set_title('learner')
 
             axs[1].plot(etraj[:, 0].cpu(), etraj[:, 1].cpu(), c='r', marker='.')
-            axs[1].plot(batch['odometry'][bi, :, 0].cpu(), batch['odometry'][bi, :, 1].cpu(), c='b', marker='.')
+            axs[1].plot(batch['odometry']['data'][bi, :, 0].cpu(), batch['odometry']['data'][bi, :, 1].cpu(), c='b', marker='.')
             axs[1].imshow(esv.T.cpu(), origin='lower', extent=extent)
             axs[1].set_title('expert')
 
@@ -193,14 +199,14 @@ class MPPIIRLSpeedmaps:
         
         expert_speedmaps = get_speedmap(footprint_expert_traj, espeeds, metadata)
 
-        speedmap_probs = res["speed_logits"].softmax(axis=1)
+        speedmap_probs = res["speed"]["logits"].softmax(axis=1)
 
         # bin expert speeds
-        _sbins = self.network.speed_bins[:-1].to(self.device).view(1, -1, 1, 1)
+        _sbins = self.network.heads["speed"].bins[:-1].to(self.device).view(1, -1, 1, 1)
         sdiffs = expert_speedmaps.unsqueeze(1) - _sbins
         sdiffs[sdiffs < 0] = 1e10
         expert_speed_idxs = sdiffs.argmin(dim=1)
-        expert_speed_idxs = expert_speed_idxs.clip(0, self.network.speed_nbins-1).long()
+        expert_speed_idxs = expert_speed_idxs.clip(0, self.network.heads["speed"].nbins-1).long()
 
         #debug viz
         """
@@ -379,13 +385,20 @@ class MPPIIRLSpeedmaps:
             metadata = dpt["bev_data"]["metadata"]
             map_features = dpt["bev_data"]["data"]
 
-            ## get network outputs ##
-            res = self.network.forward(dpt, return_mean_entropy=True)
+            # ## get network outputs ##
+            # res = self.network.forward(dpt, return_mean_entropy=True)
 
-            costmap = res["costmap"].tile(self.mppi.B, 1, 1, 1)
-            speedmap = res["speedmap"].tile(self.mppi.B, 1, 1, 1)
-            costmap_unc = res["costmap_entropy"].tile(self.mppi.B, 1, 1, 1)
-            speedmap_unc = res["speedmap_entropy"].tile(self.mppi.B, 1, 1, 1)
+            # costmap = res["costmap"].tile(self.mppi.B, 1, 1, 1)
+            # speedmap = res["speedmap"].tile(self.mppi.B, 1, 1, 1)
+            # costmap_unc = res["costmap_entropy"].tile(self.mppi.B, 1, 1, 1)
+            # speedmap_unc = res["speedmap_entropy"].tile(self.mppi.B, 1, 1, 1)
+
+            ## get network outputs (new) ##
+            res = self.network.forward(dpt)
+            costmap = res['cost']['preds'].tile(self.mppi.B, 1, 1, 1)
+            speedmap = res['speed']['preds'].tile(self.mppi.B, 1, 1, 1)
+            costmap_unc = res['cost']['entropy'].tile(self.mppi.B, 1, 1, 1)
+            speedmap_unc= res['speed']['entropy'].tile(self.mppi.B, 1, 1, 1)
 
             ## Run solver ##
             expert_kbm_traj = self.get_expert_state_traj(dpt).tile(self.mppi.B, 1, 1)

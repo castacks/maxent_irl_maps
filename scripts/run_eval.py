@@ -15,24 +15,38 @@ if __name__ == "__main__":
     parser.add_argument(
         "--test_fp", type=str, required=True, help="path to preproc data"
     )
+    parser.add_argument('--label', type=str, required=False, default='')
     parser.add_argument('--randomize', action='store_true', help='set this flag to gen plots in random order')
     parser.add_argument(
         "--device", type=str, required=False, default="cpu", help="the device to run on"
     )
     args = parser.parse_args()
 
+    ## hack setup ##
     model_base_dir, model_name = os.path.split(args.model_fp)
-    config_fp = os.path.join(model_base_dir, '_params.yaml')
-    config = yaml.safe_load(open(config_fp, 'r'))
-
-    config['dataset']['common']['root_dir'] = args.test_fp
-
-    save_dir = os.path.join(model_base_dir, 'metrics', model_name.strip('.pt'))
+    save_dir = os.path.join(model_base_dir, 'metrics'+args.label)
     os.makedirs(os.path.join(save_dir, 'viz'), exist_ok=True)
 
-    res = setup_experiment(config, skip_norms=True)["algo"].to(args.device)
-    res.network.load_state_dict(torch.load(args.model_fp, weights_only=True, map_location=args.device))
+    res = torch.load(args.model_fp, map_location=args.device, weights_only=False)
     res.network.eval()
+
+    dconf = res.expert_dataset.config
+    dconf['common']['root_dir'] = args.test_fp
+    res.expert_dataset = MaxEntIRLDataset(dconf)
+
+    ## real setup ##
+    # model_base_dir, model_name = os.path.split(args.model_fp)
+    # config_fp = os.path.join(model_base_dir, '_params.yaml')
+    # config = yaml.safe_load(open(config_fp, 'r'))
+
+    # config['dataset']['common']['root_dir'] = args.test_fp
+
+    # save_dir = os.path.join(model_base_dir, 'metrics', model_name.strip('.pt') + args.label)
+    # os.makedirs(os.path.join(save_dir, 'viz'), exist_ok=True)
+
+    # res = setup_experiment(config, skip_norms=True)["algo"].to(args.device)
+    # res.network.load_state_dict(torch.load(args.model_fp, weights_only=True, map_location=args.device))
+    # res.network.eval()
 
     N = len(res.expert_dataset)
 

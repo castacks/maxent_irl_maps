@@ -9,17 +9,9 @@ common:
     use_multiprocessing: true
 
 datatypes:
-    voxel_input:
-        dtype: VoxelGrid
-        dir: voxel_map
-
-        args:
-            subtract_curr_height: false
-
-    ## theres a lot of viz that needs the 2d defined
     bev_data:
         dtype: BEVGrid
-        dir: bev_map_reduce
+        dir: bev_map_inpaint_reduce
         
         args:
             remove_keys: [min_elevation, max_elevation, terrain, dist_to_traj]
@@ -35,6 +27,18 @@ datatypes:
         dtype: Float32
         dir: steer_angle
         temporal_sample: [0, 76]
+
+        args: {}
+
+    feature_image:
+        dtype: FeatureImage
+        dir: feature_image
+
+        args: {}
+
+    feature_image_intrinsics:
+        dtype: Intrinsics
+        dir: feature_image_intrinsics
 
         args: {}
 

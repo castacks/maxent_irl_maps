@@ -10,5 +10,16 @@
 # lss_feathead: /home/tartandriver/workspace/experiments/yamaha_irl_dino/2025-09-23-06-38-04_irl_radiov3_siglip2_lss_feathead/metrics/itr_6/
 # oft_feathead: /home/tartandriver/workspace/experiments/yamaha_irl_dino/2025-09-24-16-15-17_irl_radiov3_siglip2_oft_feathead/metrics/itr_6/
 
-vanilla_base_kbm: /home/tartandriver/workspace/experiments/yamaha_irl_dino/2025-09-26-14-35-51_irl_radiov3_siglip2_vanilla_base_kbm/metrics/itr_10/
-recolor_base_kbm: /home/tartandriver/workspace/experiments/yamaha_irl_dino/2025-09-26-20-58-51_irl_radiov3_siglip2_voxel_recolor_base_kbm/metrics/itr_5/
+# vanilla_base_kbm: /home/tartandriver/workspace/experiments/yamaha_irl_dino/2025-09-26-14-35-51_irl_radiov3_siglip2_vanilla_base_kbm/metrics/itr_10/
+# recolor_base_kbm: /home/tartandriver/workspace/experiments/yamaha_irl_dino/2025-09-26-20-58-51_irl_radiov3_siglip2_voxel_recolor_base_kbm/metrics/itr_5/
+
+## inpaint vs. vanilla vs. learned inpaint
+vanilla_default: /home/tartandriver/workspace/experiments/yamaha_irl_dino/2025-10-13-14-10-33_irl_radiov3_siglip2_vanilla/metrics/itr_5test_default
+gt_inpaint_default: /home/tartandriver/workspace/experiments/yamaha_irl_dino/2025-10-13-19-19-57_irl_radiov3_siglip2_vanilla_from_inpaint/metrics/itr_5test_default
+learned_inpaint_default: /home/tartandriver/workspace/experiments/yamaha_irl_dino/2025-10-13-18-59-54_irl_from_pretrain/metrics/itr_5test_default
+inpaint_cotrain_default: /home/tartandriver/workspace/experiments/yamaha_cotrain/debug/itr_4/metricstest_default
+
+vanilla_rr: /home/tartandriver/workspace/experiments/yamaha_irl_dino/2025-10-13-14-10-33_irl_radiov3_siglip2_vanilla/metrics/itr_5test_rr
+gt_inpaint_rr: /home/tartandriver/workspace/experiments/yamaha_irl_dino/2025-10-13-19-19-57_irl_radiov3_siglip2_vanilla_from_inpaint/metrics/itr_5test_rr
+learned_inpaint_rr: /home/tartandriver/workspace/experiments/yamaha_irl_dino/2025-10-13-18-59-54_irl_from_pretrain/metrics/itr_5test_rr
+inpaint_cotrain_rr: /home/tartandriver/workspace/experiments/yamaha_cotrain/debug/itr_4/metricstest_rr
