@@ -15,11 +15,13 @@
 
 ## inpaint vs. vanilla vs. learned inpaint
 vanilla_default: /home/tartandriver/workspace/experiments/yamaha_irl_dino/2025-10-13-14-10-33_irl_radiov3_siglip2_vanilla/metrics/itr_5test_default
+voxel_irl_only_default: /home/tartandriver/workspace/experiments/yamaha_cotrain/only_irl/itr_4/metricstest_default
 gt_inpaint_default: /home/tartandriver/workspace/experiments/yamaha_irl_dino/2025-10-13-19-19-57_irl_radiov3_siglip2_vanilla_from_inpaint/metrics/itr_5test_default
 learned_inpaint_default: /home/tartandriver/workspace/experiments/yamaha_irl_dino/2025-10-13-18-59-54_irl_from_pretrain/metrics/itr_5test_default
-inpaint_cotrain_default: /home/tartandriver/workspace/experiments/yamaha_cotrain/debug/itr_4/metricstest_default
+inpaint_cotrain_default2: /home/tartandriver/workspace/experiments/yamaha_cotrain/cotrain_irl/itr_4/metricstest_default
 
 vanilla_rr: /home/tartandriver/workspace/experiments/yamaha_irl_dino/2025-10-13-14-10-33_irl_radiov3_siglip2_vanilla/metrics/itr_5test_rr
+voxel_irl_only_rr: /home/tartandriver/workspace/experiments/yamaha_cotrain/only_irl/itr_4/metricstest_rr
 gt_inpaint_rr: /home/tartandriver/workspace/experiments/yamaha_irl_dino/2025-10-13-19-19-57_irl_radiov3_siglip2_vanilla_from_inpaint/metrics/itr_5test_rr
 learned_inpaint_rr: /home/tartandriver/workspace/experiments/yamaha_irl_dino/2025-10-13-18-59-54_irl_from_pretrain/metrics/itr_5test_rr
-inpaint_cotrain_rr: /home/tartandriver/workspace/experiments/yamaha_cotrain/debug/itr_4/metricstest_rr
+inpaint_cotrain_rr2: /home/tartandriver/workspace/experiments/yamaha_cotrain/cotrain_irl/itr_4/metricstest_rr

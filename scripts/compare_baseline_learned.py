@@ -28,21 +28,21 @@ if __name__ == "__main__":
 
     dataset = PreprocessPointpillarsDataset(
         preprocess_fp=args.preprocess_fp,
-        gridmap_type=res.expert_dataset.gridmap_type,
-        feature_mean=res.expert_dataset.feature_mean,
-        feature_std=res.expert_dataset.feature_std,
+        gridmap_type=res.dataset.gridmap_type,
+        feature_mean=res.dataset.feature_mean,
+        feature_std=res.dataset.feature_std,
     ).to(args.device)
 
-    res.expert_dataset = dataset
+    res.dataset = dataset
 
     res2 = torch.load(args.baseline_model_fp).to(args.device)
     dataset = PreprocessPointpillarsDataset(
         preprocess_fp=args.preprocess_fp,
-        gridmap_type=res2.expert_dataset.gridmap_type,
-        feature_mean=res2.expert_dataset.feature_mean,
-        feature_std=res2.expert_dataset.feature_std,
+        gridmap_type=res2.dataset.gridmap_type,
+        feature_mean=res2.dataset.feature_mean,
+        feature_std=res2.dataset.feature_std,
     ).to(args.device)
-    res2.expert_dataset = dataset
+    res2.dataset = dataset
 
     for i in range(args.n):
         idx = np.random.randint(len(dataset))

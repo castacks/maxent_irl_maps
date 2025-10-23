@@ -179,7 +179,7 @@ def setup_experiment(fp, skip_mpc=False, skip_norms=False):
         res["algo"] = MPPIIRLSpeedmaps(
             network=res["network"],
             opt=res["netopt"],
-            expert_dataset=res["dataset"],
+            dataset=res["dataset"],
             mppi=res["trajopt"],
             footprint=res["footprint"],
             **algo_params["params"]

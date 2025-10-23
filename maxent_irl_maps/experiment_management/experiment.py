@@ -59,7 +59,7 @@ class Experiment:
             if e == 0:
                 self.build_experiment_dir()
                 
-                src_data = self.algo.expert_dataset[0]
+                src_data = self.algo.dataset[0]
                 dst_fp = os.path.join(self.base_fp, "dummy_dataset", "sample_dpt.pt")
                 torch.save(src_data, dst_fp)
                 

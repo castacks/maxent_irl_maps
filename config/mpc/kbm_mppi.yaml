@@ -23,25 +23,25 @@ sampling_strategies:
         - type: UniformGaussian
           label: gaussian1
           args:
-            K: 1024
+            K: 10
             scale: [5.0, 0.25]  #sample scale on change of noise
 
         - type: UniformGaussian
           label: gaussian2
           args:
-            K: 1024
+            K: 10
             scale: [2.0, 0.1]  #sample scale on change of noise
 
         - type: UniformGaussian
           label: gaussian3
           args:
-            K: 1024
+            K: 10
             scale: [1.0, 0.05]  #sample scale on change of noise
 
         - type: UniformGaussian
           label: gaussian4
           args:
-            K: 1024
+            K: 10
             scale: [0.5, 0.01]  #sample scale on change of noise
         
         # - type: GaussianWalk

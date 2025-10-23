@@ -1,19 +1,15 @@
 import numpy as np
 import torch
 import matplotlib.pyplot as plt
-import os
-import argparse
-import scipy.spatial
-import scipy.interpolate
 
-from torch.utils.data import DataLoader
+from tartandriver_perception_infra.trainers.base import Trainer
 
 from torch_mpc.cost_functions.cost_terms.utils import apply_footprint
 
 from maxent_irl_maps.dataset.maxent_irl_dataset import MaxEntIRLDataset
 from maxent_irl_maps.utils import get_state_visitations, get_speedmap, clip_to_map_bounds, modified_hausdorff_distance
 
-class MPPIIRLSpeedmaps:
+class MPPIIRLSpeedmaps(Trainer):
     """
     This is the same as MPPI IRL, but in addition to the IRL, also learn a speed map via MLE to expert speed
     Speedmap Learning:
@@ -39,7 +35,7 @@ class MPPIIRLSpeedmaps:
         self,
         network,
         opt,
-        expert_dataset,
+        dataset,
         mppi,
         footprint,
         mppi_itrs=10,
@@ -53,62 +49,25 @@ class MPPIIRLSpeedmaps:
         Args:
             network: the network to use for predicting costmaps
             opt: the optimizer for the network
-            expert_dataset: The dataset containing expert demonstrations to imitate
+            dataset: The dataset containing expert demonstrations to imitate
             footprint: "smear" state visitations with this
             mppi: The MPPI object to optimize with
         """
-        self.expert_dataset = expert_dataset
+        super().__init__(dataset, batch_size, network, opt)
         self.footprint = footprint
         self.mppi = mppi
         self.mppi_itrs = mppi_itrs
 
-        self.network = network
+        if 'bev_data' in dataset[0].keys():
+            print(dataset[0]["bev_data"]["feature_keys"])
 
-        print(self.network)
-        print("({} params)".format(sum([x.numel() for x in self.network.parameters()])))
-        if 'bev_data' in expert_dataset[0].keys():
-            print(expert_dataset[0]["bev_data"]["feature_keys"])
-
-        self.network_opt = opt
-
-        self.batch_size = batch_size
         self.reg_coeff = reg_coeff
         self.speed_coeff = speed_coeff
         self.grad_clip = grad_clip
 
-        self.itr = 0
         self.device = device
 
-    def update(self, n=-1):
-        """
-        High-level method that runs training for one epoch.
-        """
-        self.itr += 1
-
-        # DataLoader broken for now
-        idxs = torch.randperm(len(self.expert_dataset))
-
-        # idxs = torch.arange(len(self.expert_dataset))
-
-        rem = len(idxs) - (len(idxs) % self.batch_size)
-        idxs = idxs[:rem]
-        idxs = idxs.reshape(-1, self.batch_size)
-
-        for i, bidxs in enumerate(idxs):
-            if n > -1 and i >= n:
-                break
-
-            print(
-                "{}/{}".format(i + 1, int(len(self.expert_dataset) / self.batch_size)),
-                end="\r",
-            )
-
-            batch = self.expert_dataset.getitem_batch(bidxs)
-            self.gradient_step(batch)
-
-        print("_____ITR {}_____".format(self.itr))
-
-    def gradient_step(self, batch):
+    def get_loss(self, batch):
         """
         Apply the MaxEnt update to the network given a batch
         """
@@ -255,18 +214,36 @@ class MPPIIRLSpeedmaps:
 
         # add regularization
         reg = self.reg_coeff * costmap
+        irl_grad = grads + reg
 
-        # kinda jank, but since we're multi-headed and have a loss and a gradient,
-        # I think we need two backward passes through the computation graph.
+        #return dict here is a little 
+        return {
+            'irl_info': { 
+                'grad': irl_grad,
+                'tensor': costmap
+            },
+            'speed_loss': speed_loss
+        }
+
+    def update_network(self, loss):
+        """
+        Implement custom loss bc irl is loss and grad
+        """
         try:
-            self.network_opt.zero_grad()
-            costmap.backward(gradient=(grads + reg), retain_graph=True)
-            speed_loss.backward()
+            self.opt.zero_grad()
+            loss['irl_info']['tensor'].backward(gradient=loss['irl_info']['grad'], retain_graph=True)
+            loss['speed_loss'].backward()
+
         except:
             import pdb;pdb.set_trace()
 
         torch.nn.utils.clip_grad_norm_(self.network.parameters(), self.grad_clip)
-        self.network_opt.step()
+        self.opt.step()
+
+    def get_parameters(self):
+        return {
+            'network': self.network.state_dict()
+        }
 
     def get_expert_state_traj(self, dpt):
         """
@@ -377,10 +354,10 @@ class MPPIIRLSpeedmaps:
             idx = idx.item()
             
         if idx == -1:
-            idx = np.random.randint(len(self.expert_dataset))
+            idx = np.random.randint(len(self.dataset))
 
         with torch.no_grad():
-            dpt = self.expert_dataset.getitem_batch([idx])
+            dpt = self.dataset.getitem_batch([idx])
 
             metadata = dpt["bev_data"]["metadata"]
             map_features = dpt["bev_data"]["data"]
@@ -538,7 +515,7 @@ class MPPIIRLSpeedmaps:
 
     def to(self, device):
         self.device = device
-        self.expert_dataset = self.expert_dataset.to(device)
+        self.dataset = self.dataset.to(device)
         self.mppi = self.mppi.to(device)
         self.network = self.network.to(device)
         self.footprint = self.footprint.to(device)

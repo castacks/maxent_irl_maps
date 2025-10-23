@@ -63,9 +63,9 @@ if __name__ == "__main__":
     res.network.eval()
 
     dataset = MaxEntIRLDataset(
-        root_fp=args.test_fp, feature_keys=res.expert_dataset.feature_keys
+        root_fp=args.test_fp, feature_keys=res.dataset.feature_keys
     ).to(args.device)
-    res.expert_dataset = dataset
+    res.dataset = dataset
 
     for i in range(args.n):
         idx = np.random.randint(len(dataset))

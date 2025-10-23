@@ -30,9 +30,9 @@ if __name__ == "__main__":
     res = torch.load(args.model_fp, map_location=args.device, weights_only=False)
     res.network.eval()
 
-    dconf = res.expert_dataset.config
+    dconf = res.dataset.config
     dconf['common']['root_dir'] = args.test_fp
-    res.expert_dataset = MaxEntIRLDataset(dconf)
+    res.dataset = MaxEntIRLDataset(dconf)
 
     ## real setup ##
     # model_base_dir, model_name = os.path.split(args.model_fp)
@@ -48,7 +48,7 @@ if __name__ == "__main__":
     # res.network.load_state_dict(torch.load(args.model_fp, weights_only=True, map_location=args.device))
     # res.network.eval()
 
-    N = len(res.expert_dataset)
+    N = len(res.dataset)
 
     idxs = torch.randperm(N) if args.randomize else torch.arange(N)
 
@@ -73,7 +73,7 @@ if __name__ == "__main__":
             from physics_atv_visual_mapping.utils import normalize_dino
 
             axs[-1].cla()
-            img = res.expert_dataset[idx]["feature_image"]
+            img = res.dataset[idx]["feature_image"]
             img = img['data'].unsqueeze(0)
             with torch.no_grad():
                 feat_img = res.network.voxel_recolor.feat_net(img)[0].permute(1,2,0)
@@ -89,7 +89,7 @@ if __name__ == "__main__":
             from physics_atv_visual_mapping.utils import normalize_dino
 
             with torch.no_grad():
-                dpt = res.expert_dataset.getitem_batch([idx])
+                dpt = res.dataset.getitem_batch([idx])
                 #unsqueeze for now for single-cam (TODO need to use a camlist arg)
                 images = dpt["feature_image"]["data"].unsqueeze(1)
 

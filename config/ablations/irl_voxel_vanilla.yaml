@@ -16,7 +16,8 @@ network: !include /home/tartandriver/tartandriver_ws/src/planning/maxent_irl_map
 
 netopt:
     type: Adam
-    params: {}
+    params:
+        lr: 0.00001
 
 solver:
     type: mpc

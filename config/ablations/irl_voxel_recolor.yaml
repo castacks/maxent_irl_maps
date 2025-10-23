@@ -10,7 +10,7 @@ footprint: !include /home/tartandriver/tartandriver_ws/src/planning/maxent_irl_m
 
 algo: !include /home/tartandriver/tartandriver_ws/src/planning/maxent_irl_maps/config/trainers/mppi_irl_speedmaps.yaml
 
-dataset: !include /home/tartandriver/tartandriver_ws/src/planning/maxent_irl_maps/config/dataset/voxel_recolor_irl_train.yaml
+dataset: !include /home/tartandriver/tartandriver_ws/src/planning/maxent_irl_maps/config/dataset/voxel_irl_train.yaml
 
 network: !include /home/tartandriver/tartandriver_ws/src/planning/maxent_irl_maps/config/networks/bev_default.yaml
 

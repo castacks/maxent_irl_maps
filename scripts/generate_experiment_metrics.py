@@ -109,7 +109,7 @@ if __name__ == "__main__":
         map_features_topic=args.map_topic,
         odom_topic=args.odom_topic,
         image_topic=args.image_topic,
-        horizon=model.expert_dataset.horizon,
+        horizon=model.dataset.horizon,
     ).to(args.device)
 
     save_fp = os.path.join(args.save_fp, "experiment_metrics.pt")
@@ -128,7 +128,7 @@ if __name__ == "__main__":
             os.path.join(args.experiment_fp, model_fp), map_location="cpu"
         ).to(args.device)
         model.network.eval()
-        model.expert_dataset = dataset
+        model.dataset = dataset
 
         if args.baseline:
             model.network = LethalHeightCostmap(dataset).to(args.device)
