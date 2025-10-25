@@ -412,7 +412,7 @@ class MPPIIRLSpeedmaps(Trainer):
             best_learner_costmap_cost = learner_best_cost_results['costmap_projection'].mean()
 
             ## compute MHD
-            mhd = torch.stack([modified_hausdorff_distance(et, lt) for et, lt in zip(expert_kbm_traj, learner_best_traj)]).mean()
+            mhd = torch.stack([modified_hausdorff_distance(et, lt) for et, lt in zip(expert_kbm_traj[..., :2], learner_best_traj[..., :2])]).mean()
 
             metrics = {
                 'expert_log_prob': expert_log_prob.item(),

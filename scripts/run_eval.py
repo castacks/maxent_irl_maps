@@ -31,6 +31,7 @@ if __name__ == "__main__":
     res.network.eval()
 
     dconf = res.dataset.config
+    # dconf = res.expert_dataset.config
     dconf['common']['root_dir'] = args.test_fp
     res.dataset = MaxEntIRLDataset(dconf)
 
