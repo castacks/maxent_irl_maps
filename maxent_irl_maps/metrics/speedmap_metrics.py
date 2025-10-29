@@ -19,10 +19,10 @@ def get_speedmap_metrics(experiment, frame_skip=1, viz=True, save_fp=""):
     metrics_res = {k: [] for k in ["speedmap_prob", "speedmap_l1_err"]}
 
     with torch.no_grad():
-        for i in range(0, len(experiment.expert_dataset), frame_skip):
-            print("{}/{}".format(i + 1, len(experiment.expert_dataset)), end="\r")
+        for i in range(0, len(experiment.dataset), frame_skip):
+            print("{}/{}".format(i + 1, len(experiment.dataset)), end="\r")
 
-            data = experiment.expert_dataset[i]
+            data = experiment.dataset[i]
 
             # hack back to single dim
             map_features = data["map_features"].unsqueeze(0)

@@ -63,3 +63,38 @@ class MaxEntIRLDataset(PerceptionDataset):
         idx_hash_new = torch.cat(idx_hash_new, dim=0)
         print(f"subsampled {self.idx_hash.shape[0]}->{idx_hash_new.shape[0]} dpts")
         self.idx_hash = idx_hash_new
+
+    def __getitem__(self, idx):
+        dpt = super().__getitem__(idx)
+        if 'voxel_input' in dpt.keys():
+            dpt['voxel_input'] = self.preproc_voxel(dpt)
+        return dpt
+
+    def getitem_batch(self, idxs):
+        dpt = super().getitem_batch(idxs)
+        if 'voxel_input' in dpt.keys():
+            dpt['voxel_input'] = self.preproc_voxel(dpt)
+
+        return dpt
+
+    def preproc_voxel(self, dpt):
+        curr_heights = dpt['odometry']['data'][..., 0, 2]
+        voxel_data = dpt['voxel_input']
+
+        voxel_data['metadata'].origin[..., 2] -= curr_heights
+
+        #blarg
+        if curr_heights.ndim == 0:
+            curr_heights = curr_heights.unsqueeze(0)
+
+        bidxs = voxel_data['data'].indices[:, 0]
+        features = voxel_data['data'].features
+        fks = voxel_data['feature_keys']
+
+        idxs_to_update = [i for i in range(len(fks)) if fks.label[i] in ['zmin', 'zmax']]
+
+        features[:, idxs_to_update] -= curr_heights[bidxs].unsqueeze(-1)
+
+        voxel_data['data'] = voxel_data['data'].replace_feature(features)
+
+        return voxel_data

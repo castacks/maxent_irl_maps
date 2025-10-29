@@ -1,7 +1,7 @@
 ---
 common:
     B: 1           #number of optimizations to run in parallel
-    H: 75         #number of timesteps to roll out
+    H: 75          #number of timesteps to roll out
     M: 2           #dim of action space
     dt: 0.1        #length of timestep
     device: cuda   #device to run on 

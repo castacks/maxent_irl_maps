@@ -46,9 +46,9 @@ if __name__ == "__main__":
     model.network.eval()
 
     dataset = MaxEntIRLDataset(
-        root_fp=args.test_fp, feature_keys=model.expert_dataset.feature_keys
+        root_fp=args.test_fp, feature_keys=model.dataset.feature_keys
     ).to(args.device)
-    model.expert_dataset = dataset
+    model.dataset = dataset
 
     res = {"speed": [], "svd2": [], "semantic_class": []}
 

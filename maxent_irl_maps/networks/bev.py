@@ -139,6 +139,126 @@ class BEVToCostSpeed(nn.Module):
 
         return self
 
+class FromPretrain(nn.Module):
+    """
+    slap on some prediction heads to a pretrained voxel net lol
+    """
+    def __init__(self, pretrain_fp, cost_params, speed_params, device='cpu'):
+        super(FromPretrain, self).__init__()
+        self.device = device
+        self.backbone = torch.load(pretrain_fp, weights_only=False, map_location=device).network
+    
+        self.setup_cost_head(cost_params)
+        self.setup_speed_head(speed_params)
+
+    def forward(self, x, return_mean_entropy=True):
+        voxel_data = self.preproc_voxel(x)
+
+        with torch.no_grad():
+            backbone_res = self.backbone.forward({'voxel_input': voxel_data}, return_features=True)
+            bev_features = backbone_res['features']
+
+        res = self.run_cost_speed_heads(bev_features, return_mean_entropy)
+
+        return res
+
+    def run_cost_speed_heads(self, features, return_mean_entropy):
+        cost_logits = self.cost_head(features)
+        speed_logits = self.speed_head(features)
+
+        res = {}
+        if self.cost_type == 'Categorical':
+            res['cost_logits'] = cost_logits
+            if return_mean_entropy:
+                res["costmap"], res["costmap_entropy"] = compute_map_mean_entropy(cost_logits, self.cost_bins)
+        elif self.cost_type == 'Continuous':
+            if return_mean_entropy:
+                res["costmap"] = cost_logits
+                res["costmap_entropy"] = torch.zeros_like(res["costmap"])
+
+        if self.speed_type == 'Categorical':
+            res['speed_logits'] = speed_logits
+            if return_mean_entropy:
+                res["speedmap"], res["speedmap_entropy"] = compute_map_mean_entropy(speed_logits, self.speed_bins)
+        elif self.speed_type == 'Continuous':
+            import pdb;pdb.set_trace()
+
+        return res
+    
+    def preproc_voxel(self, dpt):
+        curr_heights = dpt['odometry']['data'][..., 0, 2]
+        voxel_data = dpt['voxel_input']
+
+        voxel_data['metadata'].origin[..., 2] -= curr_heights
+
+        #blarg
+        if curr_heights.ndim == 0:
+            curr_heights = curr_heights.unsqueeze(0)
+
+        bidxs = voxel_data['data'].indices[:, 0]
+        features = voxel_data['data'].features
+        fks = voxel_data['feature_keys']
+
+        idxs_to_update = [i for i in range(len(fks)) if fks.label[i] in ['zmin', 'zmax']]
+
+        features[:, idxs_to_update] -= curr_heights[bidxs].unsqueeze(-1)
+
+        voxel_data['data'] = voxel_data['data'].replace_feature(features)
+
+        return voxel_data
+
+    def setup_cost_head(self, params):
+        self.cost_type = params['type']
+        net_params = params['net_params']
+        output_params = params['output_params']
+
+        if params['type'] == 'Categorical':
+            self.cost_nbins = output_params['nbins']
+            self.min_cost, self.max_cost = output_params['bounds']
+            self.cost_bins = torch.linspace(self.min_cost, self.max_cost, self.cost_nbins+1, device=self.device)
+            self.cost_head = ResNet(
+                in_channels = self.backbone.unet.outsize[0],
+                out_channels = self.cost_nbins,
+                device = self.device,
+                **net_params,
+            )
+
+        elif params['type'] == 'Continuous':
+            self.cost_head = ResNet(
+                in_channels = self.backbone.unet.outsize[0],
+                out_channels = 1,
+                device = self.device,
+                **net_params
+            )
+
+    def setup_speed_head(self, params):
+        self.speed_type = params['type']
+        net_params = params['net_params']
+        output_params = params['output_params']
+
+        if params['type'] == 'Categorical':
+            self.speed_nbins = output_params['nbins']
+            self.min_speed, self.max_speed = output_params['bounds']
+            self.speed_bins = torch.linspace(self.min_speed, self.max_speed, self.speed_nbins+1, device=self.device)
+            self.speed_head = ResNet(
+                in_channels = self.backbone.unet.outsize[0],
+                out_channels = self.speed_nbins,
+                device = self.device,
+                **net_params,
+            )
+
+        elif params['type'] == 'Continuous':
+            pass
+
+
+    def to(self, device):
+        self.device = device
+        self.backbone = self.backbone.to(device)
+        self.cost_head = self.cost_head.to(self.device)
+        self.speed_head = self.speed_head.to(self.device)
+
+        return self
+
 class VoxelRecolorBEVToCostSpeed(BEVToCostSpeed):
     """
     Same as the basic BEV outputs, but on the input side, perform a feature extraction

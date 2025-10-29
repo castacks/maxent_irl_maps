@@ -80,14 +80,14 @@ class CvarCostmapperNode(Node):
         self.get_logger().info("loading IRL model {}".format(os.path.join(model_fp)))
         irl = load_net_for_eval(model_fp, device=self.device)
 
-        self.feature_keys = irl.expert_dataset.feature_keys
+        self.feature_keys = irl.dataset.feature_keys
         self.feature_mean = (
-            irl.expert_dataset.feature_mean[irl.expert_dataset.fidxs]
+            irl.dataset.feature_mean[irl.dataset.fidxs]
             .to(self.device)
             .view(-1, 1, 1)
         )
         self.feature_std = (
-            irl.expert_dataset.feature_std[irl.expert_dataset.fidxs]
+            irl.dataset.feature_std[irl.dataset.fidxs]
             .to(self.device)
             .view(-1, 1, 1)
         )

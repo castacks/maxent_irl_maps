@@ -1,0 +1,24 @@
+type: FromPretrain
+
+args:
+    pretrain_fp: /home/tartandriver/workspace/experiments/yamaha_terrain_prediction/voxel_unet/temp_4.pt
+
+    cost_params:
+        type: Categorical
+        output_params:
+            bounds: [0., 5.]
+            nbins: 20
+
+        net_params:
+            hidden_channels: [128,]
+            hidden_activation: relu
+
+    speed_params:
+        type: Categorical
+        output_params:
+            bounds: [0., 15.]
+            nbins: 15
+            
+        net_params:
+            hidden_channels: [128,]
+            hidden_activation: relu

@@ -15,26 +15,41 @@ if __name__ == "__main__":
     parser.add_argument(
         "--test_fp", type=str, required=True, help="path to preproc data"
     )
+    parser.add_argument('--label', type=str, required=False, default='')
     parser.add_argument('--randomize', action='store_true', help='set this flag to gen plots in random order')
     parser.add_argument(
         "--device", type=str, required=False, default="cpu", help="the device to run on"
     )
     args = parser.parse_args()
 
+    ## hack setup ##
     model_base_dir, model_name = os.path.split(args.model_fp)
-    config_fp = os.path.join(model_base_dir, '_params.yaml')
-    config = yaml.safe_load(open(config_fp, 'r'))
-
-    config['dataset']['common']['root_dir'] = args.test_fp
-
-    save_dir = os.path.join(model_base_dir, 'metrics', model_name.strip('.pt'))
+    save_dir = os.path.join(model_base_dir, 'metrics'+args.label)
     os.makedirs(os.path.join(save_dir, 'viz'), exist_ok=True)
 
-    res = setup_experiment(config, skip_norms=True)["algo"].to(args.device)
-    res.network.load_state_dict(torch.load(args.model_fp, weights_only=True, map_location=args.device))
+    res = torch.load(args.model_fp, map_location=args.device, weights_only=False)
     res.network.eval()
 
-    N = len(res.expert_dataset)
+    dconf = res.dataset.config
+    # dconf = res.expert_dataset.config
+    dconf['common']['root_dir'] = args.test_fp
+    res.dataset = MaxEntIRLDataset(dconf)
+
+    ## real setup ##
+    # model_base_dir, model_name = os.path.split(args.model_fp)
+    # config_fp = os.path.join(model_base_dir, '_params.yaml')
+    # config = yaml.safe_load(open(config_fp, 'r'))
+
+    # config['dataset']['common']['root_dir'] = args.test_fp
+
+    # save_dir = os.path.join(model_base_dir, 'metrics', model_name.strip('.pt') + args.label)
+    # os.makedirs(os.path.join(save_dir, 'viz'), exist_ok=True)
+
+    # res = setup_experiment(config, skip_norms=True)["algo"].to(args.device)
+    # res.network.load_state_dict(torch.load(args.model_fp, weights_only=True, map_location=args.device))
+    # res.network.eval()
+
+    N = len(res.dataset)
 
     idxs = torch.randperm(N) if args.randomize else torch.arange(N)
 
@@ -59,7 +74,7 @@ if __name__ == "__main__":
             from physics_atv_visual_mapping.utils import normalize_dino
 
             axs[-1].cla()
-            img = res.expert_dataset[idx]["feature_image"]
+            img = res.dataset[idx]["feature_image"]
             img = img['data'].unsqueeze(0)
             with torch.no_grad():
                 feat_img = res.network.voxel_recolor.feat_net(img)[0].permute(1,2,0)
@@ -75,7 +90,7 @@ if __name__ == "__main__":
             from physics_atv_visual_mapping.utils import normalize_dino
 
             with torch.no_grad():
-                dpt = res.expert_dataset.getitem_batch([idx])
+                dpt = res.dataset.getitem_batch([idx])
                 #unsqueeze for now for single-cam (TODO need to use a camlist arg)
                 images = dpt["feature_image"]["data"].unsqueeze(1)
 

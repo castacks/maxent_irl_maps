@@ -26,17 +26,17 @@ if __name__ == "__main__":
     res = load_net_for_eval(args.model_fp, device=args.device, skip_mpc=False)
 
     dataset = MaxEntIRLDataset(
-        root_fp=args.test_fp, feature_keys=res.expert_dataset.feature_keys
+        root_fp=args.test_fp, feature_keys=res.dataset.feature_keys
     ).to(args.device)
-    res.expert_dataset = dataset
+    res.dataset = dataset
 
     expert_costs = []
 
-    for i in tqdm.tqdm(range(len(res.expert_dataset))):
-        idx = np.random.randint(len(res.expert_dataset))
+    for i in tqdm.tqdm(range(len(res.dataset))):
+        idx = np.random.randint(len(res.dataset))
 
         with torch.no_grad():
-            data = res.expert_dataset[idx]
+            data = res.dataset[idx]
 
             # hack back to single dim
             map_features = torch.stack([data["map_features"]] * res.mppi.B, dim=0)
@@ -104,11 +104,11 @@ if __name__ == "__main__":
     plt.show()
 
     #viz loop
-    for i in range(len(res.expert_dataset)):
-        idx = np.random.randint(len(res.expert_dataset))
+    for i in range(len(res.dataset)):
+        idx = np.random.randint(len(res.dataset))
 
         with torch.no_grad():
-            data = res.expert_dataset[idx]
+            data = res.dataset[idx]
 
             # hack back to single dim
             map_features = torch.stack([data["map_features"]] * res.mppi.B, dim=0)

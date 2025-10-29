@@ -15,7 +15,7 @@ if __name__ == "__main__":
     weights = [w.weight.squeeze().detach() for w in model.network.cost_heads]
     weights = torch.stack(weights, dim=0)
 
-    fks = model.expert_dataset.feature_keys
+    fks = model.dataset.feature_keys
 
     wmean = weights.mean(dim=0)
     wstd = weights.std(dim=0)
