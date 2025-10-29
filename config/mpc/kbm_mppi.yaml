@@ -1,7 +1,7 @@
 ---
 common:
     B: 1           #number of optimizations to run in parallel
-    H: 75         #number of timesteps to roll out
+    H: 75          #number of timesteps to roll out
     M: 2           #dim of action space
     dt: 0.1        #length of timestep
     device: cuda   #device to run on 
@@ -23,25 +23,25 @@ sampling_strategies:
         - type: UniformGaussian
           label: gaussian1
           args:
-            K: 10
+            K: 1024
             scale: [5.0, 0.25]  #sample scale on change of noise
 
         - type: UniformGaussian
           label: gaussian2
           args:
-            K: 10
+            K: 1024
             scale: [2.0, 0.1]  #sample scale on change of noise
 
         - type: UniformGaussian
           label: gaussian3
           args:
-            K: 10
+            K: 1024
             scale: [1.0, 0.05]  #sample scale on change of noise
 
         - type: UniformGaussian
           label: gaussian4
           args:
-            K: 10
+            K: 1024
             scale: [0.5, 0.01]  #sample scale on change of noise
         
         # - type: GaussianWalk
