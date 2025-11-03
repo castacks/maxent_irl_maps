@@ -156,7 +156,7 @@ class MPPIIRLSpeedmaps(Trainer):
 
         partition_fn = torch.logsumexp(all_rewards, dim=-1)
 
-        expert_log_prob_goal = (expert_rewards - partition_fn).mean()
+        expert_log_prob_goal = (expert_rewards - partition_fn)
 
         mhd = torch.stack([modified_hausdorff_distance(et, lt) for et, lt in zip(expert_kbm_traj[..., :2], learner_best_traj[..., :2])])
 
