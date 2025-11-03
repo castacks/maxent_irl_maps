@@ -100,7 +100,7 @@ class MPPIIRLSpeedmaps(Trainer):
         expert_kbm_traj = self.get_expert_state_traj(batch)
 
         with torch.no_grad():
-            learner_trajs, weights, learner_best_traj, cost_results = self.run_solver_on_costmap(costmap, metadata, expert_kbm_traj)
+            learner_trajs, weights, learner_best_traj, learner_cost_results = self.run_solver_on_costmap(costmap, metadata, expert_kbm_traj)
 
         #take the initial state out of expert traj
         expert_kbm_traj = expert_kbm_traj[:, 1:]
@@ -144,6 +144,21 @@ class MPPIIRLSpeedmaps(Trainer):
 
         if not torch.isfinite(grads).all():
             import pdb; pdb.set_trace()
+
+        ## compute expert log prob and mhd for train metrics
+        learner_rewards = -learner_cost_results['FINAL'].reshape(self.mppi.B, -1)
+        with torch.no_grad():
+            expert_cost_results = self.get_expert_cost(costmap, metadata, expert_kbm_traj)
+        expert_rewards = -expert_cost_results['FINAL']
+
+        ## fair game to throw the expert traj into the partition fn
+        all_rewards = torch.cat([learner_rewards, expert_rewards.unsqueeze(-1)], dim=-1)
+
+        partition_fn = torch.logsumexp(all_rewards, dim=-1)
+
+        expert_log_prob_goal = (expert_rewards - partition_fn).mean()
+
+        mhd = torch.stack([modified_hausdorff_distance(et, lt) for et, lt in zip(expert_kbm_traj[..., :2], learner_best_traj[..., :2])])
 
         # Speedmaps here:
 
@@ -216,13 +231,19 @@ class MPPIIRLSpeedmaps(Trainer):
         reg = self.reg_coeff * costmap
         irl_grad = grads + reg
 
-        #return dict here is a little 
+        print(f'avg log prob: {expert_log_prob_goal.mean().item():.4f} avg mhd: {mhd.mean().item():.4f}')
+
+        #return dict here is a little messy
         return {
             'irl_info': { 
                 'grad': irl_grad,
                 'tensor': costmap
             },
-            'speed_loss': speed_loss
+            'speed_loss': speed_loss,
+
+            #add these to log in wandb
+            'expert_log_prob_goal': expert_log_prob_goal,
+            'mhd': mhd
         }
 
     def update_network(self, loss):
