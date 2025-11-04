@@ -210,19 +210,40 @@ class MPPIIRLSpeedmaps(Trainer):
         #only want cells that the expert drove in
         mask = expert_speedmaps > 1e-6
 
-        ce = torch.nn.functional.cross_entropy(
-            speedmap_probs, expert_speed_idxs, reduction="none"
-        )[mask]
+        # ## cross entropy ##
+        # ce = torch.nn.functional.cross_entropy(
+        #     speedmap_probs, expert_speed_idxs, reduction="none"
+        # )[mask]
 
-        # try regularizing speeds to zero
-        neg_labels = torch.zeros_like(expert_speed_idxs)
-        ce_neg = torch.nn.functional.cross_entropy(
-            speedmap_probs, neg_labels, reduction="none"
-        )[~mask]
+        # # try regularizing speeds to zero
+        # neg_labels = torch.zeros_like(expert_speed_idxs)
+        # ce_neg = torch.nn.functional.cross_entropy(
+        #     speedmap_probs, neg_labels, reduction="none"
+        # )[~mask]
 
-        neg_ratio = mask.sum() / (~mask | mask).sum()
+        neg_ratio = mask.sum() / mask.numel()
 
-        speed_loss = self.speed_coeff * (ce.mean() + 0.1 * neg_ratio * ce_neg.mean())
+        # speed_loss = self.speed_coeff * (ce.mean() + 0.1 * neg_ratio * ce_neg.mean())
+
+        ##try square EMD (Cai et al) ##
+        """
+        In our case, EMD = ||cdf(target) - cdf(pred)||_2
+        """
+        pred_cdf = torch.cumsum(speedmap_probs, dim=-3) #[BxNsxWxH]
+
+        ## this creates a cdf where all the prob mass goes into the target bin
+        _range = torch.arange(pred_cdf.shape[-3], device=self.device).view(1,-1,1,1)
+        target_cdf = torch.where(_range >= expert_speed_idxs.unsqueeze(-3), 1., 0.) #[BxNsxWxH]
+
+        emd = torch.linalg.norm(pred_cdf - target_cdf, dim=-3) #[BxWxH]
+        emd2 = emd.pow(2)
+
+        emd2_pos = emd2[mask]
+        emd2_neg = emd2[~mask]
+
+        neg_ratio = mask.sum() / mask.numel()
+
+        speed_loss = self.speed_coeff * (emd2_pos.mean() + 0.1 * neg_ratio * emd2_neg.mean())
 
         print('IRL GRAD:   {:.4f}'.format(torch.linalg.norm(grads).detach().cpu().item()))
         print('SPEED LOSS: {:.4f}'.format(speed_loss.detach().item()))
