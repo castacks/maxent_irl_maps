@@ -486,7 +486,7 @@ class MPPIIRLSpeedmaps(Trainer):
 
             img = dpt["image"]["data"][0].permute(1, 2, 0)[:, :, [2, 1, 0]].cpu()
 
-            fig.suptitle("dpt {}: MHD={:.4f} Log prob={:.4f} Log prob goal={:.4f} Expert costmap cost={:.4f} Learner costmap cost={:.4f}".format(
+            fig.suptitle("dpt {}: avg MHD={:.4f} Log prob={:.4f} Log prob goal={:.4f} Expert costmap cost={:.4f} Learner costmap cost={:.4f}".format(
                 idx,
                 mhd.item(),
                 expert_log_prob.item(),
@@ -526,8 +526,13 @@ class MPPIIRLSpeedmaps(Trainer):
 
             #dont plot the initial state bc learner traj doesnt contain initial
             for i, ax_i in enumerate([1,2,3,4,5]):
+                #since we have batch MPPI, plot all solutions
+                for ii, lbt in enumerate(learner_best_traj):
+                    plot_label = (i==0) and (ii==0)
+                    axs[ax_i].plot(lbt[:, 0].cpu(), lbt[:, 1].cpu(), c="g", label="learner" if plot_label else None)
+
                 axs[ax_i].plot(expert_kbm_traj[0, :, 0].cpu(), expert_kbm_traj[0, :, 1].cpu(), c="y", label="expert" if i == 0 else None)
-                axs[ax_i].plot(learner_best_traj[0, :, 0].cpu(), learner_best_traj[0, :, 1].cpu(), c="g", label="learner" if i == 0 else None)
+                
 
             for ax in axs[1:]:
                 ax.set_xlim(extent[0], extent[1])
