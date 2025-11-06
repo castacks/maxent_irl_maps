@@ -58,8 +58,8 @@ class MPPIIRLSpeedmaps(Trainer):
         self.mppi = mppi
         self.mppi_itrs = mppi_itrs
 
-        if 'bev_data' in dataset[0].keys():
-            print(dataset[0]["bev_data"]["feature_keys"])
+        if 'bev_input' in dataset[0].keys():
+            print(dataset[0]["bev_input"]["feature_keys"])
 
         self.reg_coeff = reg_coeff
         self.speed_coeff = speed_coeff
@@ -72,14 +72,14 @@ class MPPIIRLSpeedmaps(Trainer):
         Apply the MaxEnt update to the network given a batch
         """
         assert (
-            self.batch_size == 1 or batch["bev_data"]["metadata"].resolution.std() < 1e-4
+            self.batch_size == 1 or batch["bev_input"]["metadata"].resolution.std() < 1e-4
         ), "got mutliple resolutions in a batch, which we currently don't support"
 
         grads = []
         speed_loss = []
 
-        metadata = batch["bev_data"]["metadata"]
-        map_features = batch["bev_data"]["data"]
+        metadata = batch["bev_input"]["metadata"]
+        map_features = batch["bev_input"]["data"]
 
         ## get network outputs ##
         # res = self.network.forward(batch, return_mean_entropy=True)
@@ -401,8 +401,8 @@ class MPPIIRLSpeedmaps(Trainer):
         with torch.no_grad():
             dpt = self.dataset.getitem_batch([idx])
 
-            metadata = dpt["bev_data"]["metadata"]
-            map_features = dpt["bev_data"]["data"]
+            metadata = dpt["bev_input"]["metadata"]
+            map_features = dpt["bev_input"]["data"]
 
             # ## get network outputs ##
             # res = self.network.forward(dpt, return_mean_entropy=True)
@@ -479,9 +479,9 @@ class MPPIIRLSpeedmaps(Trainer):
             fk = None
             fklist = ["num_voxels", "max_elevation", "step", "diff", "dino_0"]
             for f in fklist:
-                if f in dpt["bev_data"]["feature_keys"].label:
+                if f in dpt["bev_input"]["feature_keys"].label:
                     fk = f
-                    fidx = dpt["bev_data"]["feature_keys"].index(fk)
+                    fidx = dpt["bev_input"]["feature_keys"].index(fk)
                     break
 
             img = dpt["image"]["data"][0].permute(1, 2, 0)[:, :, [2, 1, 0]].cpu()

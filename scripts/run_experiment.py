@@ -10,7 +10,7 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    res = setup_experiment(args.setup_fp)
+    res = setup_experiment(args.setup_fp, skip_norms=True)
 
     print("dataset size: {}".format(len(res["dataset"])))
 
