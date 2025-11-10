@@ -1,6 +1,8 @@
 irl:
-    min_speed: 1.0
-    sample_every: 20
+    min_speed: 1.0            #filter out datapoints in this dataset with future traj at less than this average speed
+    max_ds: 2.0               #max displacement bet. frames, over which is considered a pose jump. (heuristically, max speed=15m/s * 0.1s/dpt)
+    sample_every: 20          #downsample evert n-th frame
+    distance_to_sample: 50.0  #(optional) arg for distance-based samples instead of time. produce an additional traj output that is this many m of future traj
 
 common:
     # root_dir: /media/airlab/ssd1/2025_irl_kitti/train
