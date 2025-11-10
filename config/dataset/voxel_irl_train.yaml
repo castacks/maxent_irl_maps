@@ -17,12 +17,12 @@ datatypes:
             subtract_curr_height: false
 
     ## theres a lot of viz that needs the 2d defined
-    bev_data:
+    bev_input:
         dtype: BEVGrid
         dir: bev_map_reduce
         
         args:
-            remove_keys: [min_elevation, max_elevation, terrain, dist_to_traj]
+            remove_keys: [min_elevation, max_elevation, dist_to_traj]
 
     odometry:
         dtype: OdomRBState

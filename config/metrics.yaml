@@ -1,27 +1,17 @@
-# lss_softplus: /home/tartandriver/workspace/experiments/yamaha_irl_dino/2025-09-24-16-14-25_irl_radiov3_siglip2_lss_softplus/metrics/itr_10/
-# oft_softplus: /home/tartandriver/workspace/experiments/yamaha_irl_dino/2025-09-24-16-14-23_irl_radiov3_siglip2_oft_softplus/metrics/itr_10/
+bev_bev_inpaint_irl:
+  /home/tartandriver/workspace/experiments/yamaha_cotrain/real_ablations/baseline_multitask_bev/itr_0004/metricstest_default
+voxel_bev_inpaint_irl:
+  /home/tartandriver/workspace/experiments/yamaha_cotrain/real_ablations/baseline_multitask2/itr_0004/metricstest_default
+voxel_bev_irl_only:
+  /home/tartandriver/workspace/experiments/yamaha_cotrain/real_ablations/baseline_irl_only/itr_0004/metricstest_default
+bev_bev_irl_only:
+  /home/tartandriver/workspace/experiments/yamaha_cotrain/real_ablations/baseline_irl_only_bev/itr_0004/metricstest_default
 
-# vanilla: /home/tartandriver/workspace/experiments/yamaha_irl_dino/2025-09-24-16-14-25_irl_radiov3_siglip2_vanilla/metrics/itr_10/
-# lss: /home/tartandriver/workspace/experiments/yamaha_irl_dino/2025-09-23-06-37-41_irl_radiov3_siglip2_lss/metrics/itr_10/
-# oft: /home/tartandriver/workspace/experiments/yamaha_irl_dino/2025-09-23-06-37-53_irl_radiov3_siglip2_oft/metrics/itr_10/
-
-# vanilla_softplus: /home/tartandriver/workspace/experiments/yamaha_irl_dino/2025-09-23-06-37-39_irl_radiov3_siglip2_vanilla_softplus/metrics/itr_10/
-
-# lss_feathead: /home/tartandriver/workspace/experiments/yamaha_irl_dino/2025-09-23-06-38-04_irl_radiov3_siglip2_lss_feathead/metrics/itr_6/
-# oft_feathead: /home/tartandriver/workspace/experiments/yamaha_irl_dino/2025-09-24-16-15-17_irl_radiov3_siglip2_oft_feathead/metrics/itr_6/
-
-# vanilla_base_kbm: /home/tartandriver/workspace/experiments/yamaha_irl_dino/2025-09-26-14-35-51_irl_radiov3_siglip2_vanilla_base_kbm/metrics/itr_10/
-# recolor_base_kbm: /home/tartandriver/workspace/experiments/yamaha_irl_dino/2025-09-26-20-58-51_irl_radiov3_siglip2_voxel_recolor_base_kbm/metrics/itr_5/
-
-## inpaint vs. vanilla vs. learned inpaint
-vanilla_default: /home/tartandriver/workspace/experiments/yamaha_irl_dino/2025-10-13-14-10-33_irl_radiov3_siglip2_vanilla/metrics/itr_5test_default
-voxel_irl_only_default: /home/tartandriver/workspace/experiments/yamaha_cotrain/only_irl/itr_4/metricstest_default
-gt_inpaint_default: /home/tartandriver/workspace/experiments/yamaha_irl_dino/2025-10-13-19-19-57_irl_radiov3_siglip2_vanilla_from_inpaint/metrics/itr_5test_default
-learned_inpaint_default: /home/tartandriver/workspace/experiments/yamaha_irl_dino/2025-10-13-18-59-54_irl_from_pretrain/metrics/itr_5test_default
-inpaint_cotrain_default2: /home/tartandriver/workspace/experiments/yamaha_cotrain/cotrain_irl/itr_4/metricstest_default
-
-vanilla_rr: /home/tartandriver/workspace/experiments/yamaha_irl_dino/2025-10-13-14-10-33_irl_radiov3_siglip2_vanilla/metrics/itr_5test_rr
-voxel_irl_only_rr: /home/tartandriver/workspace/experiments/yamaha_cotrain/only_irl/itr_4/metricstest_rr
-gt_inpaint_rr: /home/tartandriver/workspace/experiments/yamaha_irl_dino/2025-10-13-19-19-57_irl_radiov3_siglip2_vanilla_from_inpaint/metrics/itr_5test_rr
-learned_inpaint_rr: /home/tartandriver/workspace/experiments/yamaha_irl_dino/2025-10-13-18-59-54_irl_from_pretrain/metrics/itr_5test_rr
-inpaint_cotrain_rr2: /home/tartandriver/workspace/experiments/yamaha_cotrain/cotrain_irl/itr_4/metricstest_rr
+bev_bev_inpaint_irl_rr:
+  /home/tartandriver/workspace/experiments/yamaha_cotrain/real_ablations/baseline_multitask_bev/itr_0004/metricstest_rr
+voxel_bev_inpaint_irl_rr:
+  /home/tartandriver/workspace/experiments/yamaha_cotrain/real_ablations/baseline_multitask2/itr_0004/metricstest_rr
+voxel_bev_irl_only_rr:
+  /home/tartandriver/workspace/experiments/yamaha_cotrain/real_ablations/baseline_irl_only/itr_0004/metricstest_rr
+bev_bev_irl_only_rr:
+  /home/tartandriver/workspace/experiments/yamaha_cotrain/real_ablations/baseline_irl_only_bev/itr_0004/metricstest_rr

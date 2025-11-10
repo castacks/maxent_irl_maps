@@ -27,13 +27,13 @@ if __name__ == "__main__":
     save_dir = os.path.join(model_base_dir, 'metrics'+args.label)
     os.makedirs(os.path.join(save_dir, 'viz'), exist_ok=True)
 
-    res = torch.load(args.model_fp, map_location=args.device, weights_only=False)
+    res = torch.load(args.model_fp, weights_only=False).to(args.device)
     res.network.eval()
 
     dconf = res.dataset.config
     # dconf = res.expert_dataset.config
     dconf['common']['root_dir'] = args.test_fp
-    res.dataset = MaxEntIRLDataset(dconf)
+    res.dataset = MaxEntIRLDataset(dconf).to(args.device)
 
     ## real setup ##
     # model_base_dir, model_name = os.path.split(args.model_fp)

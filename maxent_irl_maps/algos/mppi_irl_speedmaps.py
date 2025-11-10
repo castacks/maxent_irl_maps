@@ -58,8 +58,8 @@ class MPPIIRLSpeedmaps(Trainer):
         self.mppi = mppi
         self.mppi_itrs = mppi_itrs
 
-        if 'bev_data' in dataset[0].keys():
-            print(dataset[0]["bev_data"]["feature_keys"])
+        if 'bev_input' in dataset[0].keys():
+            print(dataset[0]["bev_input"]["feature_keys"])
 
         self.reg_coeff = reg_coeff
         self.speed_coeff = speed_coeff
@@ -72,14 +72,14 @@ class MPPIIRLSpeedmaps(Trainer):
         Apply the MaxEnt update to the network given a batch
         """
         assert (
-            self.batch_size == 1 or batch["bev_data"]["metadata"].resolution.std() < 1e-4
+            self.batch_size == 1 or batch["bev_input"]["metadata"].resolution.std() < 1e-4
         ), "got mutliple resolutions in a batch, which we currently don't support"
 
         grads = []
         speed_loss = []
 
-        metadata = batch["bev_data"]["metadata"]
-        map_features = batch["bev_data"]["data"]
+        metadata = batch["bev_input"]["metadata"]
+        map_features = batch["bev_input"]["data"]
 
         ## get network outputs ##
         # res = self.network.forward(batch, return_mean_entropy=True)
@@ -100,7 +100,7 @@ class MPPIIRLSpeedmaps(Trainer):
         expert_kbm_traj = self.get_expert_state_traj(batch)
 
         with torch.no_grad():
-            learner_trajs, weights, learner_best_traj, cost_results = self.run_solver_on_costmap(costmap, metadata, expert_kbm_traj)
+            learner_trajs, weights, learner_best_traj, learner_cost_results = self.run_solver_on_costmap(costmap, metadata, expert_kbm_traj)
 
         #take the initial state out of expert traj
         expert_kbm_traj = expert_kbm_traj[:, 1:]
@@ -144,6 +144,21 @@ class MPPIIRLSpeedmaps(Trainer):
 
         if not torch.isfinite(grads).all():
             import pdb; pdb.set_trace()
+
+        ## compute expert log prob and mhd for train metrics
+        learner_rewards = -learner_cost_results['FINAL'].reshape(self.mppi.B, -1)
+        with torch.no_grad():
+            expert_cost_results = self.get_expert_cost(costmap, metadata, expert_kbm_traj)
+        expert_rewards = -expert_cost_results['FINAL']
+
+        ## fair game to throw the expert traj into the partition fn
+        all_rewards = torch.cat([learner_rewards, expert_rewards.unsqueeze(-1)], dim=-1)
+
+        partition_fn = torch.logsumexp(all_rewards, dim=-1)
+
+        expert_log_prob_goal = (expert_rewards - partition_fn)
+
+        mhd = torch.stack([modified_hausdorff_distance(et, lt) for et, lt in zip(expert_kbm_traj[..., :2], learner_best_traj[..., :2])])
 
         # Speedmaps here:
 
@@ -195,19 +210,40 @@ class MPPIIRLSpeedmaps(Trainer):
         #only want cells that the expert drove in
         mask = expert_speedmaps > 1e-6
 
-        ce = torch.nn.functional.cross_entropy(
-            speedmap_probs, expert_speed_idxs, reduction="none"
-        )[mask]
+        # ## cross entropy ##
+        # ce = torch.nn.functional.cross_entropy(
+        #     speedmap_probs, expert_speed_idxs, reduction="none"
+        # )[mask]
 
-        # try regularizing speeds to zero
-        neg_labels = torch.zeros_like(expert_speed_idxs)
-        ce_neg = torch.nn.functional.cross_entropy(
-            speedmap_probs, neg_labels, reduction="none"
-        )[~mask]
+        # # try regularizing speeds to zero
+        # neg_labels = torch.zeros_like(expert_speed_idxs)
+        # ce_neg = torch.nn.functional.cross_entropy(
+        #     speedmap_probs, neg_labels, reduction="none"
+        # )[~mask]
 
-        neg_ratio = mask.sum() / (~mask | mask).sum()
+        neg_ratio = mask.sum() / mask.numel()
 
-        speed_loss = self.speed_coeff * (ce.mean() + 0.1 * neg_ratio * ce_neg.mean())
+        # speed_loss = self.speed_coeff * (ce.mean() + 0.1 * neg_ratio * ce_neg.mean())
+
+        ##try square EMD (Cai et al) ##
+        """
+        In our case, EMD = ||cdf(target) - cdf(pred)||_2
+        """
+        pred_cdf = torch.cumsum(speedmap_probs, dim=-3) #[BxNsxWxH]
+
+        ## this creates a cdf where all the prob mass goes into the target bin
+        _range = torch.arange(pred_cdf.shape[-3], device=self.device).view(1,-1,1,1)
+        target_cdf = torch.where(_range >= expert_speed_idxs.unsqueeze(-3), 1., 0.) #[BxNsxWxH]
+
+        emd = torch.linalg.norm(pred_cdf - target_cdf, dim=-3) #[BxWxH]
+        emd2 = emd.pow(2)
+
+        emd2_pos = emd2[mask]
+        emd2_neg = emd2[~mask]
+
+        neg_ratio = mask.sum() / mask.numel()
+
+        speed_loss = self.speed_coeff * (emd2_pos.mean() + 0.1 * neg_ratio * emd2_neg.mean())
 
         print('IRL GRAD:   {:.4f}'.format(torch.linalg.norm(grads).detach().cpu().item()))
         print('SPEED LOSS: {:.4f}'.format(speed_loss.detach().item()))
@@ -216,13 +252,19 @@ class MPPIIRLSpeedmaps(Trainer):
         reg = self.reg_coeff * costmap
         irl_grad = grads + reg
 
-        #return dict here is a little 
+        print(f'avg log prob: {expert_log_prob_goal.mean().item():.4f} avg mhd: {mhd.mean().item():.4f}')
+
+        #return dict here is a little messy
         return {
             'irl_info': { 
                 'grad': irl_grad,
                 'tensor': costmap
             },
-            'speed_loss': speed_loss
+            'speed_loss': speed_loss,
+
+            #add these to log in wandb
+            'expert_log_prob_goal': expert_log_prob_goal,
+            'mhd': mhd
         }
 
     def update_network(self, loss):
@@ -359,8 +401,10 @@ class MPPIIRLSpeedmaps(Trainer):
         with torch.no_grad():
             dpt = self.dataset.getitem_batch([idx])
 
-            metadata = dpt["bev_data"]["metadata"]
-            map_features = dpt["bev_data"]["data"]
+            bev_key = "bev_input" if "bev_input" in dpt.keys() else "bev_data"
+
+            metadata = dpt[bev_key]["metadata"]
+            map_features = dpt[bev_key]["data"]
 
             # ## get network outputs ##
             # res = self.network.forward(dpt, return_mean_entropy=True)
@@ -414,12 +458,53 @@ class MPPIIRLSpeedmaps(Trainer):
             ## compute MHD
             mhd = torch.stack([modified_hausdorff_distance(et, lt) for et, lt in zip(expert_kbm_traj[..., :2], learner_best_traj[..., :2])]).mean()
 
+            ## compute speedmap log-prob
+            ## get expert speed from state if possible, else compute from odom
+            if expert_kbm_traj.shape[-1] >= 4:
+                espeeds = expert_kbm_traj[:, :, 3]
+            else:
+                espeeds = torch.linalg.norm(dpt["odometry"]["data"][:, 1:, 7:10], dim=-1)
+
+            #tile espeeds to match footprint
+            espeeds = espeeds.unsqueeze(2).tile(1, 1, self.footprint.shape[0])
+            
+            footprint_expert_traj = apply_footprint(expert_kbm_traj, self.footprint)
+            expert_speedmaps = get_speedmap(footprint_expert_traj[[0]], espeeds, metadata)
+
+            speedmap_probs = res["speed"]["logits"].softmax(axis=1)
+
+            # bin expert speeds
+            _sbins = self.network.heads["speed"].bins[:-1].to(self.device).view(1, -1, 1, 1)
+            sdiffs = expert_speedmaps.unsqueeze(1) - _sbins
+            sdiffs[sdiffs < 0] = 1e10
+            expert_speed_idxs = sdiffs.argmin(dim=1)
+            expert_speed_idxs = expert_speed_idxs.clip(0, self.network.heads["speed"].nbins-1).long()
+
+            pred_cdf = torch.cumsum(speedmap_probs, dim=-3) #[BxNsxWxH]
+
+            ## this creates a cdf where all the prob mass goes into the target bin
+            _range = torch.arange(pred_cdf.shape[-3], device=self.device).view(1,-1,1,1)
+            target_cdf = torch.where(_range >= expert_speed_idxs.unsqueeze(-3), 1., 0.) #[BxNsxWxH]
+
+            emd = torch.linalg.norm(pred_cdf - target_cdf, dim=-3) #[BxWxH]
+            emd2 = emd.pow(2)
+            #only want cells that the expert drove in
+            mask = expert_speedmaps > 1e-6
+
+            avg_emd2 = emd2[mask].mean()
+
+            _sprobs = speedmap_probs.permute(0,2,3,1)[mask]
+            _sidxs = expert_speed_idxs[mask]
+            avg_prob = _sprobs[torch.arange(_sprobs.shape[0]), _sidxs].mean()
+
             metrics = {
                 'expert_log_prob': expert_log_prob.item(),
                 'expert_log_goal': expert_log_prob_goal.item(),
                 'expert_costmap_cost': expert_costmap_cost.item(),
                 'learner_costmap_cost': best_learner_costmap_cost.item(),
                 'mhd': mhd.item(),
+                'expert_speed_emd2': avg_emd2.item(),
+                'expert_speed_prob': avg_prob.item(),
                 'idx': idx
             }
 
@@ -437,20 +522,22 @@ class MPPIIRLSpeedmaps(Trainer):
             fk = None
             fklist = ["num_voxels", "max_elevation", "step", "diff", "dino_0"]
             for f in fklist:
-                if f in dpt["bev_data"]["feature_keys"].label:
+                if f in dpt[bev_key]["feature_keys"].label:
                     fk = f
-                    fidx = dpt["bev_data"]["feature_keys"].index(fk)
+                    fidx = dpt[bev_key]["feature_keys"].index(fk)
                     break
 
             img = dpt["image"]["data"][0].permute(1, 2, 0)[:, :, [2, 1, 0]].cpu()
 
-            fig.suptitle("dpt {}: MHD={:.4f} Log prob={:.4f} Log prob goal={:.4f} Expert costmap cost={:.4f} Learner costmap cost={:.4f}".format(
+            fig.suptitle("dpt {}: avg MHD={:.4f} Log prob={:.4f} Log prob goal={:.4f} Expert costmap cost={:.4f} Learner costmap cost={:.4f} Expert speed prob={:.4f} emd2={:.4f}".format(
                 idx,
                 mhd.item(),
                 expert_log_prob.item(),
                 expert_log_prob_goal.item(),
                 expert_costmap_cost.item(),
-                best_learner_costmap_cost.item()
+                best_learner_costmap_cost.item(),
+                avg_prob.item(),
+                avg_emd2.item()
             ))
 
             axs[0].imshow(img)
@@ -484,8 +571,13 @@ class MPPIIRLSpeedmaps(Trainer):
 
             #dont plot the initial state bc learner traj doesnt contain initial
             for i, ax_i in enumerate([1,2,3,4,5]):
+                #since we have batch MPPI, plot all solutions
+                for ii, lbt in enumerate(learner_best_traj):
+                    plot_label = (i==0) and (ii==0)
+                    axs[ax_i].plot(lbt[:, 0].cpu(), lbt[:, 1].cpu(), c="g", label="learner" if plot_label else None)
+
                 axs[ax_i].plot(expert_kbm_traj[0, :, 0].cpu(), expert_kbm_traj[0, :, 1].cpu(), c="y", label="expert" if i == 0 else None)
-                axs[ax_i].plot(learner_best_traj[0, :, 0].cpu(), learner_best_traj[0, :, 1].cpu(), c="g", label="learner" if i == 0 else None)
+                
 
             for ax in axs[1:]:
                 ax.set_xlim(extent[0], extent[1])

@@ -26,6 +26,7 @@ class BEVToCostSpeed(nn.Module):
         super(BEVToCostSpeed, self).__init__()
         self.device = device
         self.in_channels = in_channels
+        self.heads = {}
 
         # self.bev_normalizations = bev_normalizations
         self.register_buffer('bev_normalizations_mean', bev_normalizations['mean'])
@@ -49,20 +50,23 @@ class BEVToCostSpeed(nn.Module):
         cost_logits = self.cost_head(features)
         speed_logits = self.speed_head(features)
 
-        res = {}
+        res = {
+            'cost': {},
+            'speed': {}
+        }
         if self.cost_type == 'Categorical':
-            res['cost_logits'] = cost_logits
+            res['cost']['logits'] = cost_logits
             if return_mean_entropy:
-                res["costmap"], res["costmap_entropy"] = compute_map_mean_entropy(cost_logits, self.cost_bins)
+                res['cost']['preds'], res['cost']['entropy'] = compute_map_mean_entropy(cost_logits, self.cost_bins)
         elif self.cost_type == 'Continuous':
             if return_mean_entropy:
-                res["costmap"] = cost_logits
-                res["costmap_entropy"] = torch.zeros_like(res["costmap"])
+                res['cost']['preds'] = cost_logits
+                res['cost']['entropy'] = torch.zeros_like(res['cost']['preds'])
 
         if self.speed_type == 'Categorical':
-            res['speed_logits'] = speed_logits
+            res['speed']['logits'] = speed_logits
             if return_mean_entropy:
-                res["speedmap"], res["speedmap_entropy"] = compute_map_mean_entropy(speed_logits, self.speed_bins)
+                res['speed']['preds'], res['speed']['entropy'] = compute_map_mean_entropy(speed_logits, self.speed_bins)
         elif self.speed_type == 'Continuous':
             import pdb;pdb.set_trace()
 

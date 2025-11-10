@@ -7,6 +7,8 @@ import yaml
 import torch
 import matplotlib.pyplot as plt
 
+from tartandriver_utils.os_utils import load_yaml
+
 from torch_mpc.models.steer_setpoint_kbm import SteerSetpointKBM
 from torch_mpc.models.skid_steer import SkidSteer
 
@@ -61,7 +63,7 @@ def setup_experiment(fp, skip_mpc=False, skip_norms=False):
     handle params in specific ways for certain classes
     """
     if isinstance(fp, str):
-        experiment_dict = yaml.safe_load(open(fp, "r"))
+        experiment_dict = load_yaml(fp)
     else:
         experiment_dict = fp
 
@@ -99,12 +101,12 @@ def setup_experiment(fp, skip_mpc=False, skip_norms=False):
     network_params = experiment_dict["network"]
 
     sample_dpt = res["dataset"][0]
-    bev_fks = sample_dpt["bev_data"]["feature_keys"]
+    bev_fks = sample_dpt["bev_input"]["feature_keys"]
 
     if skip_norms:
-        bev_normalizations = res["dataset"].compute_normalizations("bev_data", max_n_dpts=1)
+        bev_normalizations = res["dataset"].compute_normalizations("bev_input", max_n_dpts=1)
     else:
-        bev_normalizations = res["dataset"].compute_normalizations("bev_data")
+        bev_normalizations = res["dataset"].compute_normalizations("bev_input")
 
     if network_params["type"] ==  "BEVToCostSpeed":
         res["network"] = BEVToCostSpeed(

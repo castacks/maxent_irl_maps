@@ -16,7 +16,8 @@ if __name__ == '__main__':
     metrics_keys = [
         'mhd',
         'expert_log_goal',
-        'expert_log_prob',
+        'expert_speed_prob',
+        'expert_speed_emd2'
     ]
 
     res = [['Experiment'] + metrics_keys]

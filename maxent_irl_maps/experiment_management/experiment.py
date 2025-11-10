@@ -54,7 +54,10 @@ class Experiment:
             plt.show()
 
         for e in range(self.epochs):
-            self.algo.update(self.steps_per_epoch)
+            # import pdb;pdb.set_trace()
+            # self.algo.update(self.steps_per_epoch)
+
+            self.algo.run_epoch()
 
             if e == 0:
                 self.build_experiment_dir()
@@ -72,6 +75,7 @@ class Experiment:
                     self.algo.network.state_dict(),
                     os.path.join(self.base_fp, "itr_{}.pt".format(e + 1)),
                 )
+                torch.save(self.algo, os.path.join(self.base_fp, f"itr_{e+1}_trainer.pt"))
 
         for i in range(10):
             self.algo.visualize()
