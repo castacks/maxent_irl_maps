@@ -1,11 +1,11 @@
 ## NOTE: This config is meant to be used with the distance-based configuration and has a few
 ##       parameters that are specific. Namely, we are trying to optimize 50m of traj. Thus:
-##       H = 100 -> max speed=5m/s and nominal control should be [5., 0.]
+##       H = 75 -> max speed=6.7m/s and nominal control should be [6.7, 0.]
 
 ---
 common:
     B: 1           #number of optimizations to run in parallel
-    H: 100          #number of timesteps to roll out
+    H: 75          #number of timesteps to roll out
     M: 2           #dim of action space
     dt: 0.1        #length of timestep
     device: cuda   #device to run on 
@@ -111,7 +111,7 @@ cost_function:
           weight: 10.0
           label: control_effort
           args:
-            nominal: [5.0, 0.0]
+            nominal: [6.7, 0.0]
             weights: [0.1, 1.0]
             ord: 1
             
