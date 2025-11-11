@@ -24,6 +24,12 @@ model:
 sampling_strategies:
     sampling_strategies:
     strategies:
+        - type: ActionLibrary
+          label: action_library
+          args:
+            K: 1326
+            path: "/home/tartandriver/tartandriver_ws/src/control/torch_mpc/data/action_libraries/yamaha_atv/H100_N1326_vel_steer_unif.pt"
+
         - type: UniformGaussian
           label: gaussian1
           args:

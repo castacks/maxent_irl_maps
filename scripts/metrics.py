@@ -87,7 +87,7 @@ if __name__ == '__main__':
                 res.append(row)
 
             ## also add total
-            row = [label, f"total ({len(mask)} dpts)"]
+            row = [label, f" total ({len(mask)} dpts)"]
             for mk in metrics_keys:
                 mdata = metrics[mk]
                 if mask.sum() > 1:
@@ -100,13 +100,21 @@ if __name__ == '__main__':
             res.append(row)
 
         ## sort by terrain type instead of experiment
-        res = sorted(res, key=lambda x: x[1]) 
+        res = sorted(res, key=lambda x: x[1] + x[0])
 
         res.insert(0, ['Experiment'] + ['Terrain Class'] + metrics_keys)
 
         ##add line breaks lol
         prev = None
+        line_breaks = []
+        for i, row in enumerate(res):
+            if prev != row[1]:
+                line_breaks.append(i)
 
+            prev = row[1]
+
+        for i in reversed(line_breaks):
+            res.insert(i, [' '] * len(res[i]))
 
         if args.latex:
             pass
