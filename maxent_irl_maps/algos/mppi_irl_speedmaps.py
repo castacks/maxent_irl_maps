@@ -111,7 +111,7 @@ class MPPIIRLSpeedmaps(Trainer):
         learner_state_visitations = get_state_visitations(footprint_learner_traj, metadata)
         expert_state_visitations = get_state_visitations(footprint_expert_traj, metadata)
 
-        """
+        # """
         for bi in range(map_features.shape[0]):
             ltraj = learner_best_traj[bi]
             etraj = expert_kbm_traj[bi]
@@ -137,7 +137,7 @@ class MPPIIRLSpeedmaps(Trainer):
 
             axs[2].imshow((esv - lsv).T.cpu(), origin='lower', extent=extent)
             plt.show()
-        """
+        # """
 
         grads = (expert_state_visitations - learner_state_visitations) / map_features.shape[0]
         grads = grads.unsqueeze(1) #grad shape needs to match costmap shape
@@ -505,7 +505,9 @@ class MPPIIRLSpeedmaps(Trainer):
                 'mhd': mhd.item(),
                 'expert_speed_emd2': avg_emd2.item(),
                 'expert_speed_prob': avg_prob.item(),
-                'idx': idx
+                'idx': idx,
+                'rdir': dpt['rdir'][0],
+                'subidx': dpt['subidx'][0].item()
             }
 
             ## viz ##
