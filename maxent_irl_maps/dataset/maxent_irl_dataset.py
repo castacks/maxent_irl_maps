@@ -48,13 +48,17 @@ class MaxEntIRLDataset(PerceptionDataset):
             odom_data = torch.tensor(np.loadtxt(os.path.join(rdir, odom_dl['dir'], 'data.txt')))
             idxs = self.idx_hash[self.idx_hash[:, 0] == i]
 
-            assert odom_data.shape[0] == (idxs.shape[0] + odom_dl['tsample'].shape[0])
+            ## dataset may contain zero samples from a run after filtering
+            if len(idxs) == 0:
+                continue
+
+            assert odom_data.shape[0] > (idxs[:, 1].max() + odom_dl['tsample'].shape[0])
 
             H = odom_dl['tsample'].shape[0]
             N = idxs.shape[0]
 
             speeds = torch.linalg.norm(odom_data[:, 7:10], axis=-1)
-            speed_seg_idxs = torch.arange(N).reshape(N,1) + odom_dl['tsample'].reshape(1,H)
+            speed_seg_idxs = idxs[:, 1].reshape(N,1) + odom_dl['tsample'].reshape(1,H)
             speed_seg = speeds[speed_seg_idxs]
 
             avg_speed = speed_seg.mean(dim=-1)

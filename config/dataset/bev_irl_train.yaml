@@ -6,9 +6,15 @@ irl:
 
 common:
     # root_dir: /media/airlab/ssd1/2025_irl_kitti/train
-    root_dir: /media/airlab/offroad/datasets/2025_irl_kitti/train
+    root_dir: /media/airlab/offroad/datasets/2025_irl_kitti/gascola
     device: cuda
     use_multiprocessing: true
+
+    ## PoC of GPS-based filtering. TODO need to support multi-site
+    gps_filter:
+        tif_fp: /home/tartandriver/tartandriver_ws/src/core/mission_manager/gps_maps/gascola.tif
+        mask_fp: /home/tartandriver/tartandriver_ws/src/perception/tartandriver_perception_infra/data/gascola_test_mask.png
+        invert: true
 
 datatypes:
     bev_data:

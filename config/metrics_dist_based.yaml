@@ -5,12 +5,16 @@ gascola_test:
     bev_bev_inpaint_irl:
       /home/tartandriver/workspace/experiments/yamaha_cotrain/real_ablations/distance_based_mppi/baseline_multitask_bev/itr_0004/metricstest_default
     voxel_bev_inpaint_irl:
-      /home/tartandriver/workspace/experiments/yamaha_cotrain/real_ablations/distance_based_mppi/baseline_multitask/itr_0002/metricstest_default
+      /home/tartandriver/workspace/experiments/yamaha_cotrain/real_ablations/distance_based_mppi/baseline_multitask/itr_0004/metricstest_default
     voxel_bev_irl_only:
       /home/tartandriver/workspace/experiments/yamaha_cotrain/real_ablations/distance_based_mppi/baseline_irl_only/itr_0004/metricstest_default
     bev_bev_irl_only:
       /home/tartandriver/workspace/experiments/yamaha_cotrain/real_ablations/distance_based_mppi/baseline_irl_only_bev/itr_0004/metricstest_default
-
+    bev_bev_inpaint_irl_better_mppi:
+      /home/tartandriver/workspace/experiments/yamaha_cotrain/real_ablations/distance_based_mppi/baseline_multitask_bev_better_mppi/itr_0004/metricstest_default
+    voxel_bev_inpaint_irl_better_mppi:
+      /home/tartandriver/workspace/experiments/yamaha_cotrain/real_ablations/distance_based_mppi/baseline_multitask_better_mppi/itr_0004/metricstest_default
+    
 renegade_ridge_test:
   classif: !include /media/airlab/offroad/datasets/2025_irl_kitti/rr_test/irl_dataset_classif.yaml
 
@@ -18,8 +22,13 @@ renegade_ridge_test:
     bev_bev_inpaint_irl_rr:
       /home/tartandriver/workspace/experiments/yamaha_cotrain/real_ablations/distance_based_mppi/baseline_multitask_bev/itr_0004/metricstest_rr
     voxel_bev_inpaint_irl_rr:
-      /home/tartandriver/workspace/experiments/yamaha_cotrain/real_ablations/distance_based_mppi/baseline_multitask/itr_0002/metricstest_rr
+      /home/tartandriver/workspace/experiments/yamaha_cotrain/real_ablations/distance_based_mppi/baseline_multitask/itr_0004/metricstest_rr
     voxel_bev_irl_only_rr:
       /home/tartandriver/workspace/experiments/yamaha_cotrain/real_ablations/distance_based_mppi/baseline_irl_only/itr_0004/metricstest_rr
     bev_bev_irl_only_rr:
       /home/tartandriver/workspace/experiments/yamaha_cotrain/real_ablations/distance_based_mppi/baseline_irl_only_bev/itr_0004/metricstest_rr
+    bev_bev_inpaint_irl_better_mppi:
+      /home/tartandriver/workspace/experiments/yamaha_cotrain/real_ablations/distance_based_mppi/baseline_multitask_bev_better_mppi/itr_0004/metricstest_rr
+    voxel_bev_inpaint_irl_better_mppi:
+      /home/tartandriver/workspace/experiments/yamaha_cotrain/real_ablations/distance_based_mppi/baseline_multitask_better_mppi/itr_0004/metricstest_rr
+    
