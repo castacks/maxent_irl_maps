@@ -604,7 +604,12 @@ class MPPIIRLSpeedmaps(Trainer):
 
         return {
             'viz': (fig, axs),
-            'metrics': metrics
+            'metrics': metrics,
+            'learner_trajs': learner_best_traj,
+            'expert_traj': expert_kbm_traj[0],
+            'network_preds': res,
+            'rdir': dpt['rdir'][0],
+            'subidx': dpt['subidx'].item()
         }
 
     def to(self, device):

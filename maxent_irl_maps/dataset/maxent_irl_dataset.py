@@ -3,6 +3,8 @@ import os
 import torch
 import numpy as np
 
+from bev_prediction.utils import BEV_ELEVATION_KEYS
+
 from tartandriver_perception_infra.dataset.dataset import PerceptionDataset
 
 from tartandriver_utils.geometry_utils import TrajectoryInterpolator
@@ -123,6 +125,9 @@ class MaxEntIRLDataset(PerceptionDataset):
         dpt = super().__getitem__(idx)
         if 'voxel_input' in dpt.keys():
             dpt['voxel_input'] = self.preproc_voxel(dpt)
+
+        if 'bev_input' in dpt.keys():
+            dpt['bev_input'] = self.preproc_bev(dpt, dpt['bev_input'])
         
         if self.use_distance_based_sampling:
             self.resample_distances(dpt)
@@ -133,6 +138,9 @@ class MaxEntIRLDataset(PerceptionDataset):
         dpt = super().getitem_batch(idxs)
         if 'voxel_input' in dpt.keys():
             dpt['voxel_input'] = self.preproc_voxel(dpt)
+
+        if 'bev_input' in dpt.keys():
+            dpt['bev_input'] = self.preproc_bev(dpt, dpt['bev_input'])
 
         if self.use_distance_based_sampling:
             self.resample_distances_batch(dpt)
@@ -217,3 +225,40 @@ class MaxEntIRLDataset(PerceptionDataset):
         voxel_data['data'] = voxel_data['data'].replace_feature(features)
 
         return voxel_data
+    
+    def preproc_bev(self, dpt, bev_dpt):
+        """
+        Return two bev maps because we dont want to normalize the mask/d2traj
+        """
+        curr_heights = dpt['odometry']['data'][..., 0, 2]
+
+        #blarg
+        if curr_heights.ndim == 0:
+            curr_heights = curr_heights.unsqueeze(0)
+
+        bev_fks = bev_dpt['feature_keys']
+        bev_data = bev_dpt['data']
+
+        terrain_idxs_to_local = [i for i,k in enumerate(bev_fks.label) if k in BEV_ELEVATION_KEYS]
+
+        ndims = len(bev_data.shape) - 1
+        bshape = [-1] + [1] * ndims
+
+        terrain_feats_to_update = bev_data[..., terrain_idxs_to_local, :, :]
+        is_placeholder = terrain_feats_to_update.abs() < 1e-8
+
+        terrain_feats_local = terrain_feats_to_update - curr_heights.view(*bshape)
+
+        #keep the placeholder = 0 for non-valid cells
+        terrain_feats_to_update = torch.where(is_placeholder, 0., terrain_feats_local)
+
+        bev_data[..., terrain_idxs_to_local, :, :] = terrain_feats_to_update
+
+        bev_feats_dpt = {
+            'metadata': bev_dpt['metadata'],
+            'feature_keys': bev_dpt['feature_keys'],
+            'data': bev_data,
+            'stamp': bev_dpt['stamp']
+        }
+
+        return bev_feats_dpt

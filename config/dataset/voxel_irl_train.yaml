@@ -6,7 +6,7 @@ irl:
 
 common:
     # root_dir: /media/airlab/ssd1/2025_irl_kitti/train
-    root_dir: /media/airlab/offroad/datasets/2025_irl_kitti/gascola
+    root_dir: /media/airlab/offroad/datasets/2025_irl_kitti/20251112_data
     device: cuda
     use_multiprocessing: true
 
