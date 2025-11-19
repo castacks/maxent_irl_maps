@@ -1,30 +1,51 @@
 import os
 import argparse
 
+import numpy as np
 import matplotlib.pyplot as plt
 
-from tartandriver_utils.os_utils import load_yaml, save_yaml
+from tartandriver_utils.os_utils import load_yaml, save_yaml, is_kitti_dir, kitti_n_frames
 
-from maxent_irl_maps.dataset.maxent_irl_dataset import MaxEntIRLDataset
+from ros_torch_converter.datatypes.image import ImageTorch
+from ros_torch_converter.datatypes.bev_grid import BEVGridTorch
+from ros_torch_converter.datatypes.rb_state import OdomRBStateTorch
 
 #NULL is here for weird dpts/to make real classes start at 1
-dpt_classes = ['none', 'trail_dense', 'trail_open', 'no_trail_dense', 'no_trail_open']
+dpt_classes = [
+    'none',
+    'trail_open',       #Discernable trail and clear for >3 ATV widths
+    'trail_sparse',     #Discernable trail and 0-2 obstacles/hittable objects within 3 ATV widths
+    'trail_dense',      #Discernable trail and 3+ obstacles/things within 3 atv widths
+    'no_trail_open',    # same as above, but no discernable trail
+    'no_trail_sparse',
+    'no_trail_dense',
+]
 
-def viz_dpt(dpt, fig, axs):
-    img = dpt['image']['data'][[2,1,0]].permute(1,2,0).cpu().numpy()
-    traj = dpt['odometry']['data'][:, :2].cpu().numpy()
-    bev_data = dpt['bev_data']['data'][0].cpu().numpy()
-    bev_extent = dpt['bev_data']['metadata'].extent()
+def viz_dpt(rdir, subidx, fig, axs):
+    N = kitti_n_frames(rdir)
+
+    it = ImageTorch.from_kitti(os.path.join(rdir, 'image'), subidx)
+    bgt = BEVGridTorch.from_kitti(os.path.join(rdir, 'bev_map_reduce'), subidx)
+    ot = OdomRBStateTorch.from_kitti_multi(
+        os.path.join(rdir, 'odometry'),
+        range(subidx, min(subidx+75, N))
+    )
+    traj = np.stack([x.state[:2] for x in ot])
+
+    bev_data = bgt.bev_grid.data[..., bgt.bev_grid.feature_keys.index('num_voxels')]
+    bev_extent = bgt.bev_grid.metadata.extent()
 
     for ax in axs:
         ax.cla()
 
-    axs[0].imshow(img)
+    axs[0].imshow(it.image[..., [2,1,0]])
 
     axs[1].imshow(bev_data.T, extent=bev_extent, origin='lower', cmap='gray')
     axs[1].plot(traj[:, 0], traj[:, 1], c='y')
     axs[1].set_xlim(bev_extent[0], bev_extent[1])
     axs[1].set_ylim(bev_extent[2], bev_extent[3])
+
+    fig.suptitle(f'rdir = {rdir}, frame {subidx+1}/{N}')
 
     return fig, axs
 
@@ -54,56 +75,64 @@ def check_input(x, dpt_classes):
     
     return True
 
+def update_yaml(dpt_dict):
+    yaml_fp = os.path.join(dpt_dict['rdir'], 'irl_classif.yaml')
+    if not os.path.exists(yaml_fp):
+        yaml_data = {
+            'classes': dpt_classes,
+            'dpts': {}
+        }
+        save_yaml(yaml_data, yaml_fp)
+
+    yaml_data = load_yaml(yaml_fp)
+
+    yaml_data['dpts'][dpt_dict['subidx']] = dpt_dict
+    save_yaml(yaml_data, yaml_fp)
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--dataset_config', type=str, required=True, help='path to dataset')
-    parser.add_argument('--dataset_fp', type=str, required=False, default=None, help='set this arg to point to another dataset using the same config (useful for labeling test sets)')
+    parser.add_argument('--root_dir', type=str, required=True, help='path to dataset root')
+    parser.add_argument('--label_every', type=int, required=False, default=25)
     args = parser.parse_args()
 
-    config = load_yaml(args.dataset_config)
+    run_dirs = [os.path.join(args.root_dir, x) for x in os.listdir(args.root_dir)] + [args.root_dir]
+    run_dirs = [x for x in run_dirs if is_kitti_dir(x)]
 
-    if args.dataset_fp is not None:
-        config['common']['root_dir'] = args.dataset_fp
+    frame_list = []
+    print('Running labeling script for the following dirs:')
+    for x in run_dirs:
+        print(f'\t{x}')
+        N = kitti_n_frames(x)
+        idxs = range(N)[::args.label_every]
+        frame_list.extend([(x, i) for i in idxs])
+
+    print(f'{len(frame_list)} total frames to label')
     
-    dataset = MaxEntIRLDataset(config)
-
-    save_fp = os.path.join(dataset.root_dir, 'irl_dataset_classif.yaml')
-    if os.path.exists(save_fp):
-        x = input(f"{save_fp} exists. Overwrite? [Y/n]")
-        if x == 'n':
-            exit(0)
-
     ## main loop ##
     fig, axs = plt.subplots(1, 2, figsize=(18, 9))
     plt.show(block=False)
 
-    res = {
-        'classes': dpt_classes,
-        'dpts': [None] * len(dataset)
-    }
-
     curr_idx = 0
 
-    while curr_idx < len(dataset):
-        print(f"dpt {curr_idx+1}/{len(dataset)}")
+    while curr_idx < len(frame_list):
+        print(f"dpt {curr_idx+1}/{len(frame_list)}")
 
-        dpt = dataset[curr_idx]
+        rdir, subidx = frame_list[curr_idx]
 
-        viz_dpt(dpt, fig, axs)
+        viz_dpt(rdir, subidx, fig, axs)
+
         plt.pause(1e-2)
         inp = get_input(dpt_classes)
 
         if inp > 0:
             dpt_dict = {
-                'idx': curr_idx,
-                'rdir': f"{dpt['rdir']}",
-                'subidx': f"{dpt['subidx']:08d}",
+                'rdir': rdir,
+                'subidx': subidx,
                 'class_id': inp,
                 'class_label': dpt_classes[inp]
             }
 
-            res['dpts'][curr_idx] = dpt_dict
-            save_yaml(res, save_fp)
+            update_yaml(dpt_dict)
 
             curr_idx += 1
 

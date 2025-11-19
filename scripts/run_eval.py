@@ -13,7 +13,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--model_fp", type=str, required=True, help="model to load")
     parser.add_argument(
-        "--test_fp", type=str, required=True, help="path to preproc data"
+        "--test_fp", type=str, required=False, default=None, help="path to preproc data (leave blank to just invert the gps filter)"
     )
     parser.add_argument('--label', type=str, required=False, default='')
     parser.add_argument('--randomize', action='store_true', help='set this flag to gen plots in random order')
@@ -30,10 +30,15 @@ if __name__ == "__main__":
     res = torch.load(args.model_fp, weights_only=False).to(args.device)
     res.network.eval()
 
+    # dconf = res.dataset.config
+    # # dconf = res.expert_dataset.config
+    # dconf['common']['root_dir'] = args.test_fp
+    # res.dataset = MaxEntIRLDataset(dconf).to(args.device)
+
+    ## setup dataset ##
     dconf = res.dataset.config
-    # dconf = res.expert_dataset.config
-    dconf['common']['root_dir'] = args.test_fp
-    res.dataset = MaxEntIRLDataset(dconf).to(args.device)
+    dconf['common']['gps_filter']['invert'] = not dconf['common']['gps_filter']['invert']
+    res.dataset = MaxEntIRLDataset(dconf).to(res.device)
 
     ## real setup ##
     # model_base_dir, model_name = os.path.split(args.model_fp)

@@ -13,38 +13,43 @@ def get_classif_idxs(metrics, classif_data):
         metrics: metrics dir to get idxs for. Should contain rdir, subidx keys
         classif_data: classif yaml that contains class and rdir, subidx
     """
-    ## make data structure for indexing in
-    classif = {}
-    for dpt in classif_data['dpts']:
-        rdir = dpt['rdir']
-        subidx = int(dpt['subidx'])
-        cid = dpt['class_id']
-        
-        if rdir not in classif.keys():
-            classif[rdir] = {
-                'subidxs': [],
-                'class_ids': []
-            }
-
-        classif[rdir]['subidxs'].append(subidx)
-        classif[rdir]['class_ids'].append(cid)
-
-    #list -> np.array
-    classif = {k:{kk:np.array(vv) for kk,vv in v.items()} for k,v in classif.items()}
-
+    classif = {k:np.array(list(v.keys())) for k,v in classif_data['dpts'].items()}
     res = []
     for rdir, subidx in zip(metrics['rdir'], metrics['subidx']):
-        assert rdir in classif.keys(), f"classif missing run {rdir}!"
-        target_subidxs = classif[rdir]['subidxs']
-        class_ids = classif[rdir]['class_ids']
+        _rdir = os.path.basename(rdir)
+        assert _rdir in classif.keys(), f"classif missing run {rdir}!"
+        target_subidxs = classif[_rdir]
 
         mindist = np.abs(target_subidxs - subidx).min()
         minidx = np.abs(target_subidxs - subidx).argmin()
+        minidx = target_subidxs[minidx]
 
-        assert mindist < 20, "got mindist to subidx {subidx} > 20. Something probably wrong!"
-        res.append(class_ids[minidx])
+        assert mindist < 25, "got mindist to subidx {subidx} > 25. Something probably wrong!"
+
+        class_id = classif_data['dpts'][_rdir][minidx]['class_id']
+        res.append(class_id)
 
     return np.array(res)
+
+def get_classif_data(dataset_dir):
+    run_dirs = [os.path.join(dataset_dir, x) for x in os.listdir(dataset_dir)]
+    run_dirs = [x for x in run_dirs if os.path.exists(os.path.join(x, 'irl_classif.yaml'))]
+
+    res = {
+        'classes': None,
+        'dpts': {}
+    }
+
+    for rdir in run_dirs:
+        classif = load_yaml(os.path.join(rdir, 'irl_classif.yaml'))
+        if res['classes'] is None:
+            res['classes'] = classif['classes']
+
+        assert res['classes'] == classif['classes'], f"expected classes {res['classes']}, got {classif['classes']}"
+
+        res['dpts'][os.path.basename(rdir)] = classif['dpts']
+
+    return res
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -55,14 +60,14 @@ if __name__ == '__main__':
     metrics_config = load_yaml(args.metrics_config)
 
     for exp_key, exp_conf in metrics_config.items():
-        classif_data = exp_conf['classif']
-
         metrics_keys = [
             'mhd',
             'expert_log_goal',
             'expert_speed_prob',
             'expert_speed_emd2'
         ]
+
+        classif_data = get_classif_data(exp_conf['classif'])
 
         res = []
 
