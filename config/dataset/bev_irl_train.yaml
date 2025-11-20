@@ -17,12 +17,12 @@ common:
         invert: true
 
 datatypes:
-    bev_data:
+    bev_input:
         dtype: BEVGrid
         dir: bev_map_reduce
         
         args:
-            remove_keys: [min_elevation, max_elevation, terrain, dist_to_traj]
+            remove_keys: [min_elevation, max_elevation, dist_to_traj, min_elevation_filtered_inflated_mask]
 
     odometry:
         dtype: OdomRBState

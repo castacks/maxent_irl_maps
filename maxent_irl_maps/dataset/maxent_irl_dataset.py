@@ -73,7 +73,7 @@ class MaxEntIRLDataset(PerceptionDataset):
 
             valid_mask = (avg_speed > self.min_speed) & (max_disp < self.max_ds)
 
-            valid_idxs = torch.argwhere(valid_mask).squeeze()
+            valid_idxs = idxs[valid_mask][:, 1]
 
             valid_idxs = valid_idxs[::self.sample_every]
 
@@ -86,6 +86,11 @@ class MaxEntIRLDataset(PerceptionDataset):
 
         idx_hash_new = torch.cat(idx_hash_new, dim=0)
         print(f"subsampled {self.idx_hash.shape[0]}->{idx_hash_new.shape[0]} dpts")
+
+        ##double-check that new idxs are a subset of old idxs
+        for _ihn in idx_hash_new:
+            assert (_ihn.view(1,2) == self.idx_hash).all(dim=-1).any()
+
         self.idx_hash = idx_hash_new
 
     def precompute_distances(self):
@@ -254,10 +259,15 @@ class MaxEntIRLDataset(PerceptionDataset):
 
         bev_data[..., terrain_idxs_to_local, :, :] = terrain_feats_to_update
 
+        ## need to match inpainting dataset and go [vfm keys, geom keys]
+        vfm_idxs = [i for i,k in enumerate(bev_fks.metainfo) if k == 'vfm']
+        non_vfm_idxs = [i for i,k in enumerate(bev_fks.metainfo) if k != 'vfm']
+        idxs = vfm_idxs + non_vfm_idxs
+
         bev_feats_dpt = {
             'metadata': bev_dpt['metadata'],
-            'feature_keys': bev_dpt['feature_keys'],
-            'data': bev_data,
+            'feature_keys': bev_dpt['feature_keys'][idxs],
+            'data': bev_data[..., idxs, :, :],
             'stamp': bev_dpt['stamp']
         }
 
