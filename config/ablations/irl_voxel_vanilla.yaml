@@ -21,4 +21,4 @@ netopt:
 
 solver:
     type: mpc
-    mpc_fp: /home/tartandriver/tartandriver_ws/src/planning/maxent_irl_maps/config/mpc/kbm_mppi.yaml
+    mpc_fp: /home/tartandriver/tartandriver_ws/src/planning/maxent_irl_maps/config/mpc/kbm_mppi_distance.yaml

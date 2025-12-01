@@ -1,3 +1,7 @@
+## NOTE: This config is meant to be used with the distance-based configuration and has a few
+##       parameters that are specific. Namely, we are trying to optimize 50m of traj. Thus:
+##       H = 75 -> max speed=6.7m/s and nominal control should be [6.7, 0.]
+
 ---
 common:
     B: 1           #number of optimizations to run in parallel
@@ -11,7 +15,7 @@ model:
     type: KBM
     args:
         L: 2.0
-        v_lim: [0., 15.]
+        v_lim: [0., 10.]
         steer_lim: [-0.52, 0.52]
 
         #planar offset (in body frame) from odom to center of vehicle
@@ -20,6 +24,12 @@ model:
 sampling_strategies:
     sampling_strategies:
     strategies:
+        - type: ActionLibrary
+          label: action_library
+          args:
+            K: 1326
+            path: "/home/tartandriver/tartandriver_ws/src/control/torch_mpc/data/action_libraries/yamaha_atv/H100_N1326_vel_steer_unif.pt"
+
         - type: UniformGaussian
           label: gaussian1
           args:
@@ -44,35 +54,35 @@ sampling_strategies:
             K: 1024
             scale: [0.5, 0.01]  #sample scale on change of noise
         
-        # - type: GaussianWalk
-        #   label: gaussian_walk1
-        #   args:
-        #     K: 512
-        #     initial_distribution:
-        #         type: gaussian
-        #         scale: [0.5, 0.0]
-        #     alpha: [0.0, 0.0]   #low-pass on noise
-        #     scale: [0.01, 0.01]  #sample scale on change of noise
+        - type: GaussianWalk
+          label: gaussian_walk1
+          args:
+            K: 512
+            initial_distribution:
+                type: gaussian
+                scale: [0.5, 0.0]
+            alpha: [0.0, 0.0]   #low-pass on noise
+            scale: [0.1, 0.01]  #sample scale on change of noise
 
-        # - type: GaussianWalk
-        #   label: gaussian_walk2
-        #   args:
-        #     K: 512
-        #     initial_distribution:
-        #         type: gaussian
-        #         scale: [0.5, 0.0]
-        #     alpha: [0.0, 0.0]   #low-pass on noise
-        #     scale: [0.005, 0.005]  #sample scale on change of noise
+        - type: GaussianWalk
+          label: gaussian_walk2
+          args:
+            K: 512
+            initial_distribution:
+                type: gaussian
+                scale: [0.5, 0.0]
+            alpha: [0.0, 0.0]   #low-pass on noise
+            scale: [0.05, 0.005]  #sample scale on change of noise
 
-        # - type: GaussianWalk
-        #   label: gaussian_walk3
-        #   args:
-        #     K: 512
-        #     initial_distribution:
-        #         type: gaussian
-        #         scale: [0.5, 0.0]
-        #     alpha: [0.0, 0.0]   #low-pass on noise
-        #     scale: [0.0025, 0.0025]  #sample scale on change of noise
+        - type: GaussianWalk
+          label: gaussian_walk3
+          args:
+            K: 512
+            initial_distribution:
+                type: gaussian
+                scale: [0.5, 0.0]
+            alpha: [0.0, 0.0]   #low-pass on noise
+            scale: [0.025, 0.0025]  #sample scale on change of noise
 
 cost_function:
     footprint:
@@ -101,7 +111,7 @@ cost_function:
           weight: 10.0
           label: control_effort
           args:
-            nominal: [5.0, 0.0]
+            nominal: [6.7, 0.0]
             weights: [0.1, 1.0]
             ord: 1
             
