@@ -1,0 +1,18 @@
+
+costs:
+  dirt: 0.
+  grass: 0.
+  tree: 2.
+  pole: 2.
+  water: 1.
+  sky: 0.
+  vehicle: 2.
+  object: 2.
+  road: 0.
+  building: 2.
+  log: 1.
+  person: 2.
+  fence: 2.
+  bush: 1.
+  rock: 1.
+  snow: 1.
