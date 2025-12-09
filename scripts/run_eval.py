@@ -30,17 +30,21 @@ if __name__ == "__main__":
     res = torch.load(args.model_fp, weights_only=False).to(args.device)
     res.network.eval()
 
-    dconf = res.dataset.config
-    del dconf['common']['gps_filter']
-    del dconf['datatypes']['gps_odometry']
-    # dconf = res.expert_dataset.config
-    dconf['common']['root_dir'] = args.test_fp
-    res.dataset = MaxEntIRLDataset(dconf).to(args.device)
-
     ## setup dataset ##
-#    dconf = res.dataset.config
-#    dconf['common']['gps_filter']['invert'] = not dconf['common']['gps_filter']['invert']
-#    res.dataset = MaxEntIRLDataset(dconf).to(res.device)
+    if args.test_fp is not None:
+        #setup dataset as normal if theres a path
+        dconf = res.dataset.config
+        del dconf['common']['gps_filter']
+        del dconf['datatypes']['gps_odometry']
+        dconf['common']['root_dir'] = args.test_fp
+        res.dataset = MaxEntIRLDataset(dconf).to(args.device)
+    else:
+        # invert the gps mask otherwise
+        dconf = res.dataset.config
+        dconf['common']['gps_filter']['invert'] = not dconf['common']['gps_filter']['invert']
+        res.dataset = MaxEntIRLDataset(dconf).to(res.device)
+
+    print(f'evaluating on dataset {res.dataset.root_dir}...')
 
     ## real setup ##
     # model_base_dir, model_name = os.path.split(args.model_fp)
