@@ -36,16 +36,46 @@ def quat_to_yaw(quat):
         1 - 2 * (quat[:, 1] ** 2 + quat[:, 2] ** 2),
     )
 
-def compute_map_cvar(maps, cvar):
-    if cvar < 0.0:
-        map_q = torch.quantile(maps, 1.0 + cvar, dim=0)
-        mask = maps <= map_q.view(1, *map_q.shape)
-    else:
-        map_q = torch.quantile(maps, cvar, dim=0)
-        mask = maps >= map_q.view(1, *map_q.shape)
+def compute_speedmap_cvar(speedmap_cdf, speed_bins, q):
+    """
+    Given a speedmap (parameterized as cdf + bins) and a quantile,
+        compute the speed corresponding to that quantile
 
-    cvar_map = (maps * mask).sum(dim=0) / mask.sum(dim=0)
-    return cvar_map
+    Args:
+        speedmap_cdf: BxWxH Tensor of speedmap cdf
+        speed_bins: B+1 Tensor of bin edges
+        q: float containing the quantile
+    """
+    B = len(speed_bins)
+    # need to stack zeros to front
+    _cdf = torch.cat([torch.zeros_like(speedmap_cdf[[0]]), speedmap_cdf], dim=0)
+
+    _cdf = _cdf.view(B, -1)
+
+    _cdiffs = q - _cdf
+    _mask = _cdiffs <= 0
+
+    _qidx = (_cdiffs + 1e10 * _mask).argmin(dim=0)
+
+    _cdf_low = _cdf.T[torch.arange(len(_qidx)), _qidx]
+    _cdf_high = _cdf.T[torch.arange(len(_qidx)), _qidx + 1]
+
+    _k = (q - _cdf_low) / ((_cdf_high - _cdf_low)+1e-8)
+
+    _w = torch.ones_like(_cdf)
+    _w[_qidx, torch.arange(_cdf.shape[1])] = _k
+    _w = _w[1:]
+
+    _pdf = _cdf[1:] - _cdf[:-1]
+    _pdf[_cdf[1:] < q] = 0.
+
+    _pdf = _pdf * _w
+    _pdf = _pdf / _pdf.sum(dim=0, keepdim=True)
+    
+    _edges = (0.5 * (speed_bins[1:] + speed_bins[:-1])).view(-1, 1)
+    _speedmap = (_edges * _pdf).sum(dim=0)
+
+    return _speedmap.reshape(*speedmap_cdf.shape[1:])
 
 def compute_speedmap_quantile(speedmap_cdf, speed_bins, q):
     """

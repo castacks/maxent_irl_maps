@@ -105,7 +105,7 @@ if __name__ == '__main__':
             res.append(row)
 
         ## sort by terrain type instead of experiment
-        res = sorted(res, key=lambda x: x[1] + x[0])
+        res = sorted(res, key=lambda x: x[1] + x[2])
 
         res.insert(0, ['Experiment'] + ['Terrain Class'] + metrics_keys)
 
