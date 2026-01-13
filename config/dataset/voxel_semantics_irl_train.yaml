@@ -16,12 +16,12 @@ common:
         mask_fp: /home/tartandriver/tartandriver_ws/src/perception/tartandriver_perception_infra/data/gascola_test_mask.png
         invert: true
 
-semantics: false
+semantics: true
 
 datatypes:
     voxel_input:
         dtype: VoxelGrid
-        dir: voxel_map
+        dir: semantic_voxel_map
 
         args:
             subtract_curr_height: false
@@ -29,7 +29,7 @@ datatypes:
     ## theres a lot of viz that needs the 2d defined
     bev_input:
         dtype: BEVGrid
-        dir: bev_map_reduce
+        dir: semantic_bev_map_reduce
         
         args:
             remove_keys: [min_elevation, max_elevation, dist_to_traj, min_elevation_filtered_inflated_mask]

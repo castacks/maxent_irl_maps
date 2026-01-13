@@ -29,6 +29,9 @@ class MaxEntIRLDataset(PerceptionDataset):
         self.max_ds = config['irl']['max_ds']
         self.sample_every = config['irl']['sample_every']
 
+        self.is_semantics = config['semantics']
+        self.semantics_key = 'semantic_logits' if self.is_semantics else 'vfm'
+
         self.use_distance_based_sampling = 'distance_to_sample' in config['irl'].keys()
 
         print(f"Found {len(self.rdirs)} run dirs:")
@@ -259,10 +262,10 @@ class MaxEntIRLDataset(PerceptionDataset):
 
         bev_data[..., terrain_idxs_to_local, :, :] = terrain_feats_to_update
 
-        ## need to match inpainting dataset and go [vfm keys, geom keys]
-        vfm_idxs = [i for i,k in enumerate(bev_fks.metainfo) if k == 'vfm']
-        non_vfm_idxs = [i for i,k in enumerate(bev_fks.metainfo) if k != 'vfm']
-        idxs = vfm_idxs + non_vfm_idxs
+        ## need to match inpainting dataset and go [semantics keys, geom keys]
+        semantics_idxs = [i for i,k in enumerate(bev_fks.metainfo) if k == self.semantics_key]
+        non_semantics_idxs = [i for i,k in enumerate(bev_fks.metainfo) if k != self.semantics_key]
+        idxs = semantics_idxs + non_semantics_idxs
 
         bev_feats_dpt = {
             'metadata': bev_dpt['metadata'],
