@@ -131,6 +131,7 @@ class MaxEntIRLDataset(PerceptionDataset):
 
     def __getitem__(self, idx):
         dpt = super().__getitem__(idx)
+
         if 'voxel_input' in dpt.keys():
             dpt['voxel_input'] = self.preproc_voxel(dpt)
 
@@ -144,6 +145,7 @@ class MaxEntIRLDataset(PerceptionDataset):
 
     def getitem_batch(self, idxs):
         dpt = super().getitem_batch(idxs)
+
         if 'voxel_input' in dpt.keys():
             dpt['voxel_input'] = self.preproc_voxel(dpt)
 
