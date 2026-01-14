@@ -5,15 +5,14 @@ irl:
     distance_to_sample: 50.0  #(optional) arg for distance-based samples instead of time. produce an additional traj output that is this many m of future traj
 
 common:
-    root_dir: /home/tartandriver/workspace/datasets/kitti_debug
-    # root_dir: /media/airlab/offroad/datasets/2025_irl_kitti/gascola
+    root_dir: $TARTANDRIVER_DATA_DIR/2025_irl_kitti/gascola
     device: cuda
     use_multiprocessing: true
 
     ## PoC of GPS-based filtering. TODO need to support multi-site
     gps_filter:
-        tif_fp: /home/tartandriver/tartandriver_ws/src/core/mission_manager/gps_maps/gascola.tif
-        mask_fp: /home/tartandriver/tartandriver_ws/src/perception/tartandriver_perception_infra/data/gascola_test_mask.png
+        tif_fp: $TARTANDRIVER_HOME/src/core/mission_manager/gps_maps/gascola.tif
+        mask_fp: $TARTANDRIVER_HOME/src/perception/tartandriver_perception_infra/data/gascola_test_mask.png
         invert: true
 
 semantics: true

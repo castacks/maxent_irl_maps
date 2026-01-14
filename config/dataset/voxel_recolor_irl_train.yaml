@@ -5,8 +5,7 @@ irl:
     distance_to_sample: 50.0  #(optional) arg for distance-based samples instead of time. produce an additional traj output that is this many m of future traj
 
 common:
-    # root_dir: /media/airlab/ssd1/2025_irl_kitti/train
-    root_dir: /media/airlab/offroad/datasets/2025_irl_kitti/train
+    root_dir: $TARTANDRIVER_DATA_DIR/2025_irl_kitti/gascola
     device: cuda
     use_multiprocessing: true
 

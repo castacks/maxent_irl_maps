@@ -159,7 +159,7 @@ def setup_experiment(fp, skip_mpc=False, skip_norms=False):
     if not skip_mpc:
         solver_params = experiment_dict["solver"]
         if solver_params["type"] == "mpc":
-            mpc_config = yaml.safe_load(open(experiment_dict["solver"]["mpc_fp"], "r"))
+            mpc_config = experiment_dict["solver"]["params"]
             # have to make batching params match top-level config
             mpc_config["common"]["B"] = experiment_dict["algo"]["params"]["batch_size"]
             #note that we want to plan 1 fewer state than the expert as the expert traj includes the initial state
