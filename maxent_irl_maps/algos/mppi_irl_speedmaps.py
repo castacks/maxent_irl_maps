@@ -271,13 +271,17 @@ class MPPIIRLSpeedmaps(Trainer):
         """
         Implement custom loss bc irl is loss and grad
         """
-        try:
-            self.opt.zero_grad()
-            loss['irl_info']['tensor'].backward(gradient=loss['irl_info']['grad'], retain_graph=True)
-            loss['speed_loss'].backward()
+        self.opt.zero_grad()
 
+        try:
+            loss['irl_info']['tensor'].backward(gradient=loss['irl_info']['grad'], retain_graph=True)
         except:
             import pdb;pdb.set_trace()
+
+        try:
+            loss['speed_loss'].backward()
+        except:
+            print('error with speed_loss backward!') #use a print bc terrainnet opt gets mad bc no speed loss
 
         torch.nn.utils.clip_grad_norm_(self.network.parameters(), self.grad_clip)
         self.opt.step()
