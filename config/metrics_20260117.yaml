@@ -5,9 +5,21 @@ gascola_test:
   metrics:
     rq11_vfm_vox_irl_none:
       /home/tartandriver/workspace/cotrain_irl_experiments/20260115_camera_ready/run1/rq11/itr_0004/metricstest_default
+
+    rq12_vfm_vox_irl_geom:
+      /home/tartandriver/workspace/cotrain_irl_experiments/20260115_camera_ready/run1/rq12/itr_0004/metricstest_default
+
+    rq13_vfm_vox_irl_vfm:
+      /home/tartandriver/workspace/cotrain_irl_experiments/20260115_camera_ready/run1/rq13/itr_0004/metricstest_default
+
+    rq14_vfm_vox_irl_seg:
+      /home/tartandriver/workspace/cotrain_irl_experiments/20260115_camera_ready/run1/rq14/itr_0004/metricstest_default
    
     rq15_vfm_vox_irl_all:
       /home/tartandriver/workspace/cotrain_irl_experiments/20260115_camera_ready/run1/rq15/itr_0004/metricstest_default
+
+    rq16_vfm_vox_irl_geom_vfm:
+      /home/tartandriver/workspace/cotrain_irl_experiments/20260115_camera_ready/run1/rq16/itr_0004/metricstest_default
    
     rq25_vfm_bev_irl_all:
       /home/tartandriver/workspace/cotrain_irl_experiments/20260115_camera_ready/run1/rq25/itr_0004/metricstest_default
@@ -28,8 +40,20 @@ renegade_ridge_test:
     rq11_vfm_vox_irl_none:
       /home/tartandriver/workspace/cotrain_irl_experiments/20260115_camera_ready/run1/rq11/itr_0004/metricstest_rr
    
+    rq12_vfm_vox_irl_geom:
+      /home/tartandriver/workspace/cotrain_irl_experiments/20260115_camera_ready/run1/rq12/itr_0004/metricstest_rr
+
+    rq13_vfm_vox_irl_vfm:
+      /home/tartandriver/workspace/cotrain_irl_experiments/20260115_camera_ready/run1/rq13/itr_0004/metricstest_rr
+
+    rq14_vfm_vox_irl_seg:
+      /home/tartandriver/workspace/cotrain_irl_experiments/20260115_camera_ready/run1/rq14/itr_0004/metricstest_rr
+
     rq15_vfm_vox_irl_all:
       /home/tartandriver/workspace/cotrain_irl_experiments/20260115_camera_ready/run1/rq15/itr_0004/metricstest_rr
+
+    rq16_vfm_vox_irl_geom_vfm:
+      /home/tartandriver/workspace/cotrain_irl_experiments/20260115_camera_ready/run1/rq16/itr_0004/metricstest_rr
    
     rq25_vfm_bev_irl_all:
       /home/tartandriver/workspace/cotrain_irl_experiments/20260115_camera_ready/run1/rq25/itr_0004/metricstest_rr

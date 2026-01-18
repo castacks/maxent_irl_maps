@@ -1,0 +1,71 @@
+irl:
+    min_speed: 1.0            #filter out datapoints in this dataset with future traj at less than this average speed
+    max_ds: 2.0               #max displacement bet. frames, over which is considered a pose jump. (heuristically, max speed=15m/s * 0.1s/dpt)
+    sample_every: 20          #downsample evert n-th frame
+    distance_to_sample: 50.0  #(optional) arg for distance-based samples instead of time. produce an additional traj output that is this many m of future traj
+
+common:
+    root_dir: $TARTANDRIVER_DATA_DIR/2025_irl_kitti/gascola
+    device: cuda
+    use_multiprocessing: true
+
+    ## PoC of GPS-based filtering. TODO need to support multi-site
+    gps_filter:
+        tif_fp: $TARTANDRIVER_HOME/src/core/mission_manager/gps_maps/gascola.tif
+        mask_fp: $TARTANDRIVER_HOME/src/perception/tartandriver_perception_infra/data/gascola_test_mask.png
+        invert: true
+
+semantics: false
+
+datatypes:
+    voxel_input:
+        dtype: VoxelGrid
+        dir: single_frame_voxel_map
+
+        args:
+            subtract_curr_height: false
+
+    ## theres a lot of viz that needs the 2d defined
+    bev_input:
+        dtype: BEVGrid
+        dir: bev_map_reduce
+        
+        args:
+            remove_keys: [min_elevation, max_elevation, dist_to_traj, min_elevation_filtered_inflated_mask]
+
+    odometry:
+        dtype: OdomRBState
+        dir: odometry
+        temporal_sample: [0, 76]
+
+        args: {}
+
+    gps_odometry:
+        dtype: OdomRBState
+        dir: gps_odom
+        args: {}
+
+    steer_angle:
+        dtype: Float32
+        dir: steer_angle
+        temporal_sample: [0, 76]
+
+        args: {}
+
+    image:
+        dtype: Image
+        dir: image
+
+        args: {}
+
+    image_intrinsics:
+        dtype: Intrinsics
+        dir: image_intrinsics
+
+        args: {}
+
+transforms:
+    tf_odom_to_cam:
+        src_data: image
+        src_frame: sensor_init
+        dst_frame: multisense/left_camera_optical_frame

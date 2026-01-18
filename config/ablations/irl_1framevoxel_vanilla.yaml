@@ -1,0 +1,24 @@
+experiment:
+    save_to: $TARTANDRIVER_SCRATCH_DIR/experiments/yamaha_irl_dino/
+    name: irl_radiov3_siglip2_vanilla
+    device: cuda
+    epochs: 5
+    steps_per_epoch: -1
+    save_every: 1
+
+footprint: !include $TARTANDRIVER_HOME/src/planning/maxent_irl_maps/config/footprint/yamaha.yaml
+
+algo: !include $TARTANDRIVER_HOME/src/planning/maxent_irl_maps/config/trainers/mppi_irl_speedmaps.yaml
+
+dataset: !include $TARTANDRIVER_HOME/src/planning/maxent_irl_maps/config/dataset/voxel_1frame_irl_train.yaml
+
+network: !include $TARTANDRIVER_HOME/src/planning/maxent_irl_maps/config/networks/bev_default.yaml
+
+netopt:
+    type: Adam
+    params:
+        lr: 0.00001
+
+solver:
+    type: mpc
+    params: !include $TARTANDRIVER_HOME/src/planning/maxent_irl_maps/config/mpc/kbm_mppi_distance.yaml
