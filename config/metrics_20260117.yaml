@@ -1,0 +1,44 @@
+gascola_test:
+  ## need to point to the dir to get the datapoint labels
+  classif: /media/airlab/offroad/datasets/2025_irl_kitti/gascola
+
+  metrics:
+    rq11_vfm_vox_irl_none:
+      /home/tartandriver/workspace/cotrain_irl_experiments/20260115_camera_ready/run1/rq11/itr_0004/metricstest_default
+   
+    rq15_vfm_vox_irl_all:
+      /home/tartandriver/workspace/cotrain_irl_experiments/20260115_camera_ready/run1/rq15/itr_0004/metricstest_default
+   
+    rq25_vfm_bev_irl_all:
+      /home/tartandriver/workspace/cotrain_irl_experiments/20260115_camera_ready/run1/rq25/itr_0004/metricstest_default
+   
+    rq32_terrainnet_vox_baseline:
+      /home/tartandriver/workspace/cotrain_irl_experiments/20260115_camera_ready/run1/rq32/itr_0004/metricstest_default
+   
+    rq33_vfm_vox_irl_pretrain:
+      /home/tartandriver/workspace/cotrain_irl_experiments/20260115_camera_ready/run1/rq33/itr_0004/metricstest_default
+   
+    rq34_velociraptor_bev_baseline:
+      /home/tartandriver/workspace/cotrain_irl_experiments/20260115_camera_ready/run1/rq34/itr_0004/metricstest_default
+   
+renegade_ridge_test:
+  classif: /media/airlab/offroad/datasets/2025_irl_kitti/renegade_ridge
+
+  metrics:
+    rq11_vfm_vox_irl_none:
+      /home/tartandriver/workspace/cotrain_irl_experiments/20260115_camera_ready/run1/rq11/itr_0004/metricstest_rr
+   
+    rq15_vfm_vox_irl_all:
+      /home/tartandriver/workspace/cotrain_irl_experiments/20260115_camera_ready/run1/rq15/itr_0004/metricstest_rr
+   
+    rq25_vfm_bev_irl_all:
+      /home/tartandriver/workspace/cotrain_irl_experiments/20260115_camera_ready/run1/rq25/itr_0004/metricstest_rr
+   
+    rq32_terrainnet_vox_baseline:
+      /home/tartandriver/workspace/cotrain_irl_experiments/20260115_camera_ready/run1/rq32/itr_0004/metricstest_rr
+   
+    rq33_vfm_vox_irl_pretrain:
+      /home/tartandriver/workspace/cotrain_irl_experiments/20260115_camera_ready/run1/rq33/itr_0004/metricstest_rr
+   
+    rq34_velociraptor_bev_baseline:
+      /home/tartandriver/workspace/cotrain_irl_experiments/20260115_camera_ready/run1/rq34/itr_0004/metricstest_rr
