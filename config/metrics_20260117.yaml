@@ -23,6 +23,9 @@ gascola_test:
    
     rq25_vfm_bev_irl_all:
       /home/tartandriver/workspace/cotrain_irl_experiments/20260115_camera_ready/run1/rq25/itr_0004/metricstest_default
+
+    rq26_vfm_1fvox_irl_all:
+      /home/tartandriver/workspace/cotrain_irl_experiments/20260115_camera_ready/run1/rq26/itr_0004/metricstest_default
    
     rq32_terrainnet_vox_baseline:
       /home/tartandriver/workspace/cotrain_irl_experiments/20260115_camera_ready/run1/rq32/itr_0004/metricstest_default
@@ -54,6 +57,9 @@ renegade_ridge_test:
 
     rq16_vfm_vox_irl_geom_vfm:
       /home/tartandriver/workspace/cotrain_irl_experiments/20260115_camera_ready/run1/rq16/itr_0004/metricstest_rr
+
+    rq26_vfm_1fvox_irl_all:
+      /home/tartandriver/workspace/cotrain_irl_experiments/20260115_camera_ready/run1/rq26/itr_0004/metricstest_rr
    
     rq25_vfm_bev_irl_all:
       /home/tartandriver/workspace/cotrain_irl_experiments/20260115_camera_ready/run1/rq25/itr_0004/metricstest_rr
