@@ -26,7 +26,7 @@ algo:
 dataset:
     type: MaxEntIRLDataset
     params:
-        root_fp: /home/tartandriver/workspace/datasets/2025_irl_data/test
+        root_fp: $TARTANDRIVER_DATA_DIR/2025_irl_data/test
         device: cuda
         feature_keys:
             # VFM
@@ -72,6 +72,6 @@ netopt:
 
 solver:
     type: mpc
-    mpc_fp: /home/tartandriver/tartandriver_ws/src/planning/maxent_irl_maps/config/mpc/throttle_mppi.yaml
+    mpc_fp: $TARTANDRIVER_HOME/src/planning/maxent_irl_maps/config/mpc/throttle_mppi.yaml
 
 metrics:

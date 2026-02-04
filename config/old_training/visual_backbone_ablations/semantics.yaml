@@ -26,7 +26,7 @@ algo:
 dataset:
     type: MaxEntIRLDataset
     params:
-        root_fp: /home/tartandriver/workspace/datasets/irl_postpostproc_multimap/train
+        root_fp: $TARTANDRIVER_DATA_DIR/irl_postpostproc_multimap/train
         device: cuda
         feature_keys:
             # semantics
@@ -72,6 +72,6 @@ netopt:
 
 solver:
     type: planner
-    planner_fp: /home/tartandriver/tartandriver_ws/src/planning/maxent_irl_maps/config/planner/planner_config2.yaml
+    planner_fp: $TARTANDRIVER_HOME/src/planning/maxent_irl_maps/config/planner/planner_config2.yaml
 
 metrics:

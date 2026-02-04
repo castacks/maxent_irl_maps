@@ -6,13 +6,13 @@ experiment:
     steps_per_epoch: -1
     save_every: 1
 
-footprint: !include /home/tartandriver/tartandriver_ws/src/planning/maxent_irl_maps/config/footprint/yamaha.yaml
+footprint: !include $TARTANDRIVER_HOME/src/planning/maxent_irl_maps/config/footprint/yamaha.yaml
 
-algo: !include /home/tartandriver/tartandriver_ws/src/planning/maxent_irl_maps/config/trainers/mppi_irl_speedmaps.yaml
+algo: !include $TARTANDRIVER_HOME/src/planning/maxent_irl_maps/config/trainers/mppi_irl_speedmaps.yaml
 
-dataset: !include /home/tartandriver/tartandriver_ws/src/planning/maxent_irl_maps/config/dataset/bev_irl_train.yaml
+dataset: !include $TARTANDRIVER_HOME/src/planning/maxent_irl_maps/config/dataset/bev_irl_train.yaml
 
-network: !include /home/tartandriver/tartandriver_ws/src/planning/maxent_irl_maps/config/networks/bev_default.yaml
+network: !include $TARTANDRIVER_HOME/src/planning/maxent_irl_maps/config/networks/bev_default.yaml
 
 netopt:
     type: Adam
@@ -20,4 +20,4 @@ netopt:
 
 solver:
     type: mpc
-    mpc_fp: /home/tartandriver/tartandriver_ws/src/planning/maxent_irl_maps/config/mpc/kbm_mppi_distance.yaml
+    params: !include $TARTANDRIVER_HOME/src/planning/maxent_irl_maps/config/mpc/kbm_mppi_distance.yaml

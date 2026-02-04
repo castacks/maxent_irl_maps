@@ -7,7 +7,7 @@ from tartandriver_perception_infra.trainers.base import Trainer
 from torch_mpc.cost_functions.cost_terms.utils import apply_footprint
 
 from maxent_irl_maps.dataset.maxent_irl_dataset import MaxEntIRLDataset
-from maxent_irl_maps.utils import get_state_visitations, get_speedmap, clip_to_map_bounds, modified_hausdorff_distance
+from maxent_irl_maps.utils import get_state_visitations, get_speedmap, clip_to_map_bounds, modified_hausdorff_distance, compute_speedmap_cvar
 
 class MPPIIRLSpeedmaps(Trainer):
     """
@@ -271,13 +271,17 @@ class MPPIIRLSpeedmaps(Trainer):
         """
         Implement custom loss bc irl is loss and grad
         """
-        try:
-            self.opt.zero_grad()
-            loss['irl_info']['tensor'].backward(gradient=loss['irl_info']['grad'], retain_graph=True)
-            loss['speed_loss'].backward()
+        self.opt.zero_grad()
 
+        try:
+            loss['irl_info']['tensor'].backward(gradient=loss['irl_info']['grad'], retain_graph=True)
         except:
             import pdb;pdb.set_trace()
+
+        try:
+            loss['speed_loss'].backward()
+        except:
+            print('error with speed_loss backward!') #use a print bc terrainnet opt gets mad bc no speed loss
 
         torch.nn.utils.clip_grad_norm_(self.network.parameters(), self.grad_clip)
         self.opt.step()
@@ -420,6 +424,12 @@ class MPPIIRLSpeedmaps(Trainer):
             speedmap = res['speed']['preds'].tile(self.mppi.B, 1, 1, 1)
             costmap_unc = res['cost']['entropy'].tile(self.mppi.B, 1, 1, 1)
             speedmap_unc= res['speed']['entropy'].tile(self.mppi.B, 1, 1, 1)
+
+            from maxent_irl_maps.utils import compute_speedmap_quantile
+            speedmap_probs = res['speed']['logits'].softmax(dim=-3)
+            speedmap_cdf = torch.cumsum(speedmap_probs, dim=-3)
+            speed_bins = self.network.heads['speed'].bins
+            speedmap = compute_speedmap_quantile(speedmap_cdf[0], speed_bins, 0.5).unsqueeze(0).unsqueeze(0)
 
             ## Run solver ##
             expert_kbm_traj = self.get_expert_state_traj(dpt).tile(self.mppi.B, 1, 1)
@@ -564,10 +574,24 @@ class MPPIIRLSpeedmaps(Trainer):
                 vmin=0.0,
                 vmax=10.0,
             )
+
             m3 = axs[4].imshow(
                 costmap_unc[0, 0].T.cpu(),
                 origin="lower",
                 cmap="viridis",
+                extent=extent,
+            )
+
+            cvar = 0.8
+            cost_bins = self.network.heads['cost'].bins
+            cost_pdf = res['cost']['logits'].softmax(dim=1)
+            cost_cdf = torch.cumsum(cost_pdf, dim=1)
+            costmap_cvar = compute_speedmap_cvar(cost_cdf[0], cost_bins, cvar).clip(cost_bins[0], cost_bins[-1])
+            
+            m4 = axs[5].imshow(
+                costmap_cvar.T.cpu(),
+                origin="lower",
+                cmap="jet",
                 extent=extent,
             )
 
@@ -576,7 +600,7 @@ class MPPIIRLSpeedmaps(Trainer):
                 #since we have batch MPPI, plot all solutions
                 for ii, lbt in enumerate(learner_best_traj):
                     plot_label = (i==0) and (ii==0)
-                    axs[ax_i].plot(lbt[:, 0].cpu(), lbt[:, 1].cpu(), c="g", label="learner" if plot_label else None)
+                    # axs[ax_i].plot(lbt[:, 0].cpu(), lbt[:, 1].cpu(), c="g", label="learner" if plot_label else None)
 
                 axs[ax_i].plot(expert_kbm_traj[0, :, 0].cpu(), expert_kbm_traj[0, :, 1].cpu(), c="y", label="expert" if i == 0 else None)
                 
@@ -590,7 +614,7 @@ class MPPIIRLSpeedmaps(Trainer):
             axs[2].set_title("irl cost mean")
             axs[3].set_title("speedmap mean")
             axs[4].set_title("irl cost unc")
-            axs[5].set_title("cost quantile")
+            axs[5].set_title("cost cvar")
 
             for i in [1, 2, 4, 5]:
                 axs[i].set_xlabel("X(m)")
@@ -598,7 +622,7 @@ class MPPIIRLSpeedmaps(Trainer):
 
             axs[1].legend()
 
-            plt.colorbar(m1, ax=axs[2])
+            # plt.colorbar(m1, ax=axs[2])
             plt.colorbar(m2, ax=axs[3])
             plt.colorbar(m3, ax=axs[4])
 
