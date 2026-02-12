@@ -46,4 +46,3 @@ renegade_ridge_test:
       /home/tartandriver/workspace/cotrain_irl_experiments/20251209_baselines/terrainnet_learned/itr_0004/metricstest_rr
     velociraptor_vfm_bev:
       /home/tartandriver/workspace/cotrain_irl_experiments/20251209_baselines/velociraptor_vfm_bev/itr_0004/metricstest_rr
-  
