@@ -55,13 +55,13 @@ datatypes:
 
     image:
         dtype: Image
-        dir: sensors/image
+        dir: sensors/multisense_left_rect_color
 
         args: {}
 
     image_intrinsics:
         dtype: Intrinsics
-        dir: sensors/image_intrinsics
+        dir: sensors/multisense_left_rect_color_intrinsics
 
         args: {}
 
