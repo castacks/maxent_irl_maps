@@ -5,7 +5,8 @@ irl:
     distance_to_sample: 50.0  #(optional) arg for distance-based samples instead of time. produce an additional traj output that is this many m of future traj
 
 common:
-    root_dir: $TARTANDRIVER_DATA_DIR/2025_irl_kitti/gascola
+    # root_dir: $TARTANDRIVER_DATA_DIR/2025_irl_kitti/gascola
+    root_dir: /media/airlab/ssd2/debug
     device: cuda
     use_multiprocessing: true
 
@@ -20,7 +21,7 @@ semantics: false
 datatypes:
     voxel_input:
         dtype: VoxelGrid
-        dir: voxel_map
+        dir: mapping/voxel_map
 
         args:
             subtract_curr_height: false
@@ -28,39 +29,39 @@ datatypes:
     ## theres a lot of viz that needs the 2d defined
     bev_input:
         dtype: BEVGrid
-        dir: bev_map_reduce
+        dir: mapping/bev_map_reduce
         
         args:
             remove_keys: [min_elevation, max_elevation, dist_to_traj, min_elevation_filtered_inflated_mask]
 
     odometry:
         dtype: OdomRBState
-        dir: odometry
+        dir: super_odometry/odometry
         temporal_sample: [0, 76]
 
         args: {}
 
     gps_odometry:
         dtype: OdomRBState
-        dir: gps_odom
+        dir: sensors/gps_odom
         args: {}
 
     steer_angle:
         dtype: Float32
-        dir: steer_angle
+        dir: controls/steer_angle
         temporal_sample: [0, 76]
 
         args: {}
 
     image:
         dtype: Image
-        dir: image
+        dir: sensors/multisense_left_rect_color
 
         args: {}
 
     image_intrinsics:
         dtype: Intrinsics
-        dir: image_intrinsics
+        dir: sensors/multisense_left_rect_color_intrinsics
 
         args: {}
 
