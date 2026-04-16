@@ -5,8 +5,9 @@ irl:
     distance_to_sample: 50.0  #(optional) arg for distance-based samples instead of time. produce an additional traj output that is this many m of future traj
 
 common:
-    # root_dir: $TARTANDRIVER_DATA_DIR/2025_irl_kitti/gascola
-    root_dir: /media/airlab/ssd2/debug
+    # root_dir: $TARTANDRIVER_DATA_DIR/2026_irl_kitti/gascola
+    root_dir: $TARTANDRIVER_DATA_DIR/2026_irl_kitti/gascola
+    # root_dir: /media/airlab/ssd2/debug
     device: cuda
     use_multiprocessing: true
 
@@ -43,7 +44,7 @@ datatypes:
 
     gps_odometry:
         dtype: OdomRBState
-        dir: sensors/gps_odom
+        dir: sensors/novatel_gps_odom
         args: {}
 
     steer_angle:

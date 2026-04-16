@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 from tartandriver_utils.os_utils import load_yaml
 
 from torch_mpc.models.steer_setpoint_kbm import SteerSetpointKBM
-from torch_mpc.models.skid_steer import SkidSteer
+from torch_mpc.models.unicycle import UnicycleModel
 
 from torch_mpc.setup_mpc import setup_mpc
 from torch_mpc.cost_functions.cost_terms.utils import make_footprint
