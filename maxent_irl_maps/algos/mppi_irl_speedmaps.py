@@ -67,7 +67,7 @@ class MPPIIRLSpeedmaps(Trainer):
 
         self.device = device
 
-    def get_loss(self, batch):
+    def get_loss(self, batch, debug=False):
         """
         Apply the MaxEnt update to the network given a batch
         """
@@ -111,33 +111,34 @@ class MPPIIRLSpeedmaps(Trainer):
         learner_state_visitations = get_state_visitations(footprint_learner_traj, metadata)
         expert_state_visitations = get_state_visitations(footprint_expert_traj, metadata)
 
-        """
-        for bi in range(map_features.shape[0]):
-            ltraj = learner_best_traj[bi]
-            etraj = expert_kbm_traj[bi]
-            lsv = learner_state_visitations[bi]
-            esv = expert_state_visitations[bi]
+        # """
+        if debug:
+            for bi in range(map_features.shape[0]):
+                ltraj = learner_best_traj[bi]
+                etraj = expert_kbm_traj[bi]
+                lsv = learner_state_visitations[bi]
+                esv = expert_state_visitations[bi]
 
-            extent = (
-                metadata.origin[bi, 0].item(),
-                metadata.origin[bi, 0].item() + metadata.length[bi, 0].item(),
-                metadata.origin[bi, 1].item(),
-                metadata.origin[bi, 1].item() + metadata.length[bi, 1].item(),
-            )
+                extent = (
+                    metadata.origin[bi, 0].item(),
+                    metadata.origin[bi, 0].item() + metadata.length[bi, 0].item(),
+                    metadata.origin[bi, 1].item(),
+                    metadata.origin[bi, 1].item() + metadata.length[bi, 1].item(),
+                )
 
-            fig, axs = plt.subplots(1, 3)
-            axs[0].plot(ltraj[:, 0].cpu(), ltraj[:, 1].cpu(), c='r', marker='.')
-            axs[0].imshow(lsv.T.cpu(), origin='lower', extent=extent)
-            axs[0].set_title('learner')
+                fig, axs = plt.subplots(1, 3)
+                axs[0].plot(ltraj[:, 0].cpu(), ltraj[:, 1].cpu(), c='r', marker='.')
+                axs[0].imshow(lsv.T.cpu(), origin='lower', extent=extent)
+                axs[0].set_title('learner')
 
-            axs[1].plot(etraj[:, 0].cpu(), etraj[:, 1].cpu(), c='r', marker='.')
-            axs[1].plot(batch['odometry']['data'][bi, :, 0].cpu(), batch['odometry']['data'][bi, :, 1].cpu(), c='b', marker='.')
-            axs[1].imshow(esv.T.cpu(), origin='lower', extent=extent)
-            axs[1].set_title('expert')
+                axs[1].plot(etraj[:, 0].cpu(), etraj[:, 1].cpu(), c='r', marker='.')
+                axs[1].plot(batch['odometry']['data'][bi, :, 0].cpu(), batch['odometry']['data'][bi, :, 1].cpu(), c='b', marker='.')
+                axs[1].imshow(esv.T.cpu(), origin='lower', extent=extent)
+                axs[1].set_title('expert')
 
-            axs[2].imshow((esv - lsv).T.cpu(), origin='lower', extent=extent)
-            plt.show()
-        """
+                axs[2].imshow((esv - lsv).T.cpu(), origin='lower', extent=extent)
+                plt.show()
+        # """
 
         grads = (expert_state_visitations - learner_state_visitations) / map_features.shape[0]
         grads = grads.unsqueeze(1) #grad shape needs to match costmap shape
@@ -183,29 +184,30 @@ class MPPIIRLSpeedmaps(Trainer):
         expert_speed_idxs = expert_speed_idxs.clip(0, self.network.heads["speed"].nbins-1).long()
 
         #debug viz
-        """
-        for bi in range(map_features.shape[0]):
-            etraj = expert_kbm_traj[bi]
-            esm = expert_speedmaps[bi]
-            ebins = expert_speed_idxs[bi]
+        # """
+        if debug:
+            for bi in range(map_features.shape[0]):
+                etraj = expert_kbm_traj[bi]
+                esm = expert_speedmaps[bi]
+                ebins = expert_speed_idxs[bi]
 
-            extent = (
-                metadata.origin[bi, 0].item(),
-                metadata.origin[bi, 0].item() + metadata.length[bi, 0].item(),
-                metadata.origin[bi, 1].item(),
-                metadata.origin[bi, 1].item() + metadata.length[bi, 1].item(),
-            )
-            fig, axs = plt.subplots(1, 2)
-            axs[0].plot(etraj[:, 0].cpu(), etraj[:, 1].cpu(), c='r')
-            axs[0].imshow(esm.T.cpu(), origin='lower', extent=extent)
-            axs[0].set_title('expert speedmap')
+                extent = (
+                    metadata.origin[bi, 0].item(),
+                    metadata.origin[bi, 0].item() + metadata.length[bi, 0].item(),
+                    metadata.origin[bi, 1].item(),
+                    metadata.origin[bi, 1].item() + metadata.length[bi, 1].item(),
+                )
+                fig, axs = plt.subplots(1, 2)
+                axs[0].plot(etraj[:, 0].cpu(), etraj[:, 1].cpu(), c='r')
+                axs[0].imshow(esm.T.cpu(), origin='lower', extent=extent)
+                axs[0].set_title('expert speedmap')
 
-            axs[1].plot(etraj[:, 0].cpu(), etraj[:, 1].cpu(), c='r')
-            axs[1].imshow(ebins.T.cpu(), origin='lower', extent=extent)
-            axs[1].set_title('expert speed bins')
+                axs[1].plot(etraj[:, 0].cpu(), etraj[:, 1].cpu(), c='r')
+                axs[1].imshow(ebins.T.cpu(), origin='lower', extent=extent)
+                axs[1].set_title('expert speed bins')
 
-            plt.show()
-        """
+                plt.show()
+        # """
         
         #only want cells that the expert drove in
         mask = expert_speedmaps > 1e-6
@@ -299,7 +301,7 @@ class MPPIIRLSpeedmaps(Trainer):
             'state': dpt["odometry"]["data"],
             'steer_angle': dpt["steer_angle"]["data"].unsqueeze(-1)
         }
-        return self.mppi.model.get_observations(inp)
+        return self.mppi.model.get_states(inp)
 
     def run_solver_on_costmap(self, costmap, metadata, expert_traj, clip_goals=False, return_cost_results=False):
         """
@@ -372,7 +374,12 @@ class MPPIIRLSpeedmaps(Trainer):
         ## assume control costs not relevant here
         dummy_controls = self.mppi.noisy_controls[:, [0]].clone()
 
-        _, _, cost_results = self.mppi.cost_fn.cost(expert_traj.unsqueeze(1), dummy_controls)
+        _, _, cost_results = self.mppi.cost_fn.cost(
+            states=expert_traj.unsqueeze(1),
+            actions=dummy_controls,
+            state_keys=self.mppi.model.state_space.feature_keys,
+            action_keys=self.mppi.model.action_space.feature_keys
+        )
 
         cost_results = {k:v['cost'][:, 0] for k,v in cost_results.items()}
 
