@@ -17,6 +17,7 @@ if __name__ == "__main__":
     )
     parser.add_argument('--label', type=str, required=False, default='')
     parser.add_argument('--randomize', action='store_true', help='set this flag to gen plots in random order')
+    parser.add_argument("--sample_every", type=int, required=False, default=None, help="override dataset irl sample stride")
     parser.add_argument(
         "--device", type=str, required=False, default="cpu", help="the device to run on"
     )
@@ -34,6 +35,8 @@ if __name__ == "__main__":
     if args.test_fp is not None:
         #setup dataset as normal if theres a path
         dconf = res.dataset.config
+        if args.sample_every is not None and 'irl' in dconf:
+            dconf['irl']['sample_every'] = args.sample_every
         del dconf['common']['gps_filter']
         del dconf['datatypes']['gps_odometry']
         dconf['common']['root_dir'] = args.test_fp
@@ -41,6 +44,8 @@ if __name__ == "__main__":
     else:
         # invert the gps mask otherwise
         dconf = res.dataset.config
+        if args.sample_every is not None and 'irl' in dconf:
+            dconf['irl']['sample_every'] = args.sample_every
         dconf['common']['gps_filter']['invert'] = not dconf['common']['gps_filter']['invert']
         res.dataset = MaxEntIRLDataset(dconf).to(res.device)
 
