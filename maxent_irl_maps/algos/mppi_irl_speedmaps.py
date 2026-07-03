@@ -607,7 +607,7 @@ class MPPIIRLSpeedmaps(Trainer):
                 #since we have batch MPPI, plot all solutions
                 for ii, lbt in enumerate(learner_best_traj):
                     plot_label = (i==0) and (ii==0)
-                    # axs[ax_i].plot(lbt[:, 0].cpu(), lbt[:, 1].cpu(), c="g", label="learner" if plot_label else None)
+                    axs[ax_i].plot(lbt[:, 0].cpu(), lbt[:, 1].cpu(), c="g", label="learner" if plot_label else None)
 
                 axs[ax_i].plot(expert_kbm_traj[0, :, 0].cpu(), expert_kbm_traj[0, :, 1].cpu(), c="y", label="expert" if i == 0 else None)
                 
