@@ -165,12 +165,11 @@ def world_to_grid(trajs, metadata):
     xys_flat = xys.view(B, -1, 2)
     
     _o = metadata.origin.unsqueeze(1)
-    _l = metadata.length.unsqueeze(1)
     _r = metadata.resolution.unsqueeze(1)
 
     gxys_flat = (xys_flat - _o) / _r
 
-    valid_mask_flat = (xys_flat > (_o+1e-6)).all(dim=-1) & (xys_flat < (_o+_l-1e-6)).all(dim=-1)
+    valid_mask_flat = (gxys_flat >= 0).all(dim=-1) & (gxys_flat < metadata.N.unsqueeze(1)).all(dim=-1)
 
     gxys = gxys_flat.reshape(*tshape[:-1], 2)
     valid_mask = valid_mask_flat.reshape(*tshape[:-1])
