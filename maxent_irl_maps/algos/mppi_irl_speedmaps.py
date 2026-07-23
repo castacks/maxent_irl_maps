@@ -9,6 +9,11 @@ from torch_mpc.cost_functions.cost_terms.utils import apply_footprint
 from maxent_irl_maps.dataset.maxent_irl_dataset import MaxEntIRLDataset
 from maxent_irl_maps.utils import get_state_visitations, get_speedmap, clip_to_map_bounds, modified_hausdorff_distance, compute_speedmap_cvar
 
+def _get_fpv_image(dpt):
+    if "image" not in dpt:
+        return None
+    return dpt["image"]["data"][0].permute(1, 2, 0)[:, :, [2, 1, 0]].cpu()
+
 class MPPIIRLSpeedmaps(Trainer):
     """
     This is the same as MPPI IRL, but in addition to the IRL, also learn a speed map via MLE to expert speed
@@ -546,7 +551,7 @@ class MPPIIRLSpeedmaps(Trainer):
                     fidx = dpt[bev_key]["feature_keys"].index(fk)
                     break
 
-            img = dpt["image"]["data"][0].permute(1, 2, 0)[:, :, [2, 1, 0]].cpu()
+            img = _get_fpv_image(dpt)
 
             fig.suptitle("dpt {}: avg MHD={:.4f} Log prob={:.4f} Log prob goal={:.4f} Expert costmap cost={:.4f} Learner costmap cost={:.4f} Expert speed prob={:.4f} emd2={:.4f}".format(
                 idx,
@@ -559,7 +564,11 @@ class MPPIIRLSpeedmaps(Trainer):
                 avg_emd2.item()
             ))
 
-            axs[0].imshow(img)
+            if img is None:
+                axs[0].text(0.5, 0.5, "No FPV image", ha="center", va="center")
+                axs[0].set_axis_off()
+            else:
+                axs[0].imshow(img)
             axs[1].imshow(
                 map_features[0][fidx].T.cpu(),
                 origin="lower",

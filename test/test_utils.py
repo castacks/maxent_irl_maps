@@ -4,6 +4,7 @@ import pytest
 import torch
 
 from maxent_irl_maps.utils import get_state_visitations
+from maxent_irl_maps.algos.mppi_irl_speedmaps import _get_fpv_image
 
 
 @pytest.mark.parametrize(
@@ -35,3 +36,13 @@ def test_state_visitations_masks_points_outside_rounded_grid(device):
     assert torch.isfinite(visitations).all()
     assert visitations[0, 0, 0] == 1
     assert visitations.sum() == 1
+
+
+def test_fpv_image_is_optional():
+    assert _get_fpv_image({}) is None
+
+    image = torch.arange(12).reshape(1, 3, 2, 2)
+    result = _get_fpv_image({"image": {"data": image}})
+
+    assert result.shape == (2, 2, 3)
+    assert torch.equal(result[0, 0], image[0, [2, 1, 0], 0, 0])
