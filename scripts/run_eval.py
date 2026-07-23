@@ -71,7 +71,7 @@ if __name__ == "__main__":
 
     metrics_all = None
 
-    for idx in tqdm.tqdm(idxs):
+    for progress, idx in enumerate(tqdm.tqdm(idxs), start=1):
         results = res.visualize(idx=idx)
         fig, axs = results['viz']
         metrics = {k:np.array(v).reshape(1) for k,v in results['metrics'].items()}
@@ -84,6 +84,7 @@ if __name__ == "__main__":
         np.savez(os.path.join(save_dir, 'metrics.npz'), **metrics_all)
         plt.savefig(os.path.join(save_dir, 'viz', f'{idx:08d}.png'))
         plt.close()
+        print(f"evaluated {progress}/{N} (idx={idx.item()})", flush=True)
 
         if False:
             ## show feat image
