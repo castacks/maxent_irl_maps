@@ -21,6 +21,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--device", type=str, required=False, default="cpu", help="the device to run on"
     )
+    parser.add_argument('--fusion_mode', choices=['both', 'radio', 'utonia'], default='both')
     args = parser.parse_args()
 
     ## hack setup ##
@@ -30,6 +31,11 @@ if __name__ == "__main__":
 
     res = torch.load(args.model_fp, weights_only=False).to(args.device)
     res.network.eval()
+    set_fusion_mode = getattr(res.network, 'set_fusion_mode', None)
+    if set_fusion_mode is None:
+        assert args.fusion_mode == 'both', 'this network does not support modality ablations'
+    else:
+        set_fusion_mode(args.fusion_mode)
 
     ## setup dataset ##
     if args.test_fp is not None:

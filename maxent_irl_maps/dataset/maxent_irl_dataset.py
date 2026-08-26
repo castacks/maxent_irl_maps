@@ -132,8 +132,9 @@ class MaxEntIRLDataset(PerceptionDataset):
     def __getitem__(self, idx):
         dpt = super().__getitem__(idx)
 
-        if 'voxel_input' in dpt.keys():
-            dpt['voxel_input'] = self.preproc_voxel(dpt)
+        for key in ('voxel_input', 'radio_voxel_input', 'utonia_voxel_input'):
+            if key in dpt:
+                dpt[key] = self.preproc_voxel(dpt, voxel_key=key)
 
         if 'bev_input' in dpt.keys():
             dpt['bev_input'] = self.preproc_bev(dpt, dpt['bev_input'])
@@ -146,8 +147,9 @@ class MaxEntIRLDataset(PerceptionDataset):
     def getitem_batch(self, idxs):
         dpt = super().getitem_batch(idxs)
 
-        if 'voxel_input' in dpt.keys():
-            dpt['voxel_input'] = self.preproc_voxel(dpt)
+        for key in ('voxel_input', 'radio_voxel_input', 'utonia_voxel_input'):
+            if key in dpt:
+                dpt[key] = self.preproc_voxel(dpt, voxel_key=key)
 
         if 'bev_input' in dpt.keys():
             dpt['bev_input'] = self.preproc_bev(dpt, dpt['bev_input'])
@@ -214,9 +216,9 @@ class MaxEntIRLDataset(PerceptionDataset):
         # plt.gca().set_aspect(1.)
         # plt.show()
 
-    def preproc_voxel(self, dpt):
+    def preproc_voxel(self, dpt, voxel_key='voxel_input'):
         curr_heights = dpt['odometry']['data'][..., 0, 2]
-        voxel_data = dpt['voxel_input']
+        voxel_data = dpt[voxel_key]
 
         voxel_data['metadata'].origin[..., 2] -= curr_heights
 
