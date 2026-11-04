@@ -377,8 +377,8 @@ class MPPIIRLSpeedmaps(Trainer):
         _, _, cost_results = self.mppi.cost_fn.cost(
             states=expert_traj.unsqueeze(1),
             actions=dummy_controls,
-            state_keys=self.mppi.model.state_space.feature_keys,
-            action_keys=self.mppi.model.action_space.feature_keys
+            state_space=self.mppi.model.state_space,
+            action_space=self.mppi.model.action_space
         )
 
         cost_results = {k:v['cost'][:, 0] for k,v in cost_results.items()}
