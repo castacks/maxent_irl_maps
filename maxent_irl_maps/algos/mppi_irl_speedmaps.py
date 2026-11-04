@@ -298,8 +298,8 @@ class MPPIIRLSpeedmaps(Trainer):
         Get the expert trajectory (in MPC states) from datapoint
         """
         inp = {
-            'state': dpt["odometry"]["data"],
-            'steer_angle': dpt["steer_angle"]["data"].unsqueeze(-1)
+            'odom': dpt["odometry"]["data"],
+            'steer': dpt["steer_angle"]["data"].unsqueeze(-1)
         }
         return self.mppi.model.get_states(inp)
 
